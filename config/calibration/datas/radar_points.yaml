@@ -1,0 +1,29 @@
+points:
+  - id: 1
+    x: -6.975918
+    y: -12.786359
+    fast: false
+  - id: 2
+    x: -5.786031
+    y: -13.855208
+    fast: false
+  - id: 3
+    x: -3.461471
+    y: -12.661046
+    fast: false
+  - id: 4
+    x: -2.165381
+    y: -14.875412
+    fast: false
+  - id: 5
+    x: -2.077676
+    y: -16.068508
+    fast: false
+  - id: 6
+    x: -4.428520
+    y: -15.074587
+    fast: false
+  - id: 7
+    x: -6.770646
+    y: -16.302904
+    fast: false

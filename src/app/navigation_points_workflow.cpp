@@ -1,0 +1,229 @@
+#include "app/navigation_points_workflow.hpp"
+
+#include <cmath>
+#include <filesystem>
+#include <string>
+#include <system_error>
+#include <vector>
+
+#include "maps/navigation_map_helpers.hpp"
+#include "maps/point_store.hpp"
+
+namespace navigation::app
+{
+
+NavigationPointsWorkflow::NavigationPointsWorkflow(
+  NavigationNodeContext & context,
+  NavigationRuntime & runtime,
+  rclcpp::Logger logger)
+: context_(context),
+  runtime_(runtime),
+  logger_(logger)
+{
+}
+
+bool NavigationPointsWorkflow::savePoints()
+{
+  std::string marker_error;
+  if (context_.race_logic == "obstacle" &&
+    !navigation::maps::validateFastMarkers(context_.map->points(), &marker_error))
+  {
+    context_.status_message = marker_error;
+    RCLCPP_WARN(logger_, "%s", marker_error.c_str());
+    return false;
+  }
+
+  std::string error;
+  if (!navigation::maps::savePointsFile(context_.points_file, context_.map->points(), &error)) {
+    context_.status_message = "Save failed";
+    RCLCPP_ERROR(logger_, "%s", error.c_str());
+    return false;
+  }
+
+  return true;
+}
+
+void NavigationPointsWorkflow::loadPointsFromFile(const std::string & path_or_name)
+{
+  runtime_.stopNavigationForRouteChange();
+  const auto path = navigation::maps::resolvePointsFilePath(path_or_name);
+  auto loaded_points = navigation::maps::loadPointsFile(path);
+  context_.map->setPoints(loaded_points);
+  context_.points_file = path;
+  runtime_.syncControllerWaypoints();
+  RCLCPP_INFO(
+    logger_,
+    "Loaded %zu navigation points from %s",
+    loaded_points.size(),
+    context_.points_file.c_str());
+}
+
+void NavigationPointsWorkflow::savePointsAs(const std::string & path_or_name)
+{
+  std::string marker_error;
+  if (context_.race_logic == "obstacle" &&
+    !navigation::maps::validateFastMarkers(context_.map->points(), &marker_error))
+  {
+    context_.status_message = marker_error;
+    RCLCPP_WARN(logger_, "%s", marker_error.c_str());
+    return;
+  }
+
+  context_.points_file = navigation::maps::resolvePointsFilePath(path_or_name);
+  if (savePoints()) {
+    context_.status_message = "Saved: " + std::filesystem::path(context_.points_file).filename().string();
+    RCLCPP_INFO(logger_, "Saved navigation points as %s", context_.points_file.c_str());
+  }
+}
+
+void NavigationPointsWorkflow::createNewPointsFile(const std::string & path_or_name)
+{
+  runtime_.stopNavigationForRouteChange();
+  const auto path = navigation::maps::resolvePointsFilePath(path_or_name);
+  std::error_code filesystem_error;
+  if (std::filesystem::exists(path, filesystem_error)) {
+    context_.status_message = "Point file already exists";
+    RCLCPP_WARN(logger_, "Point file already exists: %s", path.c_str());
+    return;
+  }
+
+  std::string save_error;
+  const std::vector<navigation::maps::MapPoint> empty_points;
+  if (!navigation::maps::savePointsFile(path, empty_points, &save_error)) {
+    context_.status_message = "Create failed";
+    RCLCPP_ERROR(logger_, "%s", save_error.c_str());
+    return;
+  }
+
+  context_.map->clearPoints();
+  context_.points_file = path;
+  runtime_.syncControllerWaypoints();
+  RCLCPP_INFO(logger_, "Created empty navigation points file: %s", context_.points_file.c_str());
+}
+
+void NavigationPointsWorkflow::addClickedPoint(int pixel_x, int pixel_y)
+{
+  const int point_index = context_.map->hitTestPoint(pixel_x, pixel_y);
+  if (point_index >= 0) {
+    toggleFastMarker(static_cast<std::size_t>(point_index));
+    return;
+  }
+
+  navigation::maps::MapPoint point;
+  if (!context_.map->pixelToWorld(pixel_x, pixel_y, point)) {
+    RCLCPP_WARN(logger_, "Click is outside the map bounds.");
+    return;
+  }
+
+  const int pending_fast_index = navigation::maps::pendingFastMarkerIndex(context_.map->points());
+  if (context_.race_logic == "obstacle" &&
+    pending_fast_index >= 0 &&
+    pending_fast_index != static_cast<int>(context_.map->points().size()) - 1)
+  {
+    context_.status_message = "Fast marker must pair with adjacent next point";
+    RCLCPP_WARN(logger_, "%s", context_.status_message.c_str());
+    return;
+  }
+
+  runtime_.stopNavigationForRouteChange();
+  point.id = static_cast<int>(context_.map->points().size() + 1);
+  point.fast = pending_fast_index == static_cast<int>(context_.map->points().size()) - 1;
+  context_.map->addPoint(point);
+  runtime_.syncControllerWaypoints();
+  if (savePoints()) {
+    RCLCPP_INFO(
+      logger_,
+      "Saved point %d: x=%.3f y=%.3f fast=%s",
+      point.id,
+      point.x,
+      point.y,
+      point.fast ? "true" : "false");
+  }
+}
+
+void NavigationPointsWorkflow::toggleFastMarker(std::size_t index)
+{
+  const auto & points = context_.map->points();
+  if (index >= points.size()) {
+    return;
+  }
+
+  runtime_.stopNavigationForRouteChange();
+  if (points[index].fast) {
+    context_.map->setPointFast(index, false);
+    if (context_.race_logic == "obstacle" && index > 0 && points[index - 1].fast) {
+      context_.map->setPointFast(index - 1, false);
+    }
+    if (context_.race_logic == "obstacle" && index + 1 < points.size() && points[index + 1].fast) {
+      context_.map->setPointFast(index + 1, false);
+    }
+    runtime_.syncControllerWaypoints();
+    savePoints();
+    context_.status_message = context_.race_logic == "mission" ? "Mission point cleared" : "Fast pair cleared";
+    return;
+  }
+
+  if (context_.race_logic == "mission") {
+    context_.map->setPointFast(index, true);
+    runtime_.syncControllerWaypoints();
+    savePoints();
+    context_.status_message = "Mission point marked";
+    return;
+  }
+
+  const int pending_index = navigation::maps::pendingFastMarkerIndex(points);
+  if (pending_index == -2) {
+    context_.status_message = "Fix existing fast markers first";
+    RCLCPP_WARN(logger_, "%s", context_.status_message.c_str());
+    return;
+  }
+  if (pending_index >= 0 && std::abs(pending_index - static_cast<int>(index)) != 1) {
+    context_.status_message = "Fast markers must be adjacent";
+    RCLCPP_WARN(logger_, "%s", context_.status_message.c_str());
+    return;
+  }
+
+  context_.map->setPointFast(index, true);
+  runtime_.syncControllerWaypoints();
+  if (pending_index >= 0) {
+    savePoints();
+    context_.status_message = "Fast pair marked";
+  } else {
+    context_.status_message = "Select adjacent point for fast pair";
+  }
+}
+
+void NavigationPointsWorkflow::removeLastPoint()
+{
+  const bool removed_fast = !context_.map->points().empty() && context_.map->points().back().fast;
+  if (!context_.map->removeLastPoint()) {
+    return;
+  }
+
+  runtime_.stopNavigationForRouteChange();
+  if (context_.race_logic == "obstacle" &&
+    removed_fast && !context_.map->points().empty() && context_.map->points().back().fast)
+  {
+    context_.map->setPointFast(context_.map->points().size() - 1, false);
+  }
+  runtime_.syncControllerWaypoints();
+  if (savePoints()) {
+    RCLCPP_INFO(logger_, "Removed last navigation point. Remaining points: %zu", context_.map->points().size());
+  }
+}
+
+void NavigationPointsWorkflow::clearPoints()
+{
+  if (context_.map->points().empty()) {
+    return;
+  }
+
+  runtime_.stopNavigationForRouteChange();
+  context_.map->clearPoints();
+  runtime_.syncControllerWaypoints();
+  if (savePoints()) {
+    RCLCPP_INFO(logger_, "Cleared navigation points.");
+  }
+}
+
+}  // namespace navigation::app

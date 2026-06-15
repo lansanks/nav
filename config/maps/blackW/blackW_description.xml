@@ -1,0 +1,215 @@
+<?xml version="1.0" ?>
+<mujoco model="blackW_description">
+  <compiler angle="radian" meshdir="meshes" texturedir="meshes" strippath="false"/>
+  <option cone="elliptic" impratio="100"/>
+  <default>
+    <default class="blackw">
+      <joint damping="0.0" armature="0.02" frictionloss="0.0"/>
+    </default>
+    <default class="motor">
+      <motor ctrlrange="-33.5 33.5"/>
+    </default>
+  </default>
+  <asset>
+    <mesh name="trunk_vis" file="trunk_vis.stl"/>
+    <mesh name="trunk_col" file="trunk_vis.stl"/>
+    <mesh name="FL_hip_vis" file="FL_hip.STL"/>
+    <mesh name="FL_hip_col" file="FL_hip.STL"/>
+    <mesh name="FL_thigh_vis" file="FL_thigh.STL"/>
+    <mesh name="FL_thigh_col" file="FL_thigh.STL"/>
+    <mesh name="FL_calf_vis" file="FL_calf.STL"/>
+    <mesh name="FL_calf_col" file="FL_calf.STL"/>
+    <mesh name="FL_foot_vis" file="FL_foot.STL"/>
+    <mesh name="FL_foot_col" file="FL_foot.STL"/>
+    <mesh name="FR_hip_vis" file="FR_hip.STL"/>
+    <mesh name="FR_hip_col" file="FR_hip.STL"/>
+    <mesh name="FR_thigh_vis" file="FR_thigh.STL"/>
+    <mesh name="FR_thigh_col" file="FR_thigh.STL"/>
+    <mesh name="FR_calf_vis" file="FR_calf.STL"/>
+    <mesh name="FR_calf_col" file="FR_calf.STL"/>
+    <mesh name="FR_foot_vis" file="FR_foot.STL"/>
+    <mesh name="FR_foot_col" file="FR_foot.STL"/>
+    <mesh name="RR_hip_vis" file="RR_hip.STL"/>
+    <mesh name="RR_hip_col" file="RR_hip.STL"/>
+    <mesh name="RR_thigh_vis" file="RR_thigh.STL"/>
+    <mesh name="RR_thigh_col" file="RR_thigh.STL"/>
+    <mesh name="RR_calf_vis" file="RR_calf.STL"/>
+    <mesh name="RR_calf_col" file="RR_calf.STL"/>
+    <mesh name="RR_foot_vis" file="RR_foot.STL"/>
+    <mesh name="RR_foot_col" file="RR_foot.STL"/>
+    <mesh name="RL_hip_vis" file="RL_hip.STL"/>
+    <mesh name="RL_hip_col" file="RL_hip.STL"/>
+    <mesh name="RL_thigh_vis" file="RL_thigh.STL"/>
+    <mesh name="RL_thigh_col" file="RL_thigh.STL"/>
+    <mesh name="RL_calf_vis" file="RL_calf.STL"/>
+    <mesh name="RL_calf_col" file="RL_calf.STL"/>
+    <mesh name="RL_foot_vis" file="RL_foot.STL"/>
+    <mesh name="RL_foot_col" file="RL_foot.STL"/>
+  </asset>
+  <worldbody>
+    <geom size="0.0005 0.0005 0.0005" type="box" contype="0" conaffinity="0" group="3" density="0"/>
+    <body name="trunk" pos="0 0 0.5" childclass="blackw">
+      <freejoint/>
+      <inertial pos="-0.0121430088363535 -4.94276024667382E-05 -0.0734402147109879" mass="5.76595245119732" fullinertia="0.00938882573629617 0.00771120998634018 0.0128790330155169 -2.59968937030881E-06 1.71349391114686E-06 -2.75626777959007E-05"/>
+      <geom type="mesh" mesh="trunk_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+      <geom type="mesh" mesh="trunk_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="2" conaffinity="1"/>
+      <site name="imu" pos="0 0 0" quat="1 0 0 0"/>
+      <body name="FL_hip" pos="0.1566 0.060001 -0.06425">
+        <inertial pos="0.0513796430400244 0.0147843497407092 5.66422914134723E-05" mass="0.605587788530947" fullinertia="0.000374232023679539 0.000649322083852803 0.00034153510363819 -8.79517422299989E-06 1.00243328934316E-06 -6.98020953478616E-08"/>
+        <geom type="mesh" mesh="FL_hip_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+        <geom type="mesh" mesh="FL_hip_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="2" conaffinity="1"/>
+        <joint name="FL_hip_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-23 23" range="-10 10"/>
+        <body name="FL_thigh" pos="0.056 0.0336 0" euler="0 0 1.5708">
+          <inertial pos="0.0414485054935752 0.00445299032727856 -0.0219463641373225" mass="0.911684853337457" fullinertia="0.00185767826764714 0.00139828781877625 0.000517928994604592 -4.92687569949974E-08 -1.90833474072091E-07 5.13163421861595E-06"/>
+          <geom type="mesh" mesh="FL_thigh_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+          <geom type="mesh" mesh="FL_thigh_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="0" conaffinity="0"/>
+          <joint name="FL_thigh_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-23 23" range="-10 10"/>
+          <body name="FL_calf" pos="0.0618 0 -0.25">
+            <inertial pos="0.00406526667449841 -0.0170670698669355 -0.190896670066582" mass="0.631181399659253" fullinertia="0.00177394176516662 0.00149515089233514 0.000292979323501798 -6.88417869539432E-07 1.16004269899596E-06 -7.21790949066844E-05"/>
+            <geom type="mesh" mesh="FL_calf_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+            <geom type="mesh" mesh="FL_calf_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="2" conaffinity="1"/>
+            <joint name="FL_calf_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-57.5 57.5" range="-10 10"/>
+            <body name="FL_foot" pos="0.02635 0 -0.25253" euler="3.1416 0 0">
+              <inertial pos="0.0291380914223596 1.23250800945773E-06 -1.54232806415244E-07" mass="1.48626019404892" fullinertia="0.00694913543963931 0.00363863158357568 0.00363877441149129 -1.2908852847905E-10 -1.60736597332177E-09 1.38916414811648E-08"/>
+              <geom type="mesh" mesh="FL_foot_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+              <geom type="mesh" mesh="FL_foot_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="2" conaffinity="1" priority="1" friction="0.8 0.02 0.01" condim="6"/>
+              <joint name="FL_wheel_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-23 23"/>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="FR_hip" pos="0.1566 -0.059999 -0.06425">
+        <inertial pos="0.0513796430623153 -0.0147843497430413 -5.66422785884674E-05" mass="0.605587788169396" fullinertia="0.000374232023464454 0.000649322083633946 0.000341535103543839 8.79517419342952E-06 -1.0024332819348E-06 -6.98021513497608E-08"/>
+        <geom type="mesh" mesh="FR_hip_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+        <geom type="mesh" mesh="FR_hip_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="2" conaffinity="1"/>
+        <joint name="FR_hip_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-23 23" range="-10 10"/>
+        <body name="FR_thigh" pos="0.056 -0.0336 0" euler="0 0 -1.5708">
+          <inertial pos="0.0415202962184975 -0.00437811588325385 -0.022024222813747" mass="0.914912836644984" fullinertia="0.00185773317028068 0.00139914923953753 0.00051715690775453 -8.86904802204522E-08 -1.69261009092097E-07 -3.0590316347561E-06"/>
+          <geom type="mesh" mesh="FR_thigh_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+          <geom type="mesh" mesh="FR_thigh_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="0" conaffinity="0"/>
+          <joint name="FR_thigh_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-23 23" range="-10 10"/>
+          <body name="FR_calf" pos="0.0618 0 -0.25">
+            <inertial pos="0.00406529876252748 0.0170625193367507 -0.190892295184699" mass="0.631181340445323" fullinertia="0.00177394177661206 0.0014951138597214 0.000293016367814904 7.07797341679196E-07 1.14104448163357E-06 7.21775491853624E-05"/>
+            <geom type="mesh" mesh="FR_calf_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+            <geom type="mesh" mesh="FR_calf_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="2" conaffinity="1"/>
+            <joint name="FR_calf_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-57.5 57.5" range="-10 10"/>
+            <body name="FR_foot" pos="0.02635 0 -0.25253">
+              <inertial pos="0.0291380914563489 -1.05857422938449E-07 -1.23950531050188E-06" mass="1.48626025285385" fullinertia="0.00694913543807045 0.00363877530146552 0.00363863069252749 -1.61099579491232E-09 7.80409435575737E-11 -8.20201402156635E-09"/>
+              <geom type="mesh" mesh="FR_foot_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+              <geom type="mesh" mesh="FR_foot_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="2" conaffinity="1" priority="1" friction="0.8 0.02 0.01" condim="6"/>
+              <joint name="FR_wheel_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-23 23"/>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="RR_hip" pos="-0.1566 -0.059999 -0.06425" euler="0 0 -3.1416">
+        <inertial pos="0.051379643062251 0.0147843497431749 5.66422787350584E-05" mass="0.605587788166881" fullinertia="0.000374232023462225 0.000649322083631374 0.000341535103543437 -8.7951741933767E-06 1.00243328283903E-06 -6.98021512081023E-08"/>
+        <geom type="mesh" mesh="RR_hip_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+        <geom type="mesh" mesh="RR_hip_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="2" conaffinity="1"/>
+        <joint name="RR_hip_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-23 23" range="-10 10"/>
+        <body name="RR_thigh" pos="0.056 0.0336 0" euler="0 0 1.5708">
+          <inertial pos="0.0415202962185244 -0.00437811588325751 -0.0220242228137266" mass="0.914912836645016" fullinertia="0.00185773317028039 0.00139914923953726 0.00051715690775451 -8.86904802174251E-08 -1.69261009059255E-07 -3.05903163471351E-06"/>
+          <geom type="mesh" mesh="RR_thigh_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+          <geom type="mesh" mesh="RR_thigh_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="0" conaffinity="0"/>
+          <joint name="RR_thigh_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-23 23" range="-10 10"/>
+          <body name="RR_calf" pos="0.0618 0 -0.25">
+            <inertial pos="0.00406529965624255 0.0170625313702701 -0.190892302341427" mass="0.631181512411351" fullinertia="0.00177394362011099 0.00149511554829385 0.000293016524316614 7.07808057510805E-07 1.14100910936328E-06 7.21783059373102E-05"/>
+            <geom type="mesh" mesh="RR_calf_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+            <geom type="mesh" mesh="RR_calf_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="2" conaffinity="1"/>
+            <joint name="RR_calf_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-57.5 57.5" range="-10 10"/>
+            <body name="RR_foot" pos="0.02635 0 -0.25253">
+              <inertial pos="0.0291380914073453 1.12361241957903E-06 5.27543737582903E-07" mass="1.48626016807199" fullinertia="0.00694913544026226 0.00363865976546563 0.00363874623000431 7.53821083793771E-10 -1.42499924020491E-09 -5.8505740607126E-08"/>
+              <geom type="mesh" mesh="RR_foot_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+              <geom type="mesh" mesh="RR_foot_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="2" conaffinity="1" priority="1" friction="0.8 0.02 0.01" condim="6"/>
+              <joint name="RR_wheel_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-23 23"/>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="RL_hip" pos="-0.1566 0.060001 -0.06425" euler="0 0 -3.1416">
+        <inertial pos="0.0513796430583589 -0.0147843497427132 -5.66422804504085E-05" mass="0.605587788225611" fullinertia="0.000374232023494063 0.000649322083662967 0.000341535103559581 8.79517419912004E-06 -1.00243328746112E-06 -6.98021413508007E-08"/>
+        <geom type="mesh" mesh="RL_hip_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+        <geom type="mesh" mesh="RL_hip_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="2" conaffinity="1"/>
+        <joint name="RL_hip_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-23 23" range="-10 10"/>
+        <body name="RL_thigh" pos="0.056 -0.0336 0" euler="0 0 -1.5708">
+          <inertial pos="0.0414485054935686 0.00445274157431672 -0.0219466499748297" mass="0.911684853337552" fullinertia="0.00185767826764724 0.00139828781877635 0.000517928994604598 -4.92687570056967E-08 -1.90833474069484E-07 5.13163421867833E-06"/>
+          <geom type="mesh" mesh="RL_thigh_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+          <geom type="mesh" mesh="RL_thigh_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="0" conaffinity="0"/>
+          <joint name="RL_thigh_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-23 23" range="-10 10"/>
+          <body name="RL_calf" pos="0.0618 0 -0.25">
+            <inertial pos="0.00406526643039104 -0.0170670700302206 -0.190896670438509" mass="0.631181408688848" fullinertia="0.00177394177297966 0.00149515090002334 0.000292979323685045 -6.88417872805803E-07 1.1600427472011E-06 -7.21790945297523E-05"/>
+            <geom type="mesh" mesh="RL_calf_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+            <geom type="mesh" mesh="RL_calf_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="2" conaffinity="1"/>
+            <joint name="RL_calf_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-57.5 57.5" range="-10 10"/>
+            <body name="RL_foot" pos="0.02635 0 -0.25253" euler="3.1416 0 0">
+              <inertial pos="0.0291380914223595 1.23250801187247E-06 -1.5423280574911E-07" mass="1.48626019404892" fullinertia="0.0069491354396393 0.00363863158357568 0.00363877441149128 -1.29088522271439E-10 -1.60736604003513E-09 1.38916414751682E-08"/>
+              <geom type="mesh" mesh="RL_foot_vis" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" contype="0" conaffinity="0" group="1" density="0"/>
+              <geom type="mesh" mesh="RL_foot_col" rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" group="3" contype="2" conaffinity="1" priority="1" friction="0.8 0.02 0.01" condim="6"/>
+              <joint name="RL_wheel_joint" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-23 23"/>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor class="motor" joint="FL_hip_joint" gear="1" ctrlrange="-23 23"/>
+    <motor class="motor" joint="FL_thigh_joint" gear="1" ctrlrange="-23 23"/>
+    <motor class="motor" joint="FL_calf_joint" gear="1" ctrlrange="-57.5 57.5"/>
+    <motor class="motor" joint="FL_wheel_joint" gear="1" ctrlrange="-23 23"/>
+    <motor class="motor" joint="FR_hip_joint" gear="1" ctrlrange="-23 23"/>
+    <motor class="motor" joint="FR_thigh_joint" gear="1" ctrlrange="-23 23"/>
+    <motor class="motor" joint="FR_calf_joint" gear="1" ctrlrange="-57.5 57.5"/>
+    <motor class="motor" joint="FR_wheel_joint" gear="1" ctrlrange="-23 23"/>
+    <motor class="motor" joint="RR_hip_joint" gear="1" ctrlrange="-23 23"/>
+    <motor class="motor" joint="RR_thigh_joint" gear="1" ctrlrange="-23 23"/>
+    <motor class="motor" joint="RR_calf_joint" gear="1" ctrlrange="-57.5 57.5"/>
+    <motor class="motor" joint="RR_wheel_joint" gear="1" ctrlrange="-23 23"/>
+    <motor class="motor" joint="RL_hip_joint" gear="1" ctrlrange="-23 23"/>
+    <motor class="motor" joint="RL_thigh_joint" gear="1" ctrlrange="-23 23"/>
+    <motor class="motor" joint="RL_calf_joint" gear="1" ctrlrange="-57.5 57.5"/>
+    <motor class="motor" joint="RL_wheel_joint" gear="1" ctrlrange="-23 23"/>
+  </actuator>
+  <sensor>
+    <jointpos name="FL_hip_pos" joint="FL_hip_joint"/>
+    <jointpos name="FL_thigh_pos" joint="FL_thigh_joint"/>
+    <jointpos name="FL_calf_pos" joint="FL_calf_joint"/>
+    <jointpos name="FL_wheel_pos" joint="FL_wheel_joint"/>
+    <jointpos name="FR_hip_pos" joint="FR_hip_joint"/>
+    <jointpos name="FR_thigh_pos" joint="FR_thigh_joint"/>
+    <jointpos name="FR_calf_pos" joint="FR_calf_joint"/>
+    <jointpos name="FR_wheel_pos" joint="FR_wheel_joint"/>
+    <jointpos name="RR_hip_pos" joint="RR_hip_joint"/>
+    <jointpos name="RR_thigh_pos" joint="RR_thigh_joint"/>
+    <jointpos name="RR_calf_pos" joint="RR_calf_joint"/>
+    <jointpos name="RR_wheel_pos" joint="RR_wheel_joint"/>
+    <jointpos name="RL_hip_pos" joint="RL_hip_joint"/>
+    <jointpos name="RL_thigh_pos" joint="RL_thigh_joint"/>
+    <jointpos name="RL_calf_pos" joint="RL_calf_joint"/>
+    <jointpos name="RL_wheel_pos" joint="RL_wheel_joint"/>
+    <jointvel name="FL_hip_vel" joint="FL_hip_joint"/>
+    <jointvel name="FL_thigh_vel" joint="FL_thigh_joint"/>
+    <jointvel name="FL_calf_vel" joint="FL_calf_joint"/>
+    <jointvel name="FL_wheel_vel" joint="FL_wheel_joint"/>
+    <jointvel name="FR_hip_vel" joint="FR_hip_joint"/>
+    <jointvel name="FR_thigh_vel" joint="FR_thigh_joint"/>
+    <jointvel name="FR_calf_vel" joint="FR_calf_joint"/>
+    <jointvel name="FR_wheel_vel" joint="FR_wheel_joint"/>
+    <jointvel name="RR_hip_vel" joint="RR_hip_joint"/>
+    <jointvel name="RR_thigh_vel" joint="RR_thigh_joint"/>
+    <jointvel name="RR_calf_vel" joint="RR_calf_joint"/>
+    <jointvel name="RR_wheel_vel" joint="RR_wheel_joint"/>
+    <jointvel name="RL_hip_vel" joint="RL_hip_joint"/>
+    <jointvel name="RL_thigh_vel" joint="RL_thigh_joint"/>
+    <jointvel name="RL_calf_vel" joint="RL_calf_joint"/>
+    <jointvel name="RL_wheel_vel" joint="RL_wheel_joint"/>
+    <framequat name="imu_quat" objtype="site" objname="imu"/>
+    <gyro name="imu_gyro" site="imu"/>
+    <accelerometer name="imu_acc" site="imu"/>
+    <framepos name="frame_pos" objtype="site" objname="imu"/>
+    <framelinvel name="frame_vel" objtype="site" objname="imu"/>
+  </sensor>
+  <keyframe>
+    <key name="default_pose" qpos="3.7 -9.0 0.60 1 0 0 0             0.0 0.9 -1.82 0.0             0.0 -0.9 1.82 0.0             0.0 -0.9 1.82 0.0             0.0 0.9 -1.82 0.0" ctrl="0.0 0.9 -1.82 0.0             0.0 -0.9 1.82 0.0             0.0 -0.9 1.82 0.0             0.0 0.9 -1.82 0.0"/>
+  </keyframe>
+</mujoco>

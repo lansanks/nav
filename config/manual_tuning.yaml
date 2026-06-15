@@ -1,0 +1,29 @@
+/**:
+  ros__parameters:
+    # Race logic: obstacle keeps adjacent red-point fast pairs; mission treats red points as arm task points.
+    race_logic: obstacle
+
+    # Mission race behavior.
+    mission_task_radius: 0.40
+    mission_resume_event: completed
+    mission_arm_retry_period: 1.0
+    arm_mission_service: /arm/mission_event
+    navigation_arm_event_service: /navigation/arm_event
+
+    # Normal waypoint controller tuning.
+    waypoint_tolerance: 0.20
+    max_linear_speed: 0.70
+    max_angular_speed: 1.80
+    k_rho: 1.20
+    k_alpha: 2.40
+    k_beta: -0.60
+
+    # Obstacle-race fast segment tuning. Used only when adjacent red-point pairs mark a fast segment.
+    fast_max_linear_speed: 1.20
+    fast_max_angular_speed: 2.20
+    fast_k_rho: 1.60
+    fast_k_alpha: 2.80
+    fast_k_beta: -0.70
+
+    # Runtime loop rate. Increase only if pose input and downstream command handling can keep up.
+    update_rate_hz: 30.0

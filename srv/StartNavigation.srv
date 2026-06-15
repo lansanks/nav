@@ -1,0 +1,17 @@
+navigation/MapPoint[] points
+string race_logic
+float64 waypoint_tolerance
+float64 max_linear_speed
+float64 max_angular_speed
+float64 k_rho
+float64 k_alpha
+float64 k_beta
+float64 fast_max_linear_speed
+float64 fast_max_angular_speed
+float64 fast_k_rho
+float64 fast_k_alpha
+float64 fast_k_beta
+string controller_name
+---
+bool success
+string message

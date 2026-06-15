@@ -1,0 +1,11 @@
+waypoint_tolerance: 0.200000
+max_linear_speed: 0.800000
+max_angular_speed: 1.800000
+k_rho: 1.200000
+k_alpha: 2.400000
+k_beta: -0.600000
+fast_max_linear_speed: 1.600000
+fast_max_angular_speed: 2.200000
+fast_k_rho: 1.600000
+fast_k_alpha: 2.000000
+fast_k_beta: -0.700000

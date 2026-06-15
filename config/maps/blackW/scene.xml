@@ -1,0 +1,71 @@
+<mujoco model="black scene">
+  <include file="blackW_description.xml"/>
+
+  <statistic center="0 0 0.1" extent="0.8"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="120" elevation="-20"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+
+    <!-- 全局可碰撞平地：用于填充断桥周围区域，消除虚空 -->
+    <geom name="floor_solid" size="0 0 0.05" type="plane" material="groundplane"/>
+
+    <!-- 仅视觉地台：保留原有观感，避免与 floor_solid 产生重复碰撞 -->
+    <geom name="ground_platform"
+          type="box"
+          size="5 3 0.05"
+          pos="-4 0 -0.05"
+          material="groundplane"
+          contype="0"
+          conaffinity="0"
+          friction="1 0.005 0.0001"/>
+
+    <!-- 缓斜坡：长2m，宽4m(=>sy=2.0)，厚0.10m，倾角10deg
+         这里把“斜坡表面起点”对齐到 (x=1.0, z=0)，所以和地面连续 -->
+    <geom name="ramp"
+          type="box"
+          size="1.0 2.0 0.05"
+          pos="1.9934902 0 0.1244078"
+          quat="0.9961947 0 -0.0871557 0"
+          rgba="0.55 0.55 0.55 1"
+          friction="1 0.005 0.0001"/>
+
+    <!-- 断桥：每段0.40m，缝0.15m，桥面水平；宽4m(=>sy=2.0)，厚0.05m
+         桥顶面对齐斜坡末端顶面；并消除坡道到首段桥的 1cm 卡脚缝 -->
+    <body name="broken_bridge" pos="0 0 0">
+      <geom name="bridge_support_0" type="box" size="0.20 2.00 0.1486482" pos="3.1696155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_0" type="box" size="0.20 2.00 0.025" pos="3.1696155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_support_1" type="box" size="0.20 2.00 0.1486482" pos="3.7196155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_1" type="box" size="0.20 2.00 0.025" pos="3.7196155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_support_2" type="box" size="0.20 2.00 0.1486482" pos="4.2696155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_2" type="box" size="0.20 2.00 0.025" pos="4.2696155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_support_3" type="box" size="0.20 2.00 0.1486482" pos="4.8196155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_3" type="box" size="0.20 2.00 0.025" pos="4.8196155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_support_4" type="box" size="0.20 2.00 0.1486482" pos="5.3696155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_4" type="box" size="0.20 2.00 0.025" pos="5.3696155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_support_5" type="box" size="0.20 2.00 0.1486482" pos="5.9196155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_5" type="box" size="0.20 2.00 0.025" pos="5.9196155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_support_6" type="box" size="0.20 2.00 0.1486482" pos="6.4696155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_6" type="box" size="0.20 2.00 0.025" pos="6.4696155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_support_7" type="box" size="0.20 2.00 0.1486482" pos="7.0196155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_7" type="box" size="0.20 2.00 0.025" pos="7.0196155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_support_8" type="box" size="0.20 2.00 0.1486482" pos="7.5696155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_8" type="box" size="0.20 2.00 0.025" pos="7.5696155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_support_9" type="box" size="0.20 2.00 0.1486482" pos="8.1196155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
+      <geom name="bridge_9" type="box" size="0.20 2.00 0.025" pos="8.1196155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
+    </body>
+
+  </worldbody>
+</mujoco>

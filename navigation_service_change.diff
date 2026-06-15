@@ -1,0 +1,3085 @@
+diff --git a/README.md b/README.md
+index 68ddd6f..dd19e97 100644
+--- a/README.md
++++ b/README.md
+@@ -28,9 +28,74 @@ colcon build --symlink-install #编译工作空间
+ ``` bash
+ source install/setup.bash
+ 
+-ros2 launch mujoco_runner mujoco.launch.py rname:=black #rname为机器人名称，你也可以尝试rname:=a1来加载宇树a1机器人
++ros2 launch mujoco_runner mujoco.launch.py # 默认加载 blackW 到 RC_MAP 地图
++```
++没有报错的话即可看到机器人加载在了仿真环境。
++
++`blackW` 轮足机器人可直接这样启动（`blackw/blackW` 都支持）：
++``` bash
++ros2 launch mujoco_runner mujoco.launch.py rname:=blackw
++```
++
++支持通过 launch 参数选择机器人和场景（默认是 blackW + RC_MAP/terrain）：
++``` bash
++ros2 launch mujoco_runner mujoco.launch.py rname:=black scene:=flat        # 无障碍平地（默认）
++ros2 launch mujoco_runner mujoco.launch.py rname:=black scene:=obstacle    # 坡道+断桥
++ros2 launch mujoco_runner mujoco.launch.py rname:=black scene:=terrain     # 复杂地形
++```
++
++如需关闭仿真中额外注入的噪声/非理想项（IMU 噪声、编码器噪声和偏置、随机电机延迟、calf backlash），可使用总开关：
++``` bash
++ros2 launch mujoco_runner mujoco.launch.py \
++  rname:=black \
++  enable_additional_noise:=false
++```
++默认值也可在 `src/mujoco_runner/mujoco_runner/config.py` 中通过 `ENABLE_ADDITIONAL_NOISE` 修改。
++
++### GapModel 缝隙消息（obstacle 场景）
++`mujoco_runner` 会发布 `robot_msgs/GapModel`（默认话题：`/gap_model`）。
++在 `scene:=obstacle` 下会自动读取地图中的 `bridge_<index>` 几何。
++
++当前发布策略为固定两个 gap（`gaps` 长度恒为 2）：
++- `gaps[0]`：机身前方最近的第一个 gap
++- `gaps[1]`：机身后方最近的第一个 gap（已走过）
++
++当对应方向不存在 gap 时，该槽位会填“标记值”（默认 `-9999.0`）：
++- `xs=xe=ymin=ymax=gap_missing_marker`
++- `confidence=0.0`
++- `has_bridge_dir_b=false`
++
++``` bash
++# 默认开启 GapModel 发布
++ros2 launch mujoco_runner mujoco.launch.py rname:=black scene:=obstacle
++
++# 关闭发布
++ros2 launch mujoco_runner mujoco.launch.py \
++  rname:=black scene:=obstacle \
++  publish_gap_model:=false
++
++# 改话题、置信度、缺失标记值
++ros2 launch mujoco_runner mujoco.launch.py \
++  rname:=black scene:=obstacle \
++  gap_model_topic:=/perception/gap_model \
++  gap_model_confidence:=1.0 \
++  gap_missing_marker:=-9999.0
++```
++
++消息字段定义：
++- `header.frame_id = "base_link"`
++- `header.stamp`：当前检测结果时间戳
++- `gaps[0]`：前方最近 gap（或标记）
++- `gaps[1]`：后方最近 gap（或标记）
++- 每个 `gap` 包含：`xs, xe, ymin, ymax, confidence, has_bridge_dir_b, bridge_dir_b[2]`
++- `xs/xe`：设机身原点为 a，沿 `base_link x` 轴与 gap 边界相交得到 b、c，`xs=min(ab,ac)`，`xe=max(ab,ac)`。
++- 当 `base_link x` 轴不与某个 gap 相交时，该 gap 不进入前/后候选。
++- `ymin/ymax`：gap 在 `base_link y` 的横向覆盖范围（会反映桥宽）。
++
++可快速查看：
++``` bash
++ros2 topic echo /gap_model --once
+ ```
+-没有报错的话即可看到机器人加载在了仿真环境，你也可以打开代码的`src/mujoco_runner/mujoco_runner/config.py`文件将`USE_TERRAIN=False`，改为`USE_TERRAIN=True`，尝试加载地形
+ 
+ ### 运行中间件
+ 
+@@ -45,4 +110,4 @@ ros2 run midware middleware
+ 同样的，你可以向话题`'/_lowState/joint'`和`'/_lowState/imu'`中订阅数据，来获取机器人的状态。
+ 
+ 
+-代码并不是很复杂，自行阅读
+\ No newline at end of file
++代码并不是很复杂，自行阅读
+diff --git a/midware/src/midware.cpp b/midware/src/midware.cpp
+index 6395633..7df2650 100644
+--- a/midware/src/midware.cpp
++++ b/midware/src/midware.cpp
+@@ -7,43 +7,50 @@ using std::placeholders::_1;
+ 
+ class MiddlewareNode : public rclcpp::Node {
+ public:
+-    MiddlewareNode() : Node("MiddlewareNode") {
+-        command_sub_ = this->create_subscription<robot_msgs::msg::RobotCommand>(
+-            "/robot_joint_controller/command", 10, std::bind(&MiddlewareNode::commandCallback, this, _1));
+-        state_pub_ = this->create_publisher<robot_msgs::msg::RobotState>("/robot_joint_controller/state", 10);
+-        imu_pub_ = this->create_publisher<sensor_msgs::msg::Imu>("imu", 10);
+-
+-        imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
+-            "/_lowState/imu", 10, std::bind(&MiddlewareNode::imuCallback, this, _1));
+-        state_sub_ = this->create_subscription<robot_msgs::msg::RobotState>(
+-            "/_lowState/joint", 10, std::bind(&MiddlewareNode::stateCallback, this, _1));
+-        command_pub_ = this->create_publisher<robot_msgs::msg::RobotCommand>("/_lowCmd/command", 10);
+-    }
++  MiddlewareNode() : Node("middleware_node") {
++    const auto command_in = this->declare_parameter<std::string>("command_in", "/robot_joint_controller/command");
++    const auto command_out = this->declare_parameter<std::string>("command_out", "/_lowCmd/command");
++    const auto state_in = this->declare_parameter<std::string>("state_in", "/_lowState/joint");
++    const auto state_out = this->declare_parameter<std::string>("state_out", "/robot_joint_controller/state");
++    const auto imu_in = this->declare_parameter<std::string>("imu_in", "/_lowState/imu");
++    const auto imu_out = this->declare_parameter<std::string>("imu_out", "/imu");
++
++    command_sub_ = this->create_subscription<robot_msgs::msg::RobotCommand>(
++        command_in, rclcpp::QoS(10), std::bind(&MiddlewareNode::commandCallback, this, _1));
++    state_sub_ = this->create_subscription<robot_msgs::msg::RobotState>(
++        state_in, rclcpp::QoS(10), std::bind(&MiddlewareNode::stateCallback, this, _1));
++    imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
++        imu_in, rclcpp::QoS(10), std::bind(&MiddlewareNode::imuCallback, this, _1));
++
++    command_pub_ = this->create_publisher<robot_msgs::msg::RobotCommand>(command_out, rclcpp::QoS(10));
++    state_pub_ = this->create_publisher<robot_msgs::msg::RobotState>(state_out, rclcpp::QoS(10));
++    imu_pub_ = this->create_publisher<sensor_msgs::msg::Imu>(imu_out, rclcpp::QoS(10));
++
++    RCLCPP_INFO(this->get_logger(),
++                "Middleware ready. command: %s -> %s, state: %s -> %s, imu: %s -> %s",
++                command_in.c_str(), command_out.c_str(), state_in.c_str(), state_out.c_str(), imu_in.c_str(),
++                imu_out.c_str());
++  }
+ 
+ private:
+-    void commandCallback(const robot_msgs::msg::RobotCommand::SharedPtr msg) {
+-        command_pub_->publish(*msg);
+-    }
+-
+-    void stateCallback(const robot_msgs::msg::RobotState::SharedPtr msg) {
+-        state_pub_->publish(*msg);
+-    }
+-
+-    void imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) {
+-        imu_pub_->publish(*msg);
+-    }
+-
+-    rclcpp::Subscription<robot_msgs::msg::RobotCommand>::SharedPtr command_sub_;
+-    rclcpp::Subscription<robot_msgs::msg::RobotState>::SharedPtr state_sub_;
+-    rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
+-    rclcpp::Publisher<robot_msgs::msg::RobotCommand>::SharedPtr command_pub_;
+-    rclcpp::Publisher<robot_msgs::msg::RobotState>::SharedPtr state_pub_;
+-    rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
++  void commandCallback(const robot_msgs::msg::RobotCommand::SharedPtr msg) { command_pub_->publish(*msg); }
++
++  void stateCallback(const robot_msgs::msg::RobotState::SharedPtr msg) { state_pub_->publish(*msg); }
++
++  void imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) { imu_pub_->publish(*msg); }
++
++  rclcpp::Subscription<robot_msgs::msg::RobotCommand>::SharedPtr command_sub_;
++  rclcpp::Subscription<robot_msgs::msg::RobotState>::SharedPtr state_sub_;
++  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
++
++  rclcpp::Publisher<robot_msgs::msg::RobotCommand>::SharedPtr command_pub_;
++  rclcpp::Publisher<robot_msgs::msg::RobotState>::SharedPtr state_pub_;
++  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
+ };
+ 
+ int main(int argc, char **argv) {
+-    rclcpp::init(argc, argv);
+-    rclcpp::spin(std::make_shared<MiddlewareNode>());
+-    rclcpp::shutdown();
+-    return 0;
++  rclcpp::init(argc, argv);
++  rclcpp::spin(std::make_shared<MiddlewareNode>());
++  rclcpp::shutdown();
++  return 0;
+ }
+diff --git a/mujoco_runner/launch/mujoco.launch.py b/mujoco_runner/launch/mujoco.launch.py
+index 3811941..5a7c6de 100644
+--- a/mujoco_runner/launch/mujoco.launch.py
++++ b/mujoco_runner/launch/mujoco.launch.py
+@@ -1,38 +1,99 @@
+-import os
+ from launch import LaunchDescription
+-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
+-from launch.launch_description_sources import PythonLaunchDescriptionSource
+-from launch.substitutions import LaunchConfiguration, TextSubstitution, Command
++from launch.actions import DeclareLaunchArgument
++from launch.substitutions import LaunchConfiguration
+ from launch_ros.actions import Node
+ from launch_ros.parameter_descriptions import ParameterValue
+-from ament_index_python.packages import get_package_share_directory
++
++from mujoco_runner import config
++
+ 
+ def generate_launch_description():
+-    DeclareLaunchArgument('rname', default_value='black')
+-    rname = LaunchConfiguration("rname")
++    rname_arg = DeclareLaunchArgument("rname", default_value=config.DEFAULT_ROBOT_NAME)
++    scene_arg = DeclareLaunchArgument("scene", default_value=config.SCENE_DEFAULT)
++    publish_odom_arg = DeclareLaunchArgument("publish_odom", default_value="false")
++    publish_rate_hz_arg = DeclareLaunchArgument("publish_rate_hz", default_value="500.0")
++    render_arg = DeclareLaunchArgument("render", default_value="true")
++    render_rate_hz_arg = DeclareLaunchArgument("render_rate_hz", default_value="60.0")
++    real_time_arg = DeclareLaunchArgument("real_time", default_value="true")
++    publish_gap_model_arg = DeclareLaunchArgument("publish_gap_model", default_value="true")
++    gap_model_topic_arg = DeclareLaunchArgument("gap_model_topic", default_value="/gap_model")
++    gap_model_confidence_arg = DeclareLaunchArgument("gap_model_confidence", default_value="1.0")
++    gap_missing_marker_arg = DeclareLaunchArgument("gap_missing_marker", default_value="-9999.0")
++    enable_additional_noise_arg = DeclareLaunchArgument(
++        "enable_additional_noise",
++        default_value=str(config.ENABLE_ADDITIONAL_NOISE).lower(),
++    )
+ 
+-    robot_name = ParameterValue(Command(["echo -n ", rname]), value_type=str)
+-    gazebo_model_name = ParameterValue(Command(["echo -n ", rname, "_gazebo"]), value_type=str)
++    rname = LaunchConfiguration("rname")
++    scene = LaunchConfiguration("scene")
++    publish_odom = LaunchConfiguration("publish_odom")
++    publish_rate_hz = LaunchConfiguration("publish_rate_hz")
++    render = LaunchConfiguration("render")
++    render_rate_hz = LaunchConfiguration("render_rate_hz")
++    real_time = LaunchConfiguration("real_time")
++    publish_gap_model = LaunchConfiguration("publish_gap_model")
++    gap_model_topic = LaunchConfiguration("gap_model_topic")
++    gap_model_confidence = LaunchConfiguration("gap_model_confidence")
++    gap_missing_marker = LaunchConfiguration("gap_missing_marker")
++    enable_additional_noise = LaunchConfiguration("enable_additional_noise")
+ 
+     param_node = Node(
+         package="demo_nodes_cpp",
+         executable="parameter_blackboard",
+         name="param_node",
+-        output='screen',
+-        parameters=[{
+-            "robot_name": robot_name,
+-            "gazebo_model_name": gazebo_model_name,
+-        }],
++        output="screen",
++        parameters=[
++            {
++                "robot_name": ParameterValue(rname, value_type=str),
++                "gazebo_model_name": ParameterValue([rname, "_gazebo"], value_type=str),
++            }
++        ],
+     )
+ 
+-    mujoco_node=Node(
++    mujoco_node = Node(
+         package="mujoco_runner",
+         executable="mm",
+         name="mujoco_node",
+-        output='screen',
+-        parameters=[{
+-            "rname": robot_name
+-        }],
++        output="screen",
++        parameters=[
++            {
++                "rname": ParameterValue(rname, value_type=str),
++                "scene": ParameterValue(scene, value_type=str),
++                "publish_odom": ParameterValue(publish_odom, value_type=bool),
++                "publish_rate_hz": ParameterValue(publish_rate_hz, value_type=float),
++                "render": ParameterValue(render, value_type=bool),
++                "render_rate_hz": ParameterValue(render_rate_hz, value_type=float),
++                "real_time": ParameterValue(real_time, value_type=bool),
++                "publish_gap_model": ParameterValue(publish_gap_model, value_type=bool),
++                "gap_model_topic": ParameterValue(gap_model_topic, value_type=str),
++                "gap_model_confidence": ParameterValue(gap_model_confidence, value_type=float),
++                "gap_missing_marker": ParameterValue(gap_missing_marker, value_type=float),
++                "enable_additional_noise": ParameterValue(enable_additional_noise, value_type=bool),
++            }
++        ],
++    )
++
++    midware_node = Node(
++        package="midware",
++        executable="middleware",
+     )
+ 
+-    return LaunchDescription([param_node,mujoco_node])
+\ No newline at end of file
++    return LaunchDescription(
++        [
++            rname_arg,
++            scene_arg,
++            publish_odom_arg,
++            publish_rate_hz_arg,
++            render_arg,
++            render_rate_hz_arg,
++            real_time_arg,
++            publish_gap_model_arg,
++            gap_model_topic_arg,
++            gap_model_confidence_arg,
++            gap_missing_marker_arg,
++            enable_additional_noise_arg,
++            param_node,
++            mujoco_node,
++            midware_node,
++        ]
++    )
+diff --git a/mujoco_runner/mujoco_runner/config.py b/mujoco_runner/mujoco_runner/config.py
+index 193bc49..68b40d0 100644
+--- a/mujoco_runner/mujoco_runner/config.py
++++ b/mujoco_runner/mujoco_runner/config.py
+@@ -1,38 +1,223 @@
+-SIM_DT=0.002
+-RENDER_DT=0.04#渲染频率太高会导致仿真失真
++# Simulation timing
++SIM_DT = 0.005
++A1_SIM_DT = 0.0005
++DEFAULT_RENDER_RATE_HZ = 60.0
++RENDER_DT = 1.0 / DEFAULT_RENDER_RATE_HZ
+ 
+-SENCE_TERRAIN='scene_terrain.xml'
+-SENCE_PLANE='scene.xml'
++# Scene selection
++SCENE_FLAT = 'scene_flat.xml'
++SCENE_OBSTACLE = 'scene.xml'
++SCENE_TERRAIN = 'scene_terrain.xml'
++SCENE_ROBOCON = 'scene_robocon.xml'
++SCENE_DEFAULT = 'terrain'
++DEFAULT_ROBOT_NAME = "blackW"
+ 
+-USE_TERRAIN=True
++# Backward-compatibility aliases
++SENCE_TERRAIN = SCENE_TERRAIN
++SENCE_PLANE = SCENE_FLAT
+ 
+-DEFAULT_POS=[ 0.0,-0.44,  0.05,
+-             -0.0, 0.44, -0.05,
+-              0.0,-0.44, -0.05,
+-             -0.0, 0.44, -0.05]
++# Artificial sensor/actuator non-ideal effects
++ENABLE_ADDITIONAL_NOISE = False
+ 
+-NOISE_QUAT=4.36e-5
+-NOISE_GYRO=1.94e-5
+-NOISE_ACC=5.88e-4
++# IMU noise
++NOISE_QUAT = 8.36e-2
++NOISE_GYRO = 1.94e-1
++NOISE_ACC = 5.88e-2
+ 
+-MOTOR_DELAY=0.003#s latency
+-ENCODER_POSITION_NOISE=0.0005
+-ENCODER_VELOCITY_NOISE=0.01
+-# MOTOR_BIAS=0.05
+-MOTOR_BIAS=0.01
++# Actuator / encoder model
++MOTOR_DELAY = 0.003  # seconds
++ENCODER_POSITION_NOISE = 0.001
++ENCODER_VELOCITY_NOISE = 0.01
++MOTOR_BIAS = 0.02
+ 
+-ACTUATOR_NUM=12
++CALF_BACKLASH_MIN_DEG = 0.0
++CALF_BACKLASH_MAX_DEG = 0.0
+ 
+-MOTOR_MAPPING=[3, 4, 5, 0, 1, 2, 9, 10, 11, 6, 7, 8]
+-# MOTOR_MAPPING=[0,1,2,3,4,5,6,7,8,9,10,11]
+-DEFAULT_POS=[ 0.0,-0.44,  0.05,
+-             -0.0, 0.44, -0.05,
+-              0.0,-0.44, -0.05,
+-             -0.0, 0.44, -0.05]
+-# ACTUATOR_NUM=6
++LEGGED_JOINT_POS_SENSOR_NAMES = [
++    "FL_hip_pos",
++    "FL_thigh_pos",
++    "FL_calf_pos",
++    "FR_hip_pos",
++    "FR_thigh_pos",
++    "FR_calf_pos",
++    "RL_hip_pos",
++    "RL_thigh_pos",
++    "RL_calf_pos",
++    "RR_hip_pos",
++    "RR_thigh_pos",
++    "RR_calf_pos",
++]
+ 
+-# MOTOR_MAPPING=[0, 1, 2, 3, 4, 5]
+-# DEFAULT_POS=[ -1.5708, -1.5708, 1.5708, -1.5708, -1.5708, 0]
++LEGGED_JOINT_VEL_SENSOR_NAMES = [
++    "FL_hip_vel",
++    "FL_thigh_vel",
++    "FL_calf_vel",
++    "FR_hip_vel",
++    "FR_thigh_vel",
++    "FR_calf_vel",
++    "RL_hip_vel",
++    "RL_thigh_vel",
++    "RL_calf_vel",
++    "RR_hip_vel",
++    "RR_thigh_vel",
++    "RR_calf_vel",
++]
+ 
+-#to do:可以把joint mapping，joint/sensor index放在这里
++BLACKW_JOINT_POS_SENSOR_NAMES = [
++    "FL_hip_pos",
++    "FL_thigh_pos",
++    "FL_calf_pos",
++    "FL_wheel_pos",
++    "FR_hip_pos",
++    "FR_thigh_pos",
++    "FR_calf_pos",
++    "FR_wheel_pos",
++    "RR_hip_pos",
++    "RR_thigh_pos",
++    "RR_calf_pos",
++    "RR_wheel_pos",
++    "RL_hip_pos",
++    "RL_thigh_pos",
++    "RL_calf_pos",
++    "RL_wheel_pos",
++]
+ 
++BLACKW_JOINT_VEL_SENSOR_NAMES = [
++    "FL_hip_vel",
++    "FL_thigh_vel",
++    "FL_calf_vel",
++    "FL_wheel_vel",
++    "FR_hip_vel",
++    "FR_thigh_vel",
++    "FR_calf_vel",
++    "FR_wheel_vel",
++    "RR_hip_vel",
++    "RR_thigh_vel",
++    "RR_calf_vel",
++    "RR_wheel_vel",
++    "RL_hip_vel",
++    "RL_thigh_vel",
++    "RL_calf_vel",
++    "RL_wheel_vel",
++]
++
++GO2W_JOINT_POS_SENSOR_NAMES = [
++    "FL_hip_joint_pos",
++    "FL_thigh_joint_pos",
++    "FL_calf_joint_pos",
++    "FL_wheel_joint_pos",
++    "FR_hip_joint_pos",
++    "FR_thigh_joint_pos",
++    "FR_calf_joint_pos",
++    "FR_wheel_joint_pos",
++    "RL_hip_joint_pos",
++    "RL_thigh_joint_pos",
++    "RL_calf_joint_pos",
++    "RL_wheel_joint_pos",
++    "RR_hip_joint_pos",
++    "RR_thigh_joint_pos",
++    "RR_calf_joint_pos",
++    "RR_wheel_joint_pos",
++]
++
++GO2W_JOINT_VEL_SENSOR_NAMES = [
++    "FL_hip_joint_vel",
++    "FL_thigh_joint_vel",
++    "FL_calf_joint_vel",
++    "FL_wheel_joint_vel",
++    "FR_hip_joint_vel",
++    "FR_thigh_joint_vel",
++    "FR_calf_joint_vel",
++    "FR_wheel_joint_vel",
++    "RL_hip_joint_vel",
++    "RL_thigh_joint_vel",
++    "RL_calf_joint_vel",
++    "RL_wheel_joint_vel",
++    "RR_hip_joint_vel",
++    "RR_thigh_joint_vel",
++    "RR_calf_joint_vel",
++    "RR_wheel_joint_vel",
++]
++
++LEGGED_PROFILE = {
++    "route_name": "legacy_legged",
++    "actuator_num": 12,
++    "joint_pos_sensor_names": LEGGED_JOINT_POS_SENSOR_NAMES,
++    "joint_vel_sensor_names": LEGGED_JOINT_VEL_SENSOR_NAMES,
++    # Index(i): logical motor id in ROS messages
++    # Value: physical motor id in MuJoCo
++    # logical order: FR, FL, RR, RL
++    "motor_mapping": [3, 4, 5, 0, 1, 2, 9, 10, 11, 6, 7, 8],
++    # Physical actuator order in model is FL, FR, RL, RR.
++    "default_pos": [
++        0.0, -0.44, 0.05,
++        -0.0, 0.44, -0.05,
++        0.0, -0.44, -0.05,
++        -0.0, 0.44, -0.05,
++    ],
++}
++
++BLACKW_PROFILE = {
++    "route_name": "wheel_leg_blackw",
++    "actuator_num": 16,
++    "joint_pos_sensor_names": BLACKW_JOINT_POS_SENSOR_NAMES,
++    "joint_vel_sensor_names": BLACKW_JOINT_VEL_SENSOR_NAMES,
++    "imu_attitude_lpf_alpha": 0.01,
++    # logical order: FL, FR, RL, RR, each leg has hip/thigh/calf/wheel.
++    # physical order in blackW model: FL, FR, RR, RL.
++    "motor_mapping": [4, 5, 6, 7, 0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 15],
++    "default_pos": [
++        0.0, 0.9, -1.82, 0.0,
++        0.0, -0.9, 1.82, 0.0,
++        0.0, 0.9, -1.82, 0.0,
++        0.0, -0.9, 1.82, 0.0,
++    ],
++}
++
++GO2W_PROFILE = {
++    "route_name": "wheel_leg_go2w",
++    "actuator_num": 16,
++    "joint_pos_sensor_names": GO2W_JOINT_POS_SENSOR_NAMES,
++    "joint_vel_sensor_names": GO2W_JOINT_VEL_SENSOR_NAMES,
++    # HIMLoco Go2W policy order and copied MJCF physical order are both
++    # FL, FR, RL, RR, each leg has hip/thigh/calf/wheel.
++    "motor_mapping": list(range(16)),
++    "default_pos": [
++        0.0, 0.8, -1.5, 0.0,
++        0.0, 0.8, -1.5, 0.0,
++        0.0, 0.8, -1.5, 0.0,
++        0.0, 0.8, -1.5, 0.0,
++    ],
++}
++
++ROBOT_PROFILES = {
++    "default": LEGGED_PROFILE,
++    "black": LEGGED_PROFILE,
++    "a1": LEGGED_PROFILE,
++    "blackw": BLACKW_PROFILE,
++    "go2w": GO2W_PROFILE,
++}
++
++ROBOT_NAME_ALIASES = {
++    "blackw": "blackW",
++}
++
++
++def resolve_robot_name(robot_name: str) -> str:
++    normalized = str(robot_name).strip() or DEFAULT_ROBOT_NAME
++    return ROBOT_NAME_ALIASES.get(normalized.lower(), normalized)
++
++
++def get_robot_profile(robot_name: str):
++    key = str(robot_name).strip().lower() or DEFAULT_ROBOT_NAME.lower()
++    return ROBOT_PROFILES.get(key, ROBOT_PROFILES["default"])
++
++
++def get_sim_dt(robot_name: str) -> float:
++    return A1_SIM_DT if str(robot_name).strip().lower() == "a1" else SIM_DT
++
++
++# Legacy exports kept for backward compatibility.
++DEFAULT_POS = LEGGED_PROFILE["default_pos"]
++ACTUATOR_NUM = LEGGED_PROFILE["actuator_num"]
++MOTOR_MAPPING = LEGGED_PROFILE["motor_mapping"]
+diff --git a/mujoco_runner/mujoco_runner/controller_demo.py b/mujoco_runner/mujoco_runner/controller_demo.py
+index 5e0a4bb..d5664bf 100644
+--- a/mujoco_runner/mujoco_runner/controller_demo.py
++++ b/mujoco_runner/mujoco_runner/controller_demo.py
+@@ -5,7 +5,6 @@ from robot_msgs.msg import RobotCommand, MotorCommand, RobotState
+ import threading
+ import math
+ import sys
+-import select
+ import termios
+ import tty
+ 
+@@ -43,12 +42,21 @@ class Controller(Node):
+         # 控制相关变量
+         self.current_q = []               # 实时角度
+         self.start_q = []                 # 插值起点
+-        self.target_q = [
+-                -0.0, -0.82, 1.5, # FR
+-                 0.0,  0.82, -1.5, # FL
+-                -0.0, -0.82, 1.5, # RR
+-                 0.0,  0.82, -1.5  #RL 
+-            ]
++        self.target_q_by_count = {
++            12: [
++                -0.0, -0.8014, 1.527,     # FR
++                0.0, 0.8014, -1.527,      # FL
++                -0.0, -0.9, 1.527,        # RR
++                0.0, 0.9, -1.527,         # RL
++            ],
++            16: [
++                -0.0, -0.8014, 1.527, 0.0,    # FR + wheel
++                0.0, 0.8014, -1.527, 0.0,     # FL + wheel
++                -0.0, -0.9, 1.527, 0.0,       # RR + wheel
++                0.0, 0.9, -1.527, 0.0,        # RL + wheel
++            ],
++        }
++        self.target_q = []
+         self.control_state = "PASSIVE"    # PASSIVE / MOVE / HOLD
+         self.start_time = 0.0
+         self.duration = 3.0               # 插值时长
+@@ -88,6 +96,13 @@ class Controller(Node):
+             self.motor_count = len(msg.motor_state)
+             self.get_logger().info(f"检测到 {self.motor_count} 个电机，初始化控制器。")
+ 
++            self.target_q = self.target_q_by_count.get(self.motor_count, [])
++            if not self.target_q:
++                self.get_logger().warn(
++                    f"未配置 {self.motor_count} 电机的目标姿态，使用当前关节角作为 HOLD 目标。"
++                )
++                self.target_q = [msg.motor_state[i].q for i in range(self.motor_count)]
++
+             # 初始化数组
+             self.current_q = [0.0] * self.motor_count
+             self.start_q = [0.0] * self.motor_count
+@@ -215,4 +230,4 @@ def main(args=None):
+         # thread.join() 
+ 
+ if __name__ == '__main__':
+-    main()
+\ No newline at end of file
++    main()
+diff --git a/mujoco_runner/mujoco_runner/main.py b/mujoco_runner/mujoco_runner/main.py
+index edc7cc9..8c1a1f1 100644
+--- a/mujoco_runner/mujoco_runner/main.py
++++ b/mujoco_runner/mujoco_runner/main.py
+@@ -1,223 +1,978 @@
+-import rclpy
+-from rclpy.node import Node
++import os
++import re
+ import threading
+ import time
+-import numpy as np
++from collections import deque
+ 
+ import mujoco
+ import mujoco.viewer
+-
+-from sensor_msgs.msg import Imu
+-from robot_msgs.msg import RobotState, MotorState,RobotCommand
+-
++import numpy as np
++import rclpy
+ from ament_index_python.packages import get_package_share_directory
+-import os
++from nav_msgs.msg import Odometry
++from rclpy.node import Node
++from robot_msgs.msg import Gap, GapModel, MotorState, RobotCommand, RobotState
++from sensor_msgs.msg import Imu
++from std_srvs.srv import Trigger
+ 
+ from . import config
+ 
+-from collections import deque
+ 
+ class MujocoNode(Node):
+     def __init__(self, node_name):
+         super().__init__(node_name)
+ 
+-        self.declare_parameter('rname','black').__init__
+-        rname = self.get_parameter('rname').value
+-        self.get_logger().info(f"loading robot is :{rname}")
++        self.declare_parameter("rname", config.DEFAULT_ROBOT_NAME)
++        self.declare_parameter("scene", config.SCENE_DEFAULT)
++        self.declare_parameter("publish_odom", False)
++        self.declare_parameter("publish_rate_hz", 500.0)
++        self.declare_parameter("render", True)
++        self.declare_parameter("render_rate_hz", config.DEFAULT_RENDER_RATE_HZ)
++        self.declare_parameter("real_time", True)
++        self.declare_parameter("publish_gap_model", True)
++        self.declare_parameter("gap_model_topic", "/gap_model")
++        self.declare_parameter("gap_model_confidence", 1.0)
++        self.declare_parameter("gap_missing_marker", -9999.0)
++        self.declare_parameter("enable_additional_noise", config.ENABLE_ADDITIONAL_NOISE)
++
++        requested_robot_name = str(self.get_parameter("rname").value)
++        scene = str(self.get_parameter("scene").value)
++        self.publish_odom = bool(self.get_parameter("publish_odom").value)
++        self.enable_render = bool(self.get_parameter("render").value)
++        render_rate_hz = float(self.get_parameter("render_rate_hz").value)
++        self.real_time = bool(self.get_parameter("real_time").value)
++        self.publish_gap_model = bool(self.get_parameter("publish_gap_model").value)
++        gap_model_topic = str(self.get_parameter("gap_model_topic").value)
++        gap_model_confidence = float(self.get_parameter("gap_model_confidence").value)
++        self.enable_additional_noise = bool(self.get_parameter("enable_additional_noise").value)
++        self.gap_model_confidence = float(np.clip(gap_model_confidence, 0.0, 1.0))
++        if gap_model_confidence != self.gap_model_confidence:
++            self.get_logger().warn(
++                f"Parameter 'gap_model_confidence'={gap_model_confidence} is out of [0,1]. "
++                f"Clamped to {self.gap_model_confidence}."
++            )
++
++        self.gap_missing_marker = float(self.get_parameter("gap_missing_marker").value)
++
++        publish_rate_hz = float(self.get_parameter("publish_rate_hz").value)
++        if publish_rate_hz <= 0.0:
++            self.get_logger().warn("Parameter 'publish_rate_hz' must be > 0. Fallback to 500 Hz.")
++            publish_rate_hz = 500.0
++        self.publish_period = 1.0 / publish_rate_hz
++
++        if render_rate_hz <= 0.0:
++            self.get_logger().warn(
++                "Parameter 'render_rate_hz' must be > 0. "
++                f"Fallback to {config.DEFAULT_RENDER_RATE_HZ} Hz."
++            )
++            render_rate_hz = config.DEFAULT_RENDER_RATE_HZ
++        self.render_period = 1.0 / render_rate_hz
++
++        self.requested_robot_name = requested_robot_name
++        self.robot_name = config.resolve_robot_name(self.requested_robot_name)
++        self.robot_profile = config.get_robot_profile(self.requested_robot_name)
++        self.route_name = str(self.robot_profile.get("route_name", "legacy_legged"))
++        self.actuator_num = int(self.robot_profile.get("actuator_num", config.ACTUATOR_NUM))
++        self.motor_map = np.asarray(self.robot_profile.get("motor_mapping", config.MOTOR_MAPPING), dtype=np.int32)
++        self.joint_pos_sensor_names = tuple(self.robot_profile.get("joint_pos_sensor_names", []))
++        self.joint_vel_sensor_names = tuple(self.robot_profile.get("joint_vel_sensor_names", []))
++        self.default_ctrl = np.asarray(self.robot_profile.get("default_pos", []), dtype=float)
++        self.imu_attitude_lpf_alpha = float(
++            np.clip(float(self.robot_profile.get("imu_attitude_lpf_alpha", 1.0)), 0.0, 1.0)
++        )
++        self.filtered_imu_quat = None
++        self._validate_route_profile()
++
++        self.get_logger().info(f"loading robot is :{self.robot_name}")
++        if self.robot_name != self.requested_robot_name:
++            self.get_logger().info(
++                f"robot name alias: requested '{self.requested_robot_name}' -> resolved '{self.robot_name}'"
++            )
++        self.get_logger().info(f"control route is :{self.route_name}")
++        self.get_logger().info(f"Additional noise is {'ENABLED' if self.enable_additional_noise else 'DISABLED'}.")
++        if self.imu_attitude_lpf_alpha < 1.0:
++            self.get_logger().info(f"IMU attitude low-pass alpha is {self.imu_attitude_lpf_alpha:.3f}.")
++
++        robot_dir = os.path.join(get_package_share_directory("robot_description"), self.robot_name)
++        path = self.resolve_scene_path(robot_dir, scene)
++        self.get_logger().info(f"using scene is :{os.path.basename(path)}")
++
++        self.model = mujoco.MjModel.from_xml_path(path)
++        self.data = mujoco.MjData(self.model)
++        self._align_route_with_model()
++        self._set_initial_state()
++        self.lock = threading.RLock()
++
++        # Apply robot-specific timestep before building delay buffers.
++        self.model.opt.timestep = config.get_sim_dt(self.requested_robot_name)
++
++        # Sensor cache uses model's actual sensor layout instead of hard-coded indices.
++        self.values = np.array(self.data.sensordata, copy=True)
++        self._initialize_sensor_layout()
++        self._initialize_backlash_model()
++
++        self.trunk_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "trunk")
++        if self.trunk_body_id < 0:
++            self.get_logger().warn("Body 'trunk' not found in model. Ground-truth odom will use sensor fallback.")
+ 
+-        # 电机映射表
+-        # Index(i): 程序/消息中的逻辑电机ID
+-        # Value(phy_id): MuJoCo 仿真中的物理电机ID
+-        # 默认顺序：[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+-        self.motor_map = config.MOTOR_MAPPING
+-        self.actuator_num = config.ACTUATOR_NUM
+-        # self.motor_map = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
++        self.bridge_gaps_world = self._extract_bridge_gaps_world()
+ 
+-        if(config.USE_TERRAIN):
+-            path = os.path.join(get_package_share_directory('robot_description'), rname,config.SENCE_TERRAIN)
++        self._initialize_delay_buffers()
++
++        if self.enable_additional_noise:
++            self.encoder_position_bias = np.random.uniform(-config.MOTOR_BIAS, config.MOTOR_BIAS, self.actuator_num)
++            self.encoder_velocity_bias = np.random.uniform(-config.MOTOR_BIAS, config.MOTOR_BIAS, self.actuator_num)
++        else:
++            self.encoder_position_bias = np.zeros(self.actuator_num, dtype=float)
++            self.encoder_velocity_bias = np.zeros(self.actuator_num, dtype=float)
++
++        self.viewer = None
++        if self.enable_render:
++            self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
++            if self.route_name == "wheel_leg_blackw":
++                # Keep collision geoms active for physics but hide their render group.
++                self.viewer.opt.geomgroup[3] = 0
++                self.get_logger().info("blackW route: collision geoms (group 3) are hidden in renderer.")
++            self.get_logger().info(f"Rendering is ENABLED at {render_rate_hz:.1f} Hz.")
++
++        self.imu_publisher = self.create_publisher(Imu, "/_lowState/imu", 10)
++        self.joint_publisher = self.create_publisher(RobotState, "/_lowState/joint", 10)
++        self.odom_publisher = None
++        if self.publish_odom:
++            self.odom_publisher = self.create_publisher(Odometry, "/odom", 10)
++            self.get_logger().info("Ground-truth odom publishing is ENABLED on '/odom'.")
+         else:
+-            path = os.path.join(get_package_share_directory('robot_description'), rname,config.SENCE_PLANE)
++            self.get_logger().info("Ground-truth odom publishing is DISABLED.")
++
++        self.gap_model_publisher = None
++        if self.publish_gap_model:
++            self.gap_model_publisher = self.create_publisher(GapModel, gap_model_topic, 10)
++            if self.bridge_gaps_world:
++                self.get_logger().info(
++                    f"GapModel publishing is ENABLED on '{gap_model_topic}' in fixed-two-gap mode "
++                    f"(front+rear). source_gaps={len(self.bridge_gaps_world)}, "
++                    f"missing_marker={self.gap_missing_marker}."
++                )
++            else:
++                self.get_logger().warn(
++                    f"GapModel publishing is ENABLED on '{gap_model_topic}', but no geoms named "
++                    f"'bridge_<index>' were found. Both slots will publish marker {self.gap_missing_marker}."
++                )
++        else:
++            self.get_logger().info("GapModel publishing is DISABLED.")
+ 
+-        self.model = mujoco.MjModel.from_xml_path(path)
+-        self.data = mujoco.MjData(self.model)
+-        self.data.ctrl[:] = config.DEFAULT_POS
+-        self.values = np.zeros(40)
+-        self.lock=threading.RLock()
+-        self.model.opt.timestep=config.SIM_DT
+-#motor letency
+-        self.delay_steps = max(1, int(config.MOTOR_DELAY / self.model.opt.timestep))
+-        self.ctrl_buffer = [deque([0.0]*self.delay_steps, maxlen=self.delay_steps) for _ in range(self.actuator_num)]
+-        self.joint_state_buffer = [deque([ (0.0, 0.0) ] * self.delay_steps, maxlen=self.delay_steps) for _ in range(self.actuator_num)]
+-###motor bais
+-        self.encoder_position_bias = np.random.uniform(-config.MOTOR_BIAS, config.MOTOR_BIAS, self.actuator_num)
+-        self.encoder_velocity_bias = np.random.uniform(-config.MOTOR_BIAS, config.MOTOR_BIAS, self.actuator_num)  
+-
+-        if(rname=='a1'):
+-            self.model.opt.timestep=0.0005
+-
+-        self.viewer=mujoco.viewer.launch_passive(self.model, self.data)
+-
+-        self.imu_publisher = self.create_publisher(Imu, '/_lowState/imu', 10)
+-        self.joint_publisher = self.create_publisher(RobotState, '/_lowState/joint', 10)
+-        
+-        self.joint_subscriber = self.create_subscription(RobotCommand,'/_lowCmd/command', self.joint_cmd_callback, 10)
+-        self.timer = self.create_timer(0.001, self.publish_data)
+-        
+-        self.simulation_thread = threading.Thread(target=self.run_simulation)
+-        self.simulation_thread.daemon = True
++        self.joint_subscriber = self.create_subscription(
++            RobotCommand, "/_lowCmd/command", self.joint_cmd_callback, 10
++        )
++        self.reset_default_pose_service = self.create_service(
++            Trigger, "/mujoco_runner/reset_default_pose", self.reset_default_pose_callback
++        )
++        self.timer = self.create_timer(self.publish_period, self.publish_data)
++
++        self.simulation_thread = threading.Thread(target=self.run_simulation, daemon=True)
+         self.simulation_thread.start()
+ 
+-        self.render_thread = threading.Thread(target=self.run_render)
+-        self.render_thread.daemon = True
+-        self.render_thread.start()
++        if self.viewer is not None:
++            self.render_thread = threading.Thread(target=self.run_render, daemon=True)
++            self.render_thread.start()
++
++    def _validate_route_profile(self):
++        if self.actuator_num <= 0:
++            self.get_logger().warn(
++                f"Invalid actuator_num={self.actuator_num} in route profile '{self.route_name}'. "
++                "Fallback to legacy profile."
++            )
++            fallback = config.ROBOT_PROFILES["default"]
++            self.actuator_num = int(fallback["actuator_num"])
++            self.motor_map = np.asarray(fallback["motor_mapping"], dtype=np.int32)
++            self.joint_pos_sensor_names = tuple(fallback["joint_pos_sensor_names"])
++            self.joint_vel_sensor_names = tuple(fallback["joint_vel_sensor_names"])
++            self.default_ctrl = np.asarray(fallback["default_pos"], dtype=float)
++
++        if self.motor_map.size != self.actuator_num:
++            self.get_logger().warn(
++                f"Route '{self.route_name}' motor_mapping size={self.motor_map.size} "
++                f"!= actuator_num={self.actuator_num}. Fallback to identity mapping."
++            )
++            self.motor_map = np.arange(self.actuator_num, dtype=np.int32)
++
++        invalid_mapping = (
++            self.motor_map.size == 0
++            or np.any(self.motor_map < 0)
++            or np.any(self.motor_map >= self.actuator_num)
++            or np.unique(self.motor_map).size != self.actuator_num
++        )
++        if invalid_mapping:
++            self.get_logger().warn(
++                f"Route '{self.route_name}' has invalid motor_mapping. Fallback to identity mapping."
++            )
++            self.motor_map = np.arange(self.actuator_num, dtype=np.int32)
++
++        if len(self.joint_pos_sensor_names) != self.actuator_num:
++            self.get_logger().warn(
++                f"Route '{self.route_name}' joint_pos_sensor_names count={len(self.joint_pos_sensor_names)} "
++                f"!= actuator_num={self.actuator_num}. Missing entries will use synthetic placeholders."
++            )
++            pos_names = list(self.joint_pos_sensor_names[: self.actuator_num])
++            while len(pos_names) < self.actuator_num:
++                pos_names.append(f"joint_{len(pos_names)}_pos")
++            self.joint_pos_sensor_names = tuple(pos_names)
++
++        if len(self.joint_vel_sensor_names) != self.actuator_num:
++            self.get_logger().warn(
++                f"Route '{self.route_name}' joint_vel_sensor_names count={len(self.joint_vel_sensor_names)} "
++                f"!= actuator_num={self.actuator_num}. Missing entries will use synthetic placeholders."
++            )
++            vel_names = list(self.joint_vel_sensor_names[: self.actuator_num])
++            while len(vel_names) < self.actuator_num:
++                vel_names.append(f"joint_{len(vel_names)}_vel")
++            self.joint_vel_sensor_names = tuple(vel_names)
++
++        if self.default_ctrl.size < self.actuator_num:
++            self.get_logger().warn(
++                f"Route '{self.route_name}' default_pos length={self.default_ctrl.size} "
++                f"< actuator_num={self.actuator_num}. Remaining controls set to 0."
++            )
++            padded = np.zeros(self.actuator_num, dtype=float)
++            padded[: self.default_ctrl.size] = self.default_ctrl
++            self.default_ctrl = padded
++        elif self.default_ctrl.size > self.actuator_num:
++            self.default_ctrl = self.default_ctrl[: self.actuator_num]
++
++    def _align_route_with_model(self):
++        model_actuator_num = int(self.model.nu)
++        if model_actuator_num == self.actuator_num:
++            return
++
++        self.get_logger().warn(
++            f"Model actuator count is {model_actuator_num}, route '{self.route_name}' expects {self.actuator_num}. "
++            "Switching to identity mapping with model actuator count."
++        )
++
++        self.actuator_num = model_actuator_num
++        self.motor_map = np.arange(self.actuator_num, dtype=np.int32)
++        self.default_ctrl = np.zeros(self.actuator_num, dtype=float)
++        pos_names = list(self.joint_pos_sensor_names[: self.actuator_num])
++        vel_names = list(self.joint_vel_sensor_names[: self.actuator_num])
++        while len(pos_names) < self.actuator_num:
++            pos_names.append(f"joint_{len(pos_names)}_pos")
++        while len(vel_names) < self.actuator_num:
++            vel_names.append(f"joint_{len(vel_names)}_vel")
++        self.joint_pos_sensor_names = tuple(pos_names)
++        self.joint_vel_sensor_names = tuple(vel_names)
++
++    def _set_initial_state(self):
++        key_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_KEY, "default_pose")
++        if key_id >= 0:
++            mujoco.mj_resetDataKeyframe(self.model, self.data, key_id)
++        else:
++            self.get_logger().warn("Keyframe 'default_pose' not found. Falling back to model default pose.")
++
++        apply_count = min(self.data.ctrl.shape[0], self.default_ctrl.size)
++        self.data.ctrl[:apply_count] = self.default_ctrl[:apply_count]
++
++        mujoco.mj_forward(self.model, self.data)
++
++    def reset_default_pose_callback(self, request, response):
++        del request
++        with self.lock:
++            self._set_initial_state()
++            self.reset_delay()
++        response.success = True
++        response.message = "reset to keyframe 'default_pose'"
++        self.get_logger().info("Reset to keyframe 'default_pose' via ROS service.")
++        return response
++
++    def _resolve_sensor_slice(self, sensor_name: str, expected_dim: int = None, warn_on_missing: bool = True):
++        sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name)
++        if sensor_id < 0:
++            if warn_on_missing:
++                self.get_logger().warn(f"Sensor '{sensor_name}' not found in model.")
++            return None
++
++        adr = int(self.model.sensor_adr[sensor_id])
++        dim = int(self.model.sensor_dim[sensor_id])
++
++        if expected_dim is not None and dim != expected_dim:
++            self.get_logger().warn(
++                f"Sensor '{sensor_name}' dim={dim}, expected {expected_dim}. Using available dimension."
++            )
++
++        return slice(adr, adr + dim)
++
++    def _initialize_sensor_layout(self):
++        self.imu_quat_slice = self._resolve_sensor_slice("imu_quat", 4)
++        self.imu_gyro_slice = self._resolve_sensor_slice("imu_gyro", 3)
++        self.imu_acc_slice = self._resolve_sensor_slice("imu_acc", 3)
++        self.frame_pos_slice = self._resolve_sensor_slice("frame_pos", 3)
++        self.frame_vel_slice = self._resolve_sensor_slice("frame_vel", 3)
++
++        pos_indices = []
++        vel_indices = []
++
++        for name in self.joint_pos_sensor_names:
++            sensor_slice = self._resolve_sensor_slice(name, 1, warn_on_missing=False)
++            if sensor_slice is None:
++                pos_indices = []
++                break
++            pos_indices.append(sensor_slice.start)
++
++        for name in self.joint_vel_sensor_names:
++            sensor_slice = self._resolve_sensor_slice(name, 1, warn_on_missing=False)
++            if sensor_slice is None:
++                vel_indices = []
++                break
++            vel_indices.append(sensor_slice.start)
++
++        if len(pos_indices) == self.actuator_num and len(vel_indices) == self.actuator_num:
++            self.joint_pos_data_indices = pos_indices
++            self.joint_vel_data_indices = vel_indices
++            self.get_logger().info("Using name-based joint sensor layout.")
++        else:
++            self.joint_pos_data_indices = list(range(self.actuator_num))
++            self.joint_vel_data_indices = list(range(self.actuator_num, 2 * self.actuator_num))
++            self.get_logger().warn(
++                "Could not resolve full name-based joint sensors. Falling back to contiguous layout assumption."
++            )
++
++        self.joint_pos_data_indices_np = np.asarray(self.joint_pos_data_indices, dtype=np.int32)
++        self.joint_vel_data_indices_np = np.asarray(self.joint_vel_data_indices, dtype=np.int32)
++        self.logical_joint_pos_indices = self.joint_pos_data_indices_np[self.motor_map]
++        self.logical_joint_vel_indices = self.joint_vel_data_indices_np[self.motor_map]
++
++    def _initialize_backlash_model(self):
++        self.logical_joint_names = np.asarray(
++            [self.joint_pos_sensor_names[int(phy_id)].replace("_pos", "") for phy_id in self.motor_map],
++            dtype=object,
++        )
++        self.calf_physical_ids = np.asarray(
++            [idx for idx, name in enumerate(self.joint_pos_sensor_names) if name.endswith("calf_pos")],
++            dtype=np.int32,
++        )
++        self.calf_logical_ids = np.flatnonzero(np.isin(self.motor_map, self.calf_physical_ids)).astype(np.int32)
++        self.calf_backlash_by_physical = np.zeros(self.actuator_num, dtype=float)
++
++        if self.calf_physical_ids.size == 0:
++            self.calf_backlash_by_logical = np.zeros(self.actuator_num, dtype=float)
++            self.get_logger().warn("No calf joints detected for backlash model.")
++            return
++
++        if not self.enable_additional_noise:
++            self.calf_backlash_by_logical = self.calf_backlash_by_physical[self.motor_map]
++            self.get_logger().info("Calf backlash deadband is DISABLED.")
++            return
++
++        sampled_backlash_deg = np.random.uniform(
++            config.CALF_BACKLASH_MIN_DEG,
++            config.CALF_BACKLASH_MAX_DEG,
++            self.calf_physical_ids.size,
++        )
++        self.calf_backlash_by_physical[self.calf_physical_ids] = np.deg2rad(sampled_backlash_deg)
++        self.calf_backlash_by_logical = self.calf_backlash_by_physical[self.motor_map]
++
++        sampled_info = ", ".join(
++            f"{self.logical_joint_names[int(logical_id)]}:{np.rad2deg(self.calf_backlash_by_logical[int(logical_id)]):.2f}deg"
++            for logical_id in self.calf_logical_ids
++        )
++        self.get_logger().info(f"Applied calf backlash deadband: {sampled_info}")
++
++    def _initialize_delay_buffers(self):
++        self.delay_steps_list = []
++        self.ctrl_buffer = []
++        self.joint_state_buffer = []
++        self.delayed_ctrl_cache = np.zeros(self.actuator_num, dtype=float)
++        self.delayed_joint_pos_cache = np.zeros(self.actuator_num, dtype=float)
++        self.delayed_joint_vel_cache = np.zeros(self.actuator_num, dtype=float)
++
++        min_delay = 0.0
++        max_delay = config.MOTOR_DELAY if self.enable_additional_noise else 0.0
++
++        for _ in range(self.actuator_num):
++            if max_delay > 0.0:
++                delay_time = np.random.uniform(min_delay, max_delay)
++                delay_steps = max(1, int(delay_time / self.model.opt.timestep))
++            else:
++                delay_steps = 1
++            self.delay_steps_list.append(delay_steps)
++            self.ctrl_buffer.append(deque([0.0] * delay_steps, maxlen=delay_steps))
++            self.joint_state_buffer.append(deque([(0.0, 0.0)] * delay_steps, maxlen=delay_steps))
++
++    def _read_sensor_vector(self, sensor_slice, expected_dim: int, default=None):
++        if default is None:
++            default = np.zeros(expected_dim, dtype=float)
++
++        if sensor_slice is None:
++            return np.array(default, dtype=float)
++
++        if len(self.values) < sensor_slice.stop:
++            return np.array(default, dtype=float)
++
++        vec = np.array(self.values[sensor_slice], dtype=float)
++        if vec.size == expected_dim:
++            return vec
++        if vec.size > expected_dim:
++            return vec[:expected_dim]
++
++        out = np.array(default, dtype=float)
++        out[: vec.size] = vec
++        return out
++
++    @staticmethod
++    def resolve_scene_path(robot_dir: str, scene: str) -> str:
++        scene_alias = {
++            "flat": config.SCENE_FLAT,
++            "plane": config.SCENE_FLAT,
++            "obstacle": config.SCENE_OBSTACLE,
++            "terrain": config.SCENE_TERRAIN,
++            "robocon": config.SCENE_ROBOCON,
++        }
++
++        scene_key = scene.strip().lower()
++        if os.path.isabs(scene):
++            return scene
++
++        scene_file = scene_alias.get(scene_key, scene)
++        scene_path = os.path.join(robot_dir, scene_file)
++        if os.path.isfile(scene_path):
++            return scene_path
++
++        return os.path.join(robot_dir, config.SCENE_FLAT)
++
++    @staticmethod
++    def _rotation_matrix_from_quat(quat_wxyz):
++        q = np.array(quat_wxyz, dtype=float)
++        norm = np.linalg.norm(q)
++        if norm < 1e-12:
++            return np.eye(3)
++
++        w, x, y, z = q / norm
++        return np.array(
++            [
++                [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)],
++                [2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w)],
++                [2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y)],
++            ],
++            dtype=float,
++        )
++
++    def _base_pose_world(self):
++        if self.trunk_body_id >= 0:
++            base_pos = np.array(self.data.xpos[self.trunk_body_id], dtype=float)
++            base_quat = np.array(self.data.xquat[self.trunk_body_id], dtype=float)
++            return base_pos, base_quat
++
++        frame_pos = self._read_sensor_vector(self.frame_pos_slice, 3, default=[0.0, 0.0, 0.0])
++        quat_raw = self._read_sensor_vector(self.imu_quat_slice, 4, default=[1.0, 0.0, 0.0, 0.0])
++        return np.array(frame_pos, dtype=float), np.array(quat_raw, dtype=float)
++
++    def _geom_footprint_xy_world(self, geom_id: int):
++        center = np.array(self.data.geom_xpos[geom_id], dtype=float)
++        xmat = np.array(self.data.geom_xmat[geom_id], dtype=float).reshape(3, 3)
++        sx = float(self.model.geom_size[geom_id][0])
++        sy = float(self.model.geom_size[geom_id][1])
++
++        corners = []
++        for sign_x in (-1.0, 1.0):
++            for sign_y in (-1.0, 1.0):
++                local = np.array([sign_x * sx, sign_y * sy, 0.0], dtype=float)
++                world = center + xmat @ local
++                corners.append(world[:2])
++
++        return np.array(corners, dtype=float)
++
++    def _extract_bridge_gaps_world(self):
++        bridge_geoms = []
++        for geom_id in range(self.model.ngeom):
++            geom_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
++            if geom_name is None:
++                continue
++
++            match = re.fullmatch(r"bridge_(\d+)", str(geom_name))
++            if match is None:
++                continue
++
++            bridge_geoms.append((int(match.group(1)), geom_id))
++
++        bridge_geoms.sort(key=lambda item: item[0])
++
++        if len(bridge_geoms) < 2:
++            return []
++
++        gaps = []
++        for (_, geom_a), (_, geom_b) in zip(bridge_geoms[:-1], bridge_geoms[1:]):
++            corners_a = self._geom_footprint_xy_world(geom_a)
++            corners_b = self._geom_footprint_xy_world(geom_b)
++
++            center_a = np.mean(corners_a, axis=0)
++            center_b = np.mean(corners_b, axis=0)
++            dir_w = center_b - center_a
++            dir_norm = np.linalg.norm(dir_w)
++            if dir_norm < 1e-9:
++                continue
++            dir_w = dir_w / dir_norm
++            lat_w = np.array([-dir_w[1], dir_w[0]], dtype=float)
++
++            s_a = corners_a @ dir_w
++            s_b = corners_b @ dir_w
++            l_a = corners_a @ lat_w
++            l_b = corners_b @ lat_w
++
++            s_start = float(np.max(s_a))
++            s_end = float(np.min(s_b))
++            if s_end <= s_start + 1e-6:
++                continue
++
++            l_min = float(max(np.min(l_a), np.min(l_b)))
++            l_max = float(min(np.max(l_a), np.max(l_b)))
++            if l_max <= l_min + 1e-6:
++                continue
++
++            top_a = float(self.data.geom_xpos[geom_a][2] + self.model.geom_size[geom_a][2])
++            top_b = float(self.data.geom_xpos[geom_b][2] + self.model.geom_size[geom_b][2])
++            z_world = max(top_a, top_b)
++
++            gaps.append(
++                {
++                    "s_start": s_start,
++                    "s_end": s_end,
++                    "l_min": l_min,
++                    "l_max": l_max,
++                    "z_world": z_world,
++                    "dir_w": dir_w,
++                    "lat_w": lat_w,
++                }
++            )
++
++        return gaps
++
++    def get_base_position(self):
++        frame_pos = self._read_sensor_vector(self.frame_pos_slice, 3, default=[0.0, 0.0, 0.0])
++        return float(frame_pos[0]), float(frame_pos[1]), float(frame_pos[2])
+ 
+     def run_render(self):
+-        while self.viewer.is_running():
++        while rclpy.ok() and self.viewer is not None and self.viewer.is_running():
+             with self.lock:
+                 self.viewer.sync()
+-            time.sleep(config.RENDER_DT)#<50hz
++            time.sleep(self.render_period)
+ 
+     def run_simulation(self):
+-        while self.viewer.is_running():
++        while rclpy.ok() and (self.viewer is None or self.viewer.is_running()):
+             step_start = time.perf_counter()
+             with self.lock:
+                 for i in range(self.actuator_num):
+-                    self.data.ctrl[i] = self.ctrl_buffer[i][0]
++                    self.delayed_ctrl_cache[i] = self.ctrl_buffer[i][0]
++                self.data.ctrl[: self.actuator_num] = self.delayed_ctrl_cache
++
+                 mujoco.mj_step(self.model, self.data)
+-                #self.values = self.data.sensordata
+-            ##motor letency
++
+                 delayed_values = np.array(self.data.sensordata, copy=True)
++                joint_q = self.data.sensordata[self.joint_pos_data_indices_np]
++                joint_dq = self.data.sensordata[self.joint_vel_data_indices_np]
+                 for i in range(self.actuator_num):
+-                    q_real  = float(self.data.sensordata[i])
+-                    dq_real = float(self.data.sensordata[i + self.actuator_num])
+-                    self.joint_state_buffer[i].append((q_real, dq_real))
+-                for i in range(self.actuator_num):
+-                    delayed_values[i]      = self.joint_state_buffer[i][0][0] 
+-                    delayed_values[i + self.actuator_num] = self.joint_state_buffer[i][0][1] 
++                    self.joint_state_buffer[i].append((float(joint_q[i]), float(joint_dq[i])))
++                    delayed_state = self.joint_state_buffer[i][0]
++                    self.delayed_joint_pos_cache[i] = delayed_state[0]
++                    self.delayed_joint_vel_cache[i] = delayed_state[1]
++
++                delayed_values[self.joint_pos_data_indices_np] = self.delayed_joint_pos_cache
++                delayed_values[self.joint_vel_data_indices_np] = self.delayed_joint_vel_cache
++
+                 self.values = delayed_values
+-            ###
+ 
+-            time_until_next_step = self.model.opt.timestep - (time.perf_counter() - step_start)
+-            if time_until_next_step > 0:
+-                time.sleep(time_until_next_step)
++            if self.real_time:
++                time_until_next_step = self.model.opt.timestep - (time.perf_counter() - step_start)
++                if time_until_next_step > 0:
++                    time.sleep(time_until_next_step)
+ 
+     def joint_cmd_callback(self, msg):
+-        if self.data is not None:
+-            with self.lock:
+-                for i in range(self.actuator_num):
+-                    msg.motor_command[i].q+=self.encoder_position_bias[i]
+-                    # 获取映射后的物理ID
+-                    phy_id = self.motor_map[i]
+-
+-                    # 反馈数据使用 phy_id 获取对应的物理电机状态
+-                    # self.values 存储的是物理顺序的数据
+-                    q_feedback = self.values[phy_id]
+-                    dq_feedback = self.values[phy_id + self.actuator_num]
+-
+-                    u = (
+-                        msg.motor_command[i].tau
+-                        + msg.motor_command[i].kp
+-                        * (msg.motor_command[i].q - q_feedback) # 使用物理反馈
+-                        + msg.motor_command[i].kd
+-                        * (msg.motor_command[i].dq - dq_feedback) # 使用物理反馈
+-                    )
+-                    self.ctrl_buffer[phy_id].append(u)
++        if self.data is None:
++            return
++
++        with self.lock:
++            cmd_count = len(msg.motor_command)
++            if cmd_count < self.actuator_num:
++                self.get_logger().warn(
++                    f"Received RobotCommand with {cmd_count} motors, expected at least {self.actuator_num}. Ignoring command."
++                )
++                return
++
++            q_feedback = self.values[self.logical_joint_pos_indices]
++            dq_feedback = self.values[self.logical_joint_vel_indices]
++
++            cmd_q = np.fromiter((cmd.q for cmd in msg.motor_command[: self.actuator_num]), dtype=float)
++            cmd_dq = np.fromiter((cmd.dq for cmd in msg.motor_command[: self.actuator_num]), dtype=float)
++            cmd_tau = np.fromiter((cmd.tau for cmd in msg.motor_command[: self.actuator_num]), dtype=float)
++            cmd_kp = np.fromiter((cmd.kp for cmd in msg.motor_command[: self.actuator_num]), dtype=float)
++            cmd_kd = np.fromiter((cmd.kd for cmd in msg.motor_command[: self.actuator_num]), dtype=float)
++
++            pos_error = cmd_q - q_feedback
++            if self.calf_logical_ids.size > 0:
++                calf_error = pos_error[self.calf_logical_ids]
++                calf_deadband = self.calf_backlash_by_logical[self.calf_logical_ids]
++                pos_error[self.calf_logical_ids] = np.where(
++                    np.abs(calf_error) <= calf_deadband,
++                    0.0,
++                    calf_error - np.sign(calf_error) * calf_deadband,
++                )
++
++            u = cmd_tau + cmd_kp * pos_error + cmd_kd * (cmd_dq - dq_feedback)
++            for logical_id, phy_id in enumerate(self.motor_map):
++                self.ctrl_buffer[int(phy_id)].append(float(u[logical_id]))
+ 
+     def publish_data(self):
+         with self.lock:
++            stamp_msg = self.get_clock().now().to_msg()
+             self.publish_imu_data()
+             self.publish_joint_state()
++            if self.publish_odom:
++                self.publish_ground_truth_odom(stamp_msg)
++            if self.gap_model_publisher is not None:
++                self.publish_gap_model_data(stamp_msg)
+ 
+     def publish_joint_state(self):
+         robot_state_msg = RobotState()
+-        for i in range(self.actuator_num): # i 是逻辑ID
+-            # 获取对应的物理ID
+-            phy_id = self.motor_map[i]
+-
+-            motor_state = MotorState() 
+-
+-            motor_state.q = float(self.values[i])+np.random.normal(0, config.ENCODER_POSITION_NOISE) - self.encoder_position_bias[i]    
+-            motor_state.dq = float(self.values[self.actuator_num + i])+np.random.normal(0, config.ENCODER_VELOCITY_NOISE) + self.encoder_velocity_bias[i]    
+-            # 使用 phy_id 从物理数据源中读取数据
+-            # 注意：self.values 的索引是 [0~11]位置, [self.actuator_num~23]速度
+-            # 噪声也加在读取到的物理数据上
+-            
+-            # 读取位置 (phy_id)
+-            base_q = float(self.values[phy_id])
+-            # 读取速度 (phy_id + self.actuator_num)
+-            base_dq = float(self.values[self.actuator_num + phy_id])
+-
+-            motor_state.q = base_q + np.random.normal(0, config.ENCODER_POSITION_NOISE) + self.encoder_position_bias[phy_id]    
+-            motor_state.dq = base_dq + np.random.normal(0, config.ENCODER_VELOCITY_NOISE) + self.encoder_velocity_bias[phy_id]    
+-            
+-            motor_state.ddq = 0.0                         
+-            motor_state.tau_est = 0.0                    
+-            motor_state.cur = 0.0                   
++        base_q = self.values[self.logical_joint_pos_indices]
++        base_dq = self.values[self.logical_joint_vel_indices]
++        if self.enable_additional_noise:
++            q_noise = np.random.normal(0.0, config.ENCODER_POSITION_NOISE, self.actuator_num)
++            dq_noise = np.random.normal(0.0, config.ENCODER_VELOCITY_NOISE, self.actuator_num)
++        else:
++            q_noise = np.zeros(self.actuator_num, dtype=float)
++            dq_noise = np.zeros(self.actuator_num, dtype=float)
++
++        for i in range(self.actuator_num):
++            motor_state = MotorState()
++            motor_state.q = float(base_q[i] + q_noise[i] + self.encoder_position_bias[i])
++            motor_state.dq = float(base_dq[i] + dq_noise[i] + self.encoder_velocity_bias[i])
++            motor_state.ddq = 0.0
++            motor_state.tau_est = 0.0
++            motor_state.cur = 0.0
+ 
+             robot_state_msg.motor_state.append(motor_state)
++
+         self.joint_publisher.publish(robot_state_msg)
+ 
+     def publish_imu_data(self):
+         imu_msg = Imu()
+ 
+-        angle_noise = np.random.normal(0, config.NOISE_QUAT, 3)
+-        q_noised = self.quat_multiply(self.axis_angle_to_quat(angle_noise), np.array([self.values[24],self.values[25],self.values[26],self.values[27],]))
+-        q_norm = np.linalg.norm(q_noised)
+-        if q_norm > 0:
+-            q_noised /= q_norm
++        quat_raw = self._read_sensor_vector(self.imu_quat_slice, 4, default=[1.0, 0.0, 0.0, 0.0])
++        gyro_raw = self._read_sensor_vector(self.imu_gyro_slice, 3)
++        acc_raw = self._read_sensor_vector(self.imu_acc_slice, 3)
++
++        if self.enable_additional_noise:
++            angle_noise_static = np.random.normal(0, 0.7, 3)
++            angle_noise_static_filtered = 0.05 * angle_noise_static
++            angle_noise = np.random.normal(angle_noise_static_filtered, config.NOISE_QUAT, 3)
++            angle_noise_filtered = 0.1 * angle_noise
++            q_noised = self.quat_multiply(self.axis_angle_to_quat(angle_noise_filtered), quat_raw)
+         else:
+-            q_noised = np.array([1.0, 0.0, 0.0, 0.0])
++            q_noised = np.array(quat_raw, dtype=float)
++
++        q_noised = self._normalize_quat(q_noised)
++        q_output = self._low_pass_imu_attitude(q_noised)
+ 
+-        imu_msg.orientation.w = q_noised[0]
+-        imu_msg.orientation.x = q_noised[1]
+-        imu_msg.orientation.y = q_noised[2]
+-        imu_msg.orientation.z = q_noised[3]
+-        # imu_msg.orientation.w = self.values[24]
+-        # imu_msg.orientation.x = self.values[25]
+-        # imu_msg.orientation.y = self.values[26]
+-        # imu_msg.orientation.z = self.values[27]
++        imu_msg.orientation.w = float(q_output[0])
++        imu_msg.orientation.x = float(q_output[1])
++        imu_msg.orientation.y = float(q_output[2])
++        imu_msg.orientation.z = float(q_output[3])
++
++        if self.enable_additional_noise:
++            gyro = gyro_raw + np.random.normal(0.0, config.NOISE_GYRO, 3)
++            acc = acc_raw + np.random.normal(0.0, config.NOISE_ACC, 3)
++        else:
++            gyro = gyro_raw
++            acc = acc_raw
+ 
+-        imu_msg.angular_velocity.x = self.values[28]+np.random.normal(0,config.NOISE_GYRO)
+-        imu_msg.angular_velocity.y = self.values[29]+np.random.normal(0,config.NOISE_GYRO)
+-        imu_msg.angular_velocity.z = self.values[30]+np.random.normal(0,config.NOISE_GYRO)
++        imu_msg.angular_velocity.x = float(gyro[0])
++        imu_msg.angular_velocity.y = float(gyro[1])
++        imu_msg.angular_velocity.z = float(gyro[2])
+ 
+-        imu_msg.linear_acceleration.x = self.values[31]+np.random.normal(0,config.NOISE_ACC)
+-        imu_msg.linear_acceleration.y = self.values[32]+np.random.normal(0,config.NOISE_ACC)
+-        imu_msg.linear_acceleration.z = self.values[33]+np.random.normal(0,config.NOISE_ACC)
++        imu_msg.linear_acceleration.x = float(acc[0])
++        imu_msg.linear_acceleration.y = float(acc[1])
++        imu_msg.linear_acceleration.z = float(acc[2])
+ 
+         self.imu_publisher.publish(imu_msg)
+ 
++    def publish_ground_truth_odom(self, stamp_msg=None):
++        if self.odom_publisher is None:
++            return
++
++        if stamp_msg is None:
++            stamp_msg = self.get_clock().now().to_msg()
++
++        odom_msg = Odometry()
++        odom_msg.header.stamp = stamp_msg
++        odom_msg.header.frame_id = "odom"
++        odom_msg.child_frame_id = "base"
++
++        if self.trunk_body_id >= 0:
++            odom_msg.pose.pose.position.x = float(self.data.xpos[self.trunk_body_id][0])
++            odom_msg.pose.pose.position.y = float(self.data.xpos[self.trunk_body_id][1])
++            odom_msg.pose.pose.position.z = float(self.data.xpos[self.trunk_body_id][2])
++            odom_msg.pose.pose.orientation.w = float(self.data.xquat[self.trunk_body_id][0])
++            odom_msg.pose.pose.orientation.x = float(self.data.xquat[self.trunk_body_id][1])
++            odom_msg.pose.pose.orientation.y = float(self.data.xquat[self.trunk_body_id][2])
++            odom_msg.pose.pose.orientation.z = float(self.data.xquat[self.trunk_body_id][3])
++
++            body_vel = np.zeros(6, dtype=float)
++            mujoco.mj_objectVelocity(
++                self.model,
++                self.data,
++                mujoco.mjtObj.mjOBJ_BODY,
++                self.trunk_body_id,
++                body_vel,
++                1,
++            )
++            odom_msg.twist.twist.angular.x = float(body_vel[0])
++            odom_msg.twist.twist.angular.y = float(body_vel[1])
++            odom_msg.twist.twist.angular.z = float(body_vel[2])
++            odom_msg.twist.twist.linear.x = float(body_vel[3])
++            odom_msg.twist.twist.linear.y = float(body_vel[4])
++            odom_msg.twist.twist.linear.z = float(body_vel[5])
++        else:
++            frame_pos = self._read_sensor_vector(self.frame_pos_slice, 3)
++            frame_vel = self._read_sensor_vector(self.frame_vel_slice, 3)
++            quat_raw = self._read_sensor_vector(self.imu_quat_slice, 4, default=[1.0, 0.0, 0.0, 0.0])
++            gyro_raw = self._read_sensor_vector(self.imu_gyro_slice, 3)
++
++            odom_msg.pose.pose.position.x = float(frame_pos[0])
++            odom_msg.pose.pose.position.y = float(frame_pos[1])
++            odom_msg.pose.pose.position.z = float(frame_pos[2])
++            odom_msg.pose.pose.orientation.w = float(quat_raw[0])
++            odom_msg.pose.pose.orientation.x = float(quat_raw[1])
++            odom_msg.pose.pose.orientation.y = float(quat_raw[2])
++            odom_msg.pose.pose.orientation.z = float(quat_raw[3])
++            odom_msg.twist.twist.linear.x = float(frame_vel[0])
++            odom_msg.twist.twist.linear.y = float(frame_vel[1])
++            odom_msg.twist.twist.linear.z = float(frame_vel[2])
++            odom_msg.twist.twist.angular.x = float(gyro_raw[0])
++            odom_msg.twist.twist.angular.y = float(gyro_raw[1])
++            odom_msg.twist.twist.angular.z = float(gyro_raw[2])
++
++        self.odom_publisher.publish(odom_msg)
++
++    def _build_missing_gap_marker(self):
++        marker = float(self.gap_missing_marker)
++        gap_msg = Gap()
++        gap_msg.xs = marker
++        gap_msg.xe = marker
++        gap_msg.ymin = marker
++        gap_msg.ymax = marker
++        gap_msg.confidence = 0.0
++        gap_msg.has_bridge_dir_b = False
++        gap_msg.bridge_dir_b = [0.0, 0.0]
++        return gap_msg
++
++    @staticmethod
++    def _intersect_base_x_axis_with_polygon(corners_xy, eps=1e-9):
++        intersections = []
++        n = int(corners_xy.shape[0])
++
++        for i in range(n):
++            x1, y1 = corners_xy[i]
++            x2, y2 = corners_xy[(i + 1) % n]
++
++            if abs(y1) <= eps and abs(y2) <= eps:
++                intersections.extend([float(x1), float(x2)])
++                continue
++
++            if (y1 > eps and y2 > eps) or (y1 < -eps and y2 < -eps):
++                continue
++
++            dy = y2 - y1
++            if abs(dy) <= eps:
++                continue
++
++            t = -y1 / dy
++            if t < -eps or t > 1.0 + eps:
++                continue
++
++            t = float(np.clip(t, 0.0, 1.0))
++            intersections.append(float(x1 + t * (x2 - x1)))
++
++        if len(intersections) == 0:
++            return []
++
++        intersections.sort()
++        unique = [intersections[0]]
++        for x in intersections[1:]:
++            if abs(x - unique[-1]) > 1e-7:
++                unique.append(x)
++
++        return unique
++
++    def publish_gap_model_data(self, stamp_msg=None):
++        if self.gap_model_publisher is None:
++            return
++
++        if stamp_msg is None:
++            stamp_msg = self.get_clock().now().to_msg()
++
++        gap_model_msg = GapModel()
++        gap_model_msg.header.stamp = stamp_msg
++        gap_model_msg.header.frame_id = "base_link"
++
++        base_pos, base_quat = self._base_pose_world()
++        rot_bw = self._rotation_matrix_from_quat(base_quat).T
++
++        gap_candidates = []
++
++        for gap_world in self.bridge_gaps_world:
++            dir_w = gap_world["dir_w"]
++            lat_w = gap_world["lat_w"]
++            s_start = gap_world["s_start"]
++            s_end = gap_world["s_end"]
++            l_min = gap_world["l_min"]
++            l_max = gap_world["l_max"]
++            z_world = gap_world["z_world"]
++            corners_world = np.array(
++                [
++                    [
++                        dir_w[0] * s_start + lat_w[0] * l_min,
++                        dir_w[1] * s_start + lat_w[1] * l_min,
++                        z_world,
++                    ],
++                    [
++                        dir_w[0] * s_start + lat_w[0] * l_max,
++                        dir_w[1] * s_start + lat_w[1] * l_max,
++                        z_world,
++                    ],
++                    [
++                        dir_w[0] * s_end + lat_w[0] * l_min,
++                        dir_w[1] * s_end + lat_w[1] * l_min,
++                        z_world,
++                    ],
++                    [
++                        dir_w[0] * s_end + lat_w[0] * l_max,
++                        dir_w[1] * s_end + lat_w[1] * l_max,
++                        z_world,
++                    ],
++                ],
++                dtype=float,
++            )
++
++            corners_base = np.array([rot_bw @ (corner - base_pos) for corner in corners_world], dtype=float)
++
++            # a: base origin; b/c: intersections of base-x axis with gap boundary.
++            gap_polygon_xy = corners_base[[0, 1, 3, 2], :2]
++            x_intersections = self._intersect_base_x_axis_with_polygon(gap_polygon_xy)
++            if len(x_intersections) < 2:
++                continue
++
++            xs = float(x_intersections[0])
++            xe = float(x_intersections[-1])
++
++            gap_msg = Gap()
++            gap_msg.xs = xs
++            gap_msg.xe = xe
++            gap_msg.ymin = float(np.min(corners_base[:, 1]))
++            gap_msg.ymax = float(np.max(corners_base[:, 1]))
++            gap_msg.confidence = self.gap_model_confidence
++
++            bridge_dir_base = rot_bw @ np.array([dir_w[0], dir_w[1], 0.0], dtype=float)
++            bridge_dir_xy = bridge_dir_base[:2]
++            bridge_norm = np.linalg.norm(bridge_dir_xy)
++            if bridge_norm > 1e-9:
++                bridge_dir_xy = bridge_dir_xy / bridge_norm
++                gap_msg.has_bridge_dir_b = True
++                gap_msg.bridge_dir_b = [float(bridge_dir_xy[0]), float(bridge_dir_xy[1])]
++            else:
++                gap_msg.has_bridge_dir_b = False
++                gap_msg.bridge_dir_b = [0.0, 0.0]
++
++            gap_candidates.append((xs, xe, gap_msg))
++
++        front_msg = self._build_missing_gap_marker()
++        back_msg = self._build_missing_gap_marker()
++
++        front_candidates = [item for item in gap_candidates if item[1] >= 0.0]
++        if front_candidates:
++            _, _, front_msg = min(front_candidates, key=lambda item: item[0])
++
++        back_candidates = [item for item in gap_candidates if item[1] <= 0.0]
++        if back_candidates:
++            _, _, back_msg = max(back_candidates, key=lambda item: item[1])
++
++        gap_model_msg.gaps.append(front_msg)
++        gap_model_msg.gaps.append(back_msg)
++
++        self.gap_model_publisher.publish(gap_model_msg)
++
+     @staticmethod
+     def quat_multiply(q1, q2):
+         w1, x1, y1, z1 = q1
+         w2, x2, y2, z2 = q2
+-        return np.array([
+-            w1*w2 - x1*x2 - y1*y2 - z1*z2,
+-            w1*x2 + x1*w2 + y1*z2 - z1*y2,
+-            w1*y2 - x1*z2 + y1*w2 + z1*x2,
+-            w1*z2 + x1*y2 - y1*x2 + z1*w2
+-        ])
++        return np.array(
++            [
++                w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
++                w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
++                w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
++                w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
++            ]
++        )
++
++    @staticmethod
++    def _normalize_quat(quat):
++        quat = np.array(quat, dtype=float)
++        norm = np.linalg.norm(quat)
++        if norm < 1e-12:
++            return np.array([1.0, 0.0, 0.0, 0.0], dtype=float)
++        return quat / norm
++
++    def _low_pass_imu_attitude(self, quat):
++        quat = self._normalize_quat(quat)
++        alpha = self.imu_attitude_lpf_alpha
++        if alpha >= 1.0 or self.filtered_imu_quat is None:
++            self.filtered_imu_quat = quat
++            return quat
++
++        previous = self._normalize_quat(self.filtered_imu_quat)
++        if np.dot(previous, quat) < 0.0:
++            quat = -quat
++
++        dot = float(np.clip(np.dot(previous, quat), -1.0, 1.0))
++        if dot > 0.9995:
++            filtered = self._normalize_quat((1.0 - alpha) * previous + alpha * quat)
++        else:
++            theta_0 = np.arccos(dot)
++            sin_theta_0 = np.sin(theta_0)
++            theta = theta_0 * alpha
++            scale_previous = np.cos(theta) - dot * np.sin(theta) / sin_theta_0
++            scale_current = np.sin(theta) / sin_theta_0
++            filtered = self._normalize_quat(scale_previous * previous + scale_current * quat)
++
++        self.filtered_imu_quat = filtered
++        return filtered
+ 
+     @staticmethod
+     def axis_angle_to_quat(axis_angle):
+         angle = np.linalg.norm(axis_angle)
+         if angle < 1e-12:
+-            return np.array([1, 0, 0, 0])  # 无旋转
++            return np.array([1, 0, 0, 0])
+ 
+         axis = axis_angle / angle
+         half = angle * 0.5
+-        return np.array([
+-            np.cos(half),
+-            axis[0] * np.sin(half),
+-            axis[1] * np.sin(half),
+-            axis[2] * np.sin(half),
+-        ])
++        return np.array(
++            [
++                np.cos(half),
++                axis[0] * np.sin(half),
++                axis[1] * np.sin(half),
++                axis[2] * np.sin(half),
++            ]
++        )
++
++    def reset_delay(self):
++        self._initialize_delay_buffers()
++        self.filtered_imu_quat = None
++
+ 
+ def main(args=None):
+     rclpy.init(args=args)
+     node = MujocoNode("mujoco_runner")
+     rclpy.spin(node)
++    node.destroy_node()
+     rclpy.shutdown()
+ 
++
+ if __name__ == "__main__":
+-    main()
+\ No newline at end of file
++    main()
+diff --git a/mujoco_runner/package.xml b/mujoco_runner/package.xml
+index 3a780b7..28866e7 100644
+--- a/mujoco_runner/package.xml
++++ b/mujoco_runner/package.xml
+@@ -9,6 +9,9 @@
+ 
+   <depend>rclpy</depend>
+   <depend>sensor_msgs</depend>
++  <depend>nav_msgs</depend>
++  <depend>robot_msgs</depend>
++  <depend>std_srvs</depend>
+ 
+   <test_depend>ament_copyright</test_depend>
+   <test_depend>ament_flake8</test_depend>
+diff --git a/navigation/CMakeLists.txt b/navigation/CMakeLists.txt
+index 1794757..ef96991 100644
+--- a/navigation/CMakeLists.txt
++++ b/navigation/CMakeLists.txt
+@@ -17,9 +17,21 @@ find_package(Qt5 REQUIRED COMPONENTS Widgets)
+ find_package(rclcpp REQUIRED)
+ find_package(std_msgs REQUIRED)
+ find_package(OpenCV REQUIRED COMPONENTS core highgui imgproc)
++find_package(rosidl_default_generators REQUIRED)
+ pkg_check_modules(TINYXML2 REQUIRED IMPORTED_TARGET tinyxml2)
+ pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
+ 
++# Generate ROS 2 interfaces (messages and services)
++rosidl_generate_interfaces(${PROJECT_NAME}
++  "msg/MapPoint.msg"
++  "srv/SetWaypoints.srv"
++  "srv/SetControllerConfig.srv"
++  "srv/StartNavigation.srv"
++  "srv/StopNavigation.srv"
++  DEPENDENCIES
++  std_msgs
++)
++
+ set(NAVIGATION_UI_SOURCES
+   src/app/navigation_map_node.cpp
+   src/app/navigation_mouse_controller.cpp
+@@ -75,27 +87,30 @@ add_executable(navigation_core
+   ${NAVIGATION_CORE_SOURCES}
+ )
+ 
+-foreach(target navigation_map navigation_remote_ui navigation_core)
+-target_include_directories(${target}
+-  PRIVATE
+-    include
+-    ${OpenCV_INCLUDE_DIRS}
+-)
+-
+-ament_target_dependencies(${target}
+-  ament_index_cpp
+-  geometry_msgs
+-  nav_msgs
+-  rclcpp
+-  std_msgs
+-)
++rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+ 
+-target_link_libraries(${target}
+-  ${OpenCV_LIBS}
+-  Qt5::Widgets
+-  PkgConfig::TINYXML2
+-  PkgConfig::GTK3
+-)
++foreach(target navigation_map navigation_remote_ui navigation_core)
++  target_include_directories(${target}
++    PRIVATE
++      include
++      ${OpenCV_INCLUDE_DIRS}
++  )
++
++  ament_target_dependencies(${target}
++    ament_index_cpp
++    geometry_msgs
++    nav_msgs
++    rclcpp
++    std_msgs
++  )
++
++  target_link_libraries(${target}
++    ${OpenCV_LIBS}
++    Qt5::Widgets
++    PkgConfig::TINYXML2
++    PkgConfig::GTK3
++    ${cpp_typesupport_target}
++  )
+ endforeach()
+ 
+ install(TARGETS
+@@ -122,4 +137,5 @@ install(DIRECTORY config
+   DESTINATION share/${PROJECT_NAME}
+ )
+ 
++ament_export_dependencies(rosidl_default_runtime)
+ ament_package()
+diff --git a/navigation/include/app/navigation_map_node.hpp b/navigation/include/app/navigation_map_node.hpp
+index 72de3fb..1c493ca 100644
+--- a/navigation/include/app/navigation_map_node.hpp
++++ b/navigation/include/app/navigation_map_node.hpp
+@@ -28,7 +28,6 @@ private:
+   void onTimer();
+   void applyFullscreenIfNeeded(int frame_width, int frame_height);
+   void publishVelocity(const geometry_msgs::msg::Twist & command);
+-  void publishRemoteCommand(const std::string & command);
+   void handleRemoteState(const nav_msgs::msg::Odometry::SharedPtr msg);
+   void handleRemoteStatus(const std_msgs::msg::String::SharedPtr msg);
+ 
+@@ -39,9 +38,9 @@ private:
+   NavigationMouseController mouse_controller_;
+   std::unique_ptr<navigation::ui::WindowScrollController> scroll_controller_;
+   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
+-  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr command_publisher_;
+   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr remote_state_subscription_;
+   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr remote_status_subscription_;
++  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr heartbeat_subscription_;
+   rclcpp::TimerBase::SharedPtr timer_;
+   int displayed_frame_width_{0};
+   int displayed_frame_height_{0};
+diff --git a/navigation/include/app/navigation_node_context.hpp b/navigation/include/app/navigation_node_context.hpp
+index 2543d73..a21d304 100644
+--- a/navigation/include/app/navigation_node_context.hpp
++++ b/navigation/include/app/navigation_node_context.hpp
+@@ -12,7 +12,12 @@
+ #include "interface/radar_pose_listener.hpp"
+ #include "keyboards/navigation_input_handler.hpp"
+ #include "maps/top_view_map.hpp"
++#include "navigation/srv/set_waypoints.hpp"
++#include "navigation/srv/set_controller_config.hpp"
++#include "navigation/srv/start_navigation.hpp"
++#include "navigation/srv/stop_navigation.hpp"
+ #include "params/navigation_params.hpp"
++#include "std_msgs/msg/string.hpp"
+ #include "ui/navigation_ui_state.hpp"
+ 
+ namespace navigation::app
+@@ -65,7 +70,18 @@ struct NavigationNodeContext
+   std::unique_ptr<navigation::NavigationController> controller;
+   navigation::RadarPoseListener radar_listener;
+   navigation::ControllerConfig controller_config;
+-  std::function<void(const std::string &)> remote_command_sender;
++
++  // Service clients for remote_ui → core communication
++  rclcpp::Client<navigation::srv::SetWaypoints>::SharedPtr set_waypoints_client;
++  rclcpp::Client<navigation::srv::SetControllerConfig>::SharedPtr set_config_client;
++  rclcpp::Client<navigation::srv::StartNavigation>::SharedPtr start_client;
++  rclcpp::Client<navigation::srv::StopNavigation>::SharedPtr stop_client;
++
++  // Heartbeat monitoring (remote_ui mode)
++  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr heartbeat_subscription;
++  rclcpp::Time last_heartbeat_time;
++  bool core_connected{false};
++  static constexpr double HEARTBEAT_TIMEOUT_S = 3.0;
+ };
+ 
+ }  // namespace navigation::app
+diff --git a/navigation/include/app/navigation_runtime.hpp b/navigation/include/app/navigation_runtime.hpp
+index 1a00345..00630cc 100644
+--- a/navigation/include/app/navigation_runtime.hpp
++++ b/navigation/include/app/navigation_runtime.hpp
+@@ -32,6 +32,14 @@ public:
+   void updateNavigationController(bool has_state, const navigation::RobotNavigationState & state);
+ 
+ private:
++  void sendSetWaypointsRequest(const std::vector<navigation::maps::MapPoint> & points);
++  void sendSetConfigRequest(const navigation::ControllerConfig & config);
++  void sendStartRequest(
++    const std::vector<navigation::maps::MapPoint> & points,
++    const navigation::ControllerConfig & config,
++    const std::string & controller_name);
++  void sendStopRequest(const std::string & reason);
++
+   NavigationNodeContext & context_;
+   rclcpp::Logger logger_;
+   PublishVelocity publish_velocity_;
+diff --git a/navigation/include/ui/map_ui_types.hpp b/navigation/include/ui/map_ui_types.hpp
+index 22c6778..a04ab81 100644
+--- a/navigation/include/ui/map_ui_types.hpp
++++ b/navigation/include/ui/map_ui_types.hpp
+@@ -92,6 +92,7 @@ struct MapUiState
+   int panel_scroll_px{0};
+   bool panel_collapsed{false};
+   bool fullscreen{false};
++  bool core_connected{true};
+ };
+ 
+ }  // namespace navigation::ui
+diff --git a/navigation/package.xml b/navigation/package.xml
+index 10257c8..0845cf1 100644
+--- a/navigation/package.xml
++++ b/navigation/package.xml
+@@ -9,6 +9,9 @@
+ 
+   <buildtool_depend>ament_cmake</buildtool_depend>
+ 
++  <build_depend>rosidl_default_generators</build_depend>
++  <exec_depend>rosidl_default_runtime</exec_depend>
++
+   <depend>ament_index_cpp</depend>
+   <depend>geometry_msgs</depend>
+   <depend>nav_msgs</depend>
+@@ -18,6 +21,8 @@
+   <depend>qtbase5-dev</depend>
+   <depend>tinyxml2</depend>
+ 
++  <member_of_group>rosidl_interface_packages</member_of_group>
++
+   <test_depend>ament_lint_auto</test_depend>
+   <test_depend>ament_lint_common</test_depend>
+ 
+diff --git a/navigation/src/app/navigation_map_node.cpp b/navigation/src/app/navigation_map_node.cpp
+index 3c779a1..a1f381b 100644
+--- a/navigation/src/app/navigation_map_node.cpp
++++ b/navigation/src/app/navigation_map_node.cpp
+@@ -88,9 +88,8 @@ NavigationMapNode::NavigationMapNode()
+   context_.param_fields = navigation::params::makeControllerParamFields(context_.controller_config);
+   const auto node_role = declare_parameter<std::string>("node_role", "standalone");
+   context_.remote_control = node_role == "remote_ui";
+-  const auto command_topic = declare_parameter<std::string>("navigation_command_topic", "/navigation/command");
+-  const auto status_topic = declare_parameter<std::string>("navigation_status_topic", "/navigation/status");
+   const auto state_topic = declare_parameter<std::string>("navigation_state_topic", "/navigation/state");
++  const auto status_topic = declare_parameter<std::string>("navigation_status_topic", "/navigation/status");
+ 
+   const auto scene_path = navigation::maps::resolveScenePath(context_.robot_name, config.scene);
+   context_.current_map_file = scene_path;
+@@ -135,10 +134,17 @@ NavigationMapNode::NavigationMapNode()
+   }
+ 
+   if (context_.remote_control) {
+-    command_publisher_ = create_publisher<std_msgs::msg::String>(command_topic, rclcpp::QoS(10));
+-    context_.remote_command_sender = [this](const std::string & command) {
+-        publishRemoteCommand(command);
+-      };
++    // Create service clients for communication with core
++    context_.set_waypoints_client =
++      create_client<navigation::srv::SetWaypoints>("/navigation/set_waypoints");
++    context_.set_config_client =
++      create_client<navigation::srv::SetControllerConfig>("/navigation/set_config");
++    context_.start_client =
++      create_client<navigation::srv::StartNavigation>("/navigation/start");
++    context_.stop_client =
++      create_client<navigation::srv::StopNavigation>("/navigation/stop");
++
++    // Subscribe to state and status from core
+     remote_state_subscription_ = create_subscription<nav_msgs::msg::Odometry>(
+       state_topic,
+       rclcpp::SensorDataQoS(),
+@@ -151,6 +157,15 @@ NavigationMapNode::NavigationMapNode()
+       [this](std_msgs::msg::String::SharedPtr msg) {
+         handleRemoteStatus(msg);
+       });
++
++    // Subscribe to heartbeat from core for connection monitoring
++    heartbeat_subscription_ = create_subscription<std_msgs::msg::String>(
++      "/navigation/heartbeat",
++      rclcpp::QoS(10),
++      [this](std_msgs::msg::String::SharedPtr /* msg */) {
++        context_.last_heartbeat_time = now();
++      });
++
+     context_.navigation_status = "Waiting for core";
+   } else {
+     cmd_vel_publisher_ =
+@@ -172,10 +187,10 @@ NavigationMapNode::NavigationMapNode()
+   if (context_.remote_control) {
+     RCLCPP_INFO(
+       get_logger(),
+-      "Remote UI mode. commands: %s, status: %s, state: %s",
+-      command_topic.c_str(),
+-      status_topic.c_str(),
+-      state_topic.c_str());
++      "Remote UI mode. services on /navigation/{set_waypoints,set_config,start,stop}, "
++      "state: %s, status: %s",
++      state_topic.c_str(),
++      status_topic.c_str());
+   } else {
+     RCLCPP_INFO(get_logger(), "Navigation command topic: %s", context_.cmd_vel_topic.c_str());
+   }
+@@ -202,17 +217,6 @@ void NavigationMapNode::publishVelocity(const geometry_msgs::msg::Twist & comman
+   }
+ }
+ 
+-void NavigationMapNode::publishRemoteCommand(const std::string & command)
+-{
+-  if (command_publisher_ == nullptr) {
+-    return;
+-  }
+-
+-  std_msgs::msg::String msg;
+-  msg.data = command;
+-  command_publisher_->publish(msg);
+-}
+-
+ void NavigationMapNode::handleRemoteState(const nav_msgs::msg::Odometry::SharedPtr msg)
+ {
+   navigation::RobotNavigationState next;
+@@ -261,6 +265,20 @@ void NavigationMapNode::onTimer()
+     scroll_controller_->installGtkScrollController();
+   }
+ 
++  // Check heartbeat / service availability in remote_ui mode
++  if (context_.remote_control) {
++    const auto elapsed = (now() - context_.last_heartbeat_time).seconds();
++    context_.core_connected = elapsed < NavigationNodeContext::HEARTBEAT_TIMEOUT_S;
++
++    // Wait for service clients to become ready
++    if (!context_.set_waypoints_client->service_is_ready() ||
++        !context_.set_config_client->service_is_ready() ||
++        !context_.start_client->service_is_ready() ||
++        !context_.stop_client->service_is_ready()) {
++      context_.core_connected = false;
++    }
++  }
++
+   navigation::RobotNavigationState state;
+   bool has_state = false;
+   if (context_.remote_control) {
+diff --git a/navigation/src/app/navigation_runtime.cpp b/navigation/src/app/navigation_runtime.cpp
+index e669d5e..6b98cc3 100644
+--- a/navigation/src/app/navigation_runtime.cpp
++++ b/navigation/src/app/navigation_runtime.cpp
+@@ -6,53 +6,48 @@
+ 
+ #include "controller.hpp"
+ #include "maps/navigation_map_helpers.hpp"
++#include "navigation/srv/set_waypoints.hpp"
++#include "navigation/srv/set_controller_config.hpp"
++#include "navigation/srv/start_navigation.hpp"
++#include "navigation/srv/stop_navigation.hpp"
+ 
+ namespace navigation::app
+ {
+ namespace
+ {
+ 
+-std::string boolText(bool value)
++void fillConfigRequest(
++  navigation::srv::SetControllerConfig::Request & request,
++  const navigation::ControllerConfig & config)
+ {
+-  return value ? "1" : "0";
++  request.waypoint_tolerance = config.waypoint_tolerance;
++  request.max_linear_speed = config.max_linear_speed;
++  request.max_angular_speed = config.max_angular_speed;
++  request.k_rho = config.k_rho;
++  request.k_alpha = config.k_alpha;
++  request.k_beta = config.k_beta;
++  request.fast_max_linear_speed = config.fast_max_linear_speed;
++  request.fast_max_angular_speed = config.fast_max_angular_speed;
++  request.fast_k_rho = config.fast_k_rho;
++  request.fast_k_alpha = config.fast_k_alpha;
++  request.fast_k_beta = config.fast_k_beta;
+ }
+ 
+-std::string serializeControllerConfig(const navigation::ControllerConfig & config)
+-{
+-  std::ostringstream output;
+-  output << "set_config|"
+-         << "waypoint_tolerance=" << config.waypoint_tolerance
+-         << ";max_linear_speed=" << config.max_linear_speed
+-         << ";max_angular_speed=" << config.max_angular_speed
+-         << ";k_rho=" << config.k_rho
+-         << ";k_alpha=" << config.k_alpha
+-         << ";k_beta=" << config.k_beta
+-         << ";fast_max_linear_speed=" << config.fast_max_linear_speed
+-         << ";fast_max_angular_speed=" << config.fast_max_angular_speed
+-         << ";fast_k_rho=" << config.fast_k_rho
+-         << ";fast_k_alpha=" << config.fast_k_alpha
+-         << ";fast_k_beta=" << config.fast_k_beta;
+-  return output.str();
+-}
+-
+-std::string serializePoints(const std::vector<navigation::maps::MapPoint> & points)
++void fillStartConfigRequest(
++  navigation::srv::StartNavigation::Request & request,
++  const navigation::ControllerConfig & config)
+ {
+-  std::ostringstream output;
+-  output << "set_points|";
+-  for (std::size_t i = 0; i < points.size(); ++i) {
+-    if (i > 0) {
+-      output << ";";
+-    }
+-    output << points[i].x << "," << points[i].y << "," << boolText(points[i].fast);
+-  }
+-  return output.str();
+-}
+-
+-void sendRemoteCommand(NavigationNodeContext & context, const std::string & command)
+-{
+-  if (context.remote_command_sender != nullptr) {
+-    context.remote_command_sender(command);
+-  }
++  request.waypoint_tolerance = config.waypoint_tolerance;
++  request.max_linear_speed = config.max_linear_speed;
++  request.max_angular_speed = config.max_angular_speed;
++  request.k_rho = config.k_rho;
++  request.k_alpha = config.k_alpha;
++  request.k_beta = config.k_beta;
++  request.fast_max_linear_speed = config.fast_max_linear_speed;
++  request.fast_max_angular_speed = config.fast_max_angular_speed;
++  request.fast_k_rho = config.fast_k_rho;
++  request.fast_k_alpha = config.fast_k_alpha;
++  request.fast_k_beta = config.fast_k_beta;
+ }
+ 
+ }  // namespace
+@@ -70,8 +65,7 @@ NavigationRuntime::NavigationRuntime(
+ void NavigationRuntime::applyControllerConfig()
+ {
+   if (context_.remote_control) {
+-    sendRemoteCommand(context_, serializeControllerConfig(context_.controller_config));
+-    context_.status_message = "Params sent to core";
++    sendSetConfigRequest(context_.controller_config);
+     return;
+   }
+ 
+@@ -102,11 +96,7 @@ void NavigationRuntime::publishZeroVelocity()
+ void NavigationRuntime::stopNavigation(const std::string & message)
+ {
+   if (context_.remote_control) {
+-    sendRemoteCommand(context_, "stop|" + message);
+-    context_.remote_navigation_active = false;
+-    context_.navigation_status = message;
+-    context_.status_message = message;
+-    RCLCPP_INFO(logger_, "Sent remote stop command.");
++    sendStopRequest(message);
+     return;
+   }
+ 
+@@ -129,9 +119,7 @@ void NavigationRuntime::stopNavigationForRouteChange()
+ void NavigationRuntime::syncControllerWaypoints()
+ {
+   if (context_.remote_control) {
+-    sendRemoteCommand(context_, serializePoints(context_.map->points()));
+-    context_.remote_navigation_point_count = context_.map->points().size();
+-    context_.status_message = "Route sent to core";
++    sendSetWaypointsRequest(context_.map->points());
+     return;
+   }
+ 
+@@ -155,14 +143,7 @@ void NavigationRuntime::startNavigation(const std::string & controller_name)
+     }
+ 
+     context_.selected_controller_name = controller_name;
+-    sendRemoteCommand(context_, serializePoints(context_.map->points()));
+-    sendRemoteCommand(context_, serializeControllerConfig(context_.controller_config));
+-    sendRemoteCommand(context_, "start|" + controller_name);
+-    context_.remote_navigation_active = true;
+-    context_.remote_navigation_point_count = context_.map->points().size();
+-    context_.navigation_status = "Start sent";
+-    context_.status_message = "Navigation start sent";
+-    RCLCPP_INFO(logger_, "Sent remote start command for controller '%s'.", controller_name.c_str());
++    sendStartRequest(context_.map->points(), context_.controller_config, controller_name);
+     return;
+   }
+ 
+@@ -202,6 +183,137 @@ void NavigationRuntime::startNavigation(const std::string & controller_name)
+   RCLCPP_INFO(logger_, "Navigation started with controller '%s'.", context_.selected_controller_name.c_str());
+ }
+ 
++void NavigationRuntime::sendSetWaypointsRequest(
++  const std::vector<navigation::maps::MapPoint> & points)
++{
++  if (context_.set_waypoints_client == nullptr) {
++    RCLCPP_WARN(logger_, "SetWaypoints client is not available.");
++    return;
++  }
++
++  auto request = std::make_shared<navigation::srv::SetWaypoints::Request>();
++  for (const auto & point : points) {
++    navigation::msg::MapPoint mp;
++    mp.id = point.id;
++    mp.x = point.x;
++    mp.y = point.y;
++    mp.fast = point.fast;
++    request->points.push_back(mp);
++  }
++
++  context_.status_message = "Sending route to core...";
++
++  context_.set_waypoints_client->async_send_request(
++    request,
++    [this](rclcpp::Client<navigation::srv::SetWaypoints>::SharedFuture future) {
++      auto response = future.get();
++      if (response->success) {
++        context_.remote_navigation_point_count = context_.map->points().size();
++        context_.status_message = "Route sent to core";
++      } else {
++        context_.status_message = "Core rejected route: " + response->message;
++        RCLCPP_WARN(logger_, "SetWaypoints rejected: %s", response->message.c_str());
++      }
++    });
++}
++
++void NavigationRuntime::sendSetConfigRequest(const navigation::ControllerConfig & config)
++{
++  if (context_.set_config_client == nullptr) {
++    RCLCPP_WARN(logger_, "SetControllerConfig client is not available.");
++    return;
++  }
++
++  auto request = std::make_shared<navigation::srv::SetControllerConfig::Request>();
++  fillConfigRequest(*request, config);
++
++  context_.status_message = "Sending params to core...";
++
++  context_.set_config_client->async_send_request(
++    request,
++    [this](rclcpp::Client<navigation::srv::SetControllerConfig>::SharedFuture future) {
++      auto response = future.get();
++      if (response->success) {
++        context_.status_message = "Params sent to core";
++      } else {
++        context_.status_message = "Core rejected params: " + response->message;
++        RCLCPP_WARN(logger_, "SetControllerConfig rejected: %s", response->message.c_str());
++      }
++    });
++}
++
++void NavigationRuntime::sendStartRequest(
++  const std::vector<navigation::maps::MapPoint> & points,
++  const navigation::ControllerConfig & config,
++  const std::string & controller_name)
++{
++  if (context_.start_client == nullptr) {
++    RCLCPP_WARN(logger_, "StartNavigation client is not available.");
++    return;
++  }
++
++  auto request = std::make_shared<navigation::srv::StartNavigation::Request>();
++  for (const auto & point : points) {
++    navigation::msg::MapPoint mp;
++    mp.id = point.id;
++    mp.x = point.x;
++    mp.y = point.y;
++    mp.fast = point.fast;
++    request->points.push_back(mp);
++  }
++  fillStartConfigRequest(*request, config);
++  request->controller_name = controller_name;
++
++  context_.navigation_status = "Start sent";
++  context_.status_message = "Sending start to core...";
++
++  context_.start_client->async_send_request(
++    request,
++    [this](rclcpp::Client<navigation::srv::StartNavigation>::SharedFuture future) {
++      auto response = future.get();
++      if (response->success) {
++        context_.remote_navigation_active = true;
++        context_.remote_navigation_point_count = context_.map->points().size();
++        context_.navigation_status = response->message;
++        context_.status_message = "Navigation started";
++        RCLCPP_INFO(logger_, "Core confirmed navigation start.");
++      } else {
++        context_.remote_navigation_active = false;
++        context_.navigation_status = "Start rejected";
++        context_.status_message = "Core rejected start: " + response->message;
++        RCLCPP_WARN(logger_, "StartNavigation rejected: %s", response->message.c_str());
++      }
++    });
++}
++
++void NavigationRuntime::sendStopRequest(const std::string & reason)
++{
++  if (context_.stop_client == nullptr) {
++    RCLCPP_WARN(logger_, "StopNavigation client is not available.");
++    return;
++  }
++
++  auto request = std::make_shared<navigation::srv::StopNavigation::Request>();
++  request->reason = reason;
++
++  context_.status_message = "Sending stop to core...";
++
++  context_.stop_client->async_send_request(
++    request,
++    [this, reason](rclcpp::Client<navigation::srv::StopNavigation>::SharedFuture future) {
++      auto response = future.get();
++      if (response->success) {
++        context_.remote_navigation_active = false;
++        context_.navigation_status = reason;
++        context_.status_message = reason;
++        RCLCPP_INFO(logger_, "Core confirmed stop: %s", reason.c_str());
++      } else {
++        context_.status_message = "Core rejected stop: " + response->message;
++        RCLCPP_WARN(logger_, "StopNavigation rejected: %s", response->message.c_str());
++      }
++    });
++}
++
+ void NavigationRuntime::updateNavigationController(
+   bool has_state,
+   const navigation::RobotNavigationState & state)
+diff --git a/navigation/src/app/navigation_ui_coordinator.cpp b/navigation/src/app/navigation_ui_coordinator.cpp
+index 19cbe76..c7cacfe 100644
+--- a/navigation/src/app/navigation_ui_coordinator.cpp
++++ b/navigation/src/app/navigation_ui_coordinator.cpp
+@@ -442,6 +442,7 @@ navigation::ui::MapUiState NavigationUiCoordinator::buildUiState()
+   ui_state.panel_scroll_px = context_.panel_scroll_px;
+   ui_state.panel_collapsed = context_.panel_collapsed;
+   ui_state.fullscreen = context_.fullscreen;
++  ui_state.core_connected = context_.core_connected;
+   return ui_state;
+ }
+ 
+diff --git a/navigation/src/navigation_core_node.cpp b/navigation/src/navigation_core_node.cpp
+index 937aa44..c4a24a6 100644
+--- a/navigation/src/navigation_core_node.cpp
++++ b/navigation/src/navigation_core_node.cpp
+@@ -16,6 +16,10 @@
+ #include "maps/navigation_map_helpers.hpp"
+ #include "maps/point_store.hpp"
+ #include "nav_msgs/msg/odometry.hpp"
++#include "navigation/srv/set_waypoints.hpp"
++#include "navigation/srv/set_controller_config.hpp"
++#include "navigation/srv/start_navigation.hpp"
++#include "navigation/srv/stop_navigation.hpp"
+ #include "params/navigation_params.hpp"
+ #include "rclcpp/rclcpp.hpp"
+ #include "std_msgs/msg/string.hpp"
+@@ -32,35 +36,6 @@ std::string sanitizeField(std::string value)
+   return value;
+ }
+ 
+-std::unordered_map<std::string, std::string> parseKeyValues(const std::string & text)
+-{
+-  std::unordered_map<std::string, std::string> fields;
+-  std::stringstream stream(text);
+-  std::string item;
+-  while (std::getline(stream, item, ';')) {
+-    const auto sep = item.find('=');
+-    if (sep == std::string::npos) {
+-      continue;
+-    }
+-    fields[item.substr(0, sep)] = item.substr(sep + 1);
+-  }
+-  return fields;
+-}
+-
+-bool parseBoolText(const std::string & text)
+-{
+-  return text == "1" || text == "true" || text == "True";
+-}
+-
+-double parseDoubleOr(const std::string & text, double fallback)
+-{
+-  try {
+-    return std::stod(text);
+-  } catch (const std::exception &) {
+-    return fallback;
+-  }
+-}
+-
+ geometry_msgs::msg::Quaternion quaternionFromYaw(double yaw)
+ {
+   geometry_msgs::msg::Quaternion q;
+@@ -69,62 +44,26 @@ geometry_msgs::msg::Quaternion quaternionFromYaw(double yaw)
+   return q;
+ }
+ 
+-std::vector<navigation::maps::MapPoint> parsePointsPayload(const std::string & payload)
+-{
+-  std::vector<navigation::maps::MapPoint> points;
+-  std::stringstream stream(payload);
+-  std::string item;
+-  while (std::getline(stream, item, ';')) {
+-    if (item.empty()) {
+-      continue;
+-    }
+-
+-    std::stringstream point_stream(item);
+-    std::string x_text;
+-    std::string y_text;
+-    std::string fast_text;
+-    if (!std::getline(point_stream, x_text, ',') ||
+-      !std::getline(point_stream, y_text, ',') ||
+-      !std::getline(point_stream, fast_text, ','))
+-    {
+-      continue;
+-    }
+-
+-    navigation::maps::MapPoint point;
+-    point.id = static_cast<int>(points.size() + 1);
+-    point.x = parseDoubleOr(x_text, 0.0);
+-    point.y = parseDoubleOr(y_text, 0.0);
+-    point.fast = parseBoolText(fast_text);
+-    points.push_back(point);
+-  }
+-  return points;
+-}
+-
+-void assignConfigField(navigation::ControllerConfig & config, const std::string & key, double value)
++void applyConfigFromRequest(
++  navigation::ControllerConfig & config,
++  double waypoint_tolerance,
++  double max_linear_speed,
++  double max_angular_speed,
++  double k_rho, double k_alpha, double k_beta,
++  double fast_max_linear_speed, double fast_max_angular_speed,
++  double fast_k_rho, double fast_k_alpha, double fast_k_beta)
+ {
+-  if (key == "waypoint_tolerance" && value > 0.0) {
+-    config.waypoint_tolerance = value;
+-  } else if (key == "max_linear_speed" && value > 0.0) {
+-    config.max_linear_speed = value;
+-  } else if (key == "max_angular_speed" && value > 0.0) {
+-    config.max_angular_speed = value;
+-  } else if (key == "k_rho") {
+-    config.k_rho = value;
+-  } else if (key == "k_alpha") {
+-    config.k_alpha = value;
+-  } else if (key == "k_beta") {
+-    config.k_beta = value;
+-  } else if (key == "fast_max_linear_speed" && value > 0.0) {
+-    config.fast_max_linear_speed = value;
+-  } else if (key == "fast_max_angular_speed" && value > 0.0) {
+-    config.fast_max_angular_speed = value;
+-  } else if (key == "fast_k_rho") {
+-    config.fast_k_rho = value;
+-  } else if (key == "fast_k_alpha") {
+-    config.fast_k_alpha = value;
+-  } else if (key == "fast_k_beta") {
+-    config.fast_k_beta = value;
+-  }
++  if (waypoint_tolerance > 0.0) { config.waypoint_tolerance = waypoint_tolerance; }
++  if (max_linear_speed > 0.0) { config.max_linear_speed = max_linear_speed; }
++  if (max_angular_speed > 0.0) { config.max_angular_speed = max_angular_speed; }
++  config.k_rho = k_rho;
++  config.k_alpha = k_alpha;
++  config.k_beta = k_beta;
++  if (fast_max_linear_speed > 0.0) { config.fast_max_linear_speed = fast_max_linear_speed; }
++  if (fast_max_angular_speed > 0.0) { config.fast_max_angular_speed = fast_max_angular_speed; }
++  config.fast_k_rho = fast_k_rho;
++  config.fast_k_alpha = fast_k_alpha;
++  config.fast_k_beta = fast_k_beta;
+ }
+ 
+ }  // namespace
+@@ -171,21 +110,58 @@ public:
+     }
+     context_.interface->start(*this);
+ 
+-    const auto command_topic = declare_parameter<std::string>("navigation_command_topic", "/navigation/command");
+     const auto status_topic = declare_parameter<std::string>("navigation_status_topic", "/navigation/status");
+     const auto state_topic = declare_parameter<std::string>("navigation_state_topic", "/navigation/state");
+ 
+     cmd_vel_publisher_ =
+       create_publisher<geometry_msgs::msg::Twist>(context_.cmd_vel_topic, rclcpp::QoS(10));
+-    command_subscription_ = create_subscription<std_msgs::msg::String>(
+-      command_topic,
+-      rclcpp::QoS(10),
+-      [this](std_msgs::msg::String::SharedPtr msg) {
+-        handleCommand(msg->data);
++
++    // Service servers (replacing topic-based command subscription)
++    set_waypoints_service_ = create_service<navigation::srv::SetWaypoints>(
++      "/navigation/set_waypoints",
++      [this](
++        const std::shared_ptr<navigation::srv::SetWaypoints::Request> request,
++        std::shared_ptr<navigation::srv::SetWaypoints::Response> response) {
++        handleSetWaypoints(request, response);
++      });
++
++    set_config_service_ = create_service<navigation::srv::SetControllerConfig>(
++      "/navigation/set_config",
++      [this](
++        const std::shared_ptr<navigation::srv::SetControllerConfig::Request> request,
++        std::shared_ptr<navigation::srv::SetControllerConfig::Response> response) {
++        handleSetConfig(request, response);
++      });
++
++    start_service_ = create_service<navigation::srv::StartNavigation>(
++      "/navigation/start",
++      [this](
++        const std::shared_ptr<navigation::srv::StartNavigation::Request> request,
++        std::shared_ptr<navigation::srv::StartNavigation::Response> response) {
++        handleStartNavigation(request, response);
+       });
++
++    stop_service_ = create_service<navigation::srv::StopNavigation>(
++      "/navigation/stop",
++      [this](
++        const std::shared_ptr<navigation::srv::StopNavigation::Request> request,
++        std::shared_ptr<navigation::srv::StopNavigation::Response> response) {
++        handleStopNavigation(request, response);
++      });
++
+     status_publisher_ = create_publisher<std_msgs::msg::String>(status_topic, rclcpp::QoS(10));
+     state_publisher_ = create_publisher<nav_msgs::msg::Odometry>(state_topic, rclcpp::SensorDataQoS());
+ 
++    // Heartbeat publisher: sends a pulse every second so remote UI can detect disconnection
++    heartbeat_publisher_ = create_publisher<std_msgs::msg::String>("/navigation/heartbeat", rclcpp::QoS(10));
++    heartbeat_timer_ = create_wall_timer(
++      std::chrono::seconds(1),
++      [this]() {
++        std_msgs::msg::String msg;
++        msg.data = "beat";
++        heartbeat_publisher_->publish(msg);
++      });
++
+     timer_ = create_wall_timer(
+       std::chrono::duration<double>(1.0 / config.update_rate_hz),
+       [this]() {
+@@ -194,8 +170,8 @@ public:
+ 
+     RCLCPP_INFO(
+       get_logger(),
+-      "Navigation core ready. commands: %s, status: %s, state: %s, cmd_vel: %s",
+-      command_topic.c_str(),
++      "Navigation core ready. services: /navigation/{set_waypoints,set_config,start,stop}, "
++      "status: %s, state: %s, cmd_vel: %s",
+       status_topic.c_str(),
+       state_topic.c_str(),
+       context_.cmd_vel_topic.c_str());
+@@ -268,41 +244,164 @@ private:
+     status_publisher_->publish(msg);
+   }
+ 
+-  void handleCommand(const std::string & command)
++  // === Service handlers ===
++
++  void handleSetWaypoints(
++    const std::shared_ptr<navigation::srv::SetWaypoints::Request> request,
++    std::shared_ptr<navigation::srv::SetWaypoints::Response> response)
+   {
+-    const auto sep = command.find('|');
+-    const auto verb = sep == std::string::npos ? command : command.substr(0, sep);
+-    const auto payload = sep == std::string::npos ? std::string() : command.substr(sep + 1);
+-
+-    if (verb == "start") {
+-      runtime_.startNavigation(payload.empty() ? context_.selected_controller_name : payload);
+-    } else if (verb == "stop") {
+-      runtime_.stopNavigation(payload.empty() ? "Navigation stopped" : payload);
+-    } else if (verb == "set_points") {
+-      runtime_.stopNavigationForRouteChange();
+-      context_.map->setPoints(parsePointsPayload(payload));
+-      runtime_.syncControllerWaypoints();
+-      context_.navigation_status = "Route updated";
+-      RCLCPP_INFO(get_logger(), "Remote route updated: %zu points.", context_.map->points().size());
+-    } else if (verb == "set_config") {
+-      for (const auto & [key, value] : parseKeyValues(payload)) {
+-        assignConfigField(context_.controller_config, key, parseDoubleOr(value, 0.0));
+-      }
+-      runtime_.applyControllerConfig();
+-      context_.navigation_status = "Params updated";
+-      RCLCPP_INFO(get_logger(), "Remote navigation params updated.");
+-    } else {
+-      RCLCPP_WARN(get_logger(), "Unknown navigation command: %s", command.c_str());
++    std::vector<navigation::maps::MapPoint> points;
++    for (const auto & mp : request->points) {
++      navigation::maps::MapPoint point;
++      point.id = mp.id;
++      point.x = mp.x;
++      point.y = mp.y;
++      point.fast = mp.fast;
++      points.push_back(point);
+     }
++
++    runtime_.stopNavigationForRouteChange();
++    context_.map->setPoints(points);
++    runtime_.syncControllerWaypoints();
++    context_.navigation_status = "Route updated";
++
++    response->success = true;
++    response->message = "Route updated: " + std::to_string(points.size()) + " points";
++
++    RCLCPP_INFO(get_logger(), "Service set_waypoints: %zu points.", points.size());
++    publishStatus();
++  }
++
++  void handleSetConfig(
++    const std::shared_ptr<navigation::srv::SetControllerConfig::Request> request,
++    std::shared_ptr<navigation::srv::SetControllerConfig::Response> response)
++  {
++    applyConfigFromRequest(
++      context_.controller_config,
++      request->waypoint_tolerance,
++      request->max_linear_speed,
++      request->max_angular_speed,
++      request->k_rho, request->k_alpha, request->k_beta,
++      request->fast_max_linear_speed,
++      request->fast_max_angular_speed,
++      request->fast_k_rho, request->fast_k_alpha, request->fast_k_beta);
++
++    runtime_.applyControllerConfig();
++    context_.navigation_status = "Params updated";
++
++    response->success = true;
++    response->message = "Params updated";
++
++    RCLCPP_INFO(get_logger(), "Service set_config: navigation params updated.");
++    publishStatus();
++  }
++
++  void handleStartNavigation(
++    const std::shared_ptr<navigation::srv::StartNavigation::Request> request,
++    std::shared_ptr<navigation::srv::StartNavigation::Response> response)
++  {
++    // Stop any running navigation first
++    if (runtime_.isNavigationActive()) {
++      runtime_.stopNavigation("Navigation restarted");
++    }
++
++    // Set points
++    std::vector<navigation::maps::MapPoint> points;
++    for (const auto & mp : request->points) {
++      navigation::maps::MapPoint point;
++      point.id = mp.id;
++      point.x = mp.x;
++      point.y = mp.y;
++      point.fast = mp.fast;
++      points.push_back(point);
++    }
++    context_.map->setPoints(points);
++
++    // Set config
++    applyConfigFromRequest(
++      context_.controller_config,
++      request->waypoint_tolerance,
++      request->max_linear_speed,
++      request->max_angular_speed,
++      request->k_rho, request->k_alpha, request->k_beta,
++      request->fast_max_linear_speed,
++      request->fast_max_angular_speed,
++      request->fast_k_rho, request->fast_k_alpha, request->fast_k_beta);
++
++    runtime_.applyControllerConfig();
++    runtime_.syncControllerWaypoints();
++
++    // Validate fast markers
++    std::string marker_error;
++    if (!navigation::maps::validateFastMarkers(context_.map->points(), &marker_error)) {
++      response->success = false;
++      response->message = marker_error;
++      RCLCPP_WARN(get_logger(), "Service start_navigation rejected: %s", marker_error.c_str());
++      publishStatus();
++      return;
++    }
++
++    // Start navigation
++    const auto & controller_name = request->controller_name;
++    context_.selected_controller_name = controller_name;
++
++    auto next_controller = navigation::createController(controller_name, context_.controller_config);
++    if (next_controller == nullptr) {
++      response->success = false;
++      response->message = "Controller unavailable: " + controller_name;
++      RCLCPP_WARN(get_logger(), "Service start_navigation rejected: unknown controller '%s'.", controller_name.c_str());
++      publishStatus();
++      return;
++    }
++
++    next_controller->setWaypoints(context_.map->points());
++
++    std::string error_message;
++    if (!next_controller->start(&error_message)) {
++      context_.controller = std::move(next_controller);
++      response->success = false;
++      response->message = error_message.empty() ? "Navigation start failed" : error_message;
++      context_.navigation_status = response->message;
++      RCLCPP_WARN(get_logger(), "Service start_navigation failed: %s", response->message.c_str());
++      publishStatus();
++      return;
++    }
++
++    context_.controller = std::move(next_controller);
++    context_.navigation_status = context_.controller->status().message;
++
++    response->success = true;
++    response->message = "Navigation started: " + controller_name;
++
++    RCLCPP_INFO(get_logger(), "Service start_navigation: %zu points, controller '%s'.", points.size(), controller_name.c_str());
++    publishStatus();
++  }
++
++  void handleStopNavigation(
++    const std::shared_ptr<navigation::srv::StopNavigation::Request> request,
++    std::shared_ptr<navigation::srv::StopNavigation::Response> response)
++  {
++    const auto reason = request->reason.empty() ? "Navigation stopped" : request->reason;
++    runtime_.stopNavigation(reason);
++
++    response->success = true;
++    response->message = reason;
++
++    RCLCPP_INFO(get_logger(), "Service stop_navigation: %s", reason.c_str());
+     publishStatus();
+   }
+ 
+   NavigationNodeContext context_;
+   NavigationRuntime runtime_;
+   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
+-  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr command_subscription_;
++  rclcpp::Service<navigation::srv::SetWaypoints>::SharedPtr set_waypoints_service_;
++  rclcpp::Service<navigation::srv::SetControllerConfig>::SharedPtr set_config_service_;
++  rclcpp::Service<navigation::srv::StartNavigation>::SharedPtr start_service_;
++  rclcpp::Service<navigation::srv::StopNavigation>::SharedPtr stop_service_;
+   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_publisher_;
+   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr state_publisher_;
++  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr heartbeat_publisher_;
++  rclcpp::TimerBase::SharedPtr heartbeat_timer_;
+   rclcpp::TimerBase::SharedPtr timer_;
+ };
+ 
+diff --git a/navigation/src/ui/map_ui_renderer.cpp b/navigation/src/ui/map_ui_renderer.cpp
+index fde0499..b24c78e 100644
+--- a/navigation/src/ui/map_ui_renderer.cpp
++++ b/navigation/src/ui/map_ui_renderer.cpp
+@@ -563,6 +563,12 @@ void MapUiRenderer::drawUiPanel(cv::Mat & canvas, const MapUiState & ui_state, s
+     putPanelText(canvas, progress, cv::Point(panel_left + 22, y + 54), 0.43, palette.text_muted);
+   }
+ 
++  y += 84;
++  putPanelText(canvas, "Core:", cv::Point(panel_left + 22, y), 0.48, palette.text);
++  const std::string core_status = ui_state.core_connected ? "Connected" : "DISCONNECTED";
++  const auto core_color = ui_state.core_connected ? palette.text_muted : cv::Scalar(64, 128, 255);
++  putPanelText(canvas, core_status, cv::Point(panel_left + 22, y + 28), 0.43, core_color);
++
+   if (!ui_state.message.empty()) {
+     cv::rectangle(canvas, cv::Rect(panel_left + 18, height_ - 74, panel_width_ - 36, 50), palette.surface_alt, cv::FILLED);
+     cv::rectangle(canvas, cv::Rect(panel_left + 18, height_ - 74, panel_width_ - 36, 50), palette.button_border, 1, cv::LINE_AA);
+diff --git a/real_robot/real_runner/include/real_runner/utils/serial_packages.hpp b/real_robot/real_runner/include/real_runner/utils/serial_packages.hpp
+index 7f2de0d..e07f94d 100644
+--- a/real_robot/real_runner/include/real_runner/utils/serial_packages.hpp
++++ b/real_robot/real_runner/include/real_runner/utils/serial_packages.hpp
+@@ -195,6 +195,7 @@ private:
+             } else {
+                 // 如果通信失败，不标记为初始化成功，下一轮循环重试
+                 RCLCPP_WARN(rclcpp::get_logger("SerialPack"), "Failed to read initial motor state, retrying...");
++                
+                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
+             }
+             continue;
+@@ -222,6 +223,7 @@ private:
+         // ============================================================
+         localState.resize(localCmd.size()); 
+         if(!port.sendRecv(localCmd, localState)){ 
++            utils::SafetyStateManager::getInstance().setIsSafe(false);
+             RCLCPP_ERROR(rclcpp::get_logger("SerialPack"), "sendRecv failed"); 
+         }
+         {
+diff --git a/robot_description/black/assets/FL_calf.STL b/robot_description/black/assets/FL_calf.STL
+index 43a3335..403be6c 100644
+Binary files a/robot_description/black/assets/FL_calf.STL and b/robot_description/black/assets/FL_calf.STL differ
+diff --git a/robot_description/black/assets/FL_foot.STL b/robot_description/black/assets/FL_foot.STL
+index 389b6fb..09b6316 100644
+Binary files a/robot_description/black/assets/FL_foot.STL and b/robot_description/black/assets/FL_foot.STL differ
+diff --git a/robot_description/black/assets/FL_hip.STL b/robot_description/black/assets/FL_hip.STL
+index 02994de..617e7ed 100644
+Binary files a/robot_description/black/assets/FL_hip.STL and b/robot_description/black/assets/FL_hip.STL differ
+diff --git a/robot_description/black/assets/FL_thigh.STL b/robot_description/black/assets/FL_thigh.STL
+index dd38c3b..73c1cb6 100644
+Binary files a/robot_description/black/assets/FL_thigh.STL and b/robot_description/black/assets/FL_thigh.STL differ
+diff --git a/robot_description/black/assets/FR_calf.STL b/robot_description/black/assets/FR_calf.STL
+index 6a0b70e..b755810 100644
+Binary files a/robot_description/black/assets/FR_calf.STL and b/robot_description/black/assets/FR_calf.STL differ
+diff --git a/robot_description/black/assets/FR_foot.STL b/robot_description/black/assets/FR_foot.STL
+index 28125d5..34c666e 100644
+Binary files a/robot_description/black/assets/FR_foot.STL and b/robot_description/black/assets/FR_foot.STL differ
+diff --git a/robot_description/black/assets/FR_hip.STL b/robot_description/black/assets/FR_hip.STL
+index a603e41..5b9dbdf 100644
+Binary files a/robot_description/black/assets/FR_hip.STL and b/robot_description/black/assets/FR_hip.STL differ
+diff --git a/robot_description/black/assets/FR_thigh.STL b/robot_description/black/assets/FR_thigh.STL
+index 8da2ba2..cea176c 100644
+Binary files a/robot_description/black/assets/FR_thigh.STL and b/robot_description/black/assets/FR_thigh.STL differ
+diff --git a/robot_description/black/assets/RL_calf.STL b/robot_description/black/assets/RL_calf.STL
+index da8b486..02845b3 100644
+Binary files a/robot_description/black/assets/RL_calf.STL and b/robot_description/black/assets/RL_calf.STL differ
+diff --git a/robot_description/black/assets/RL_foot.STL b/robot_description/black/assets/RL_foot.STL
+index 157f712..c8c3e96 100644
+Binary files a/robot_description/black/assets/RL_foot.STL and b/robot_description/black/assets/RL_foot.STL differ
+diff --git a/robot_description/black/assets/RL_hip.STL b/robot_description/black/assets/RL_hip.STL
+index 783690e..c175834 100644
+Binary files a/robot_description/black/assets/RL_hip.STL and b/robot_description/black/assets/RL_hip.STL differ
+diff --git a/robot_description/black/assets/RL_thigh.STL b/robot_description/black/assets/RL_thigh.STL
+index eff1810..a8b322a 100644
+Binary files a/robot_description/black/assets/RL_thigh.STL and b/robot_description/black/assets/RL_thigh.STL differ
+diff --git a/robot_description/black/assets/RR_calf.STL b/robot_description/black/assets/RR_calf.STL
+index 8bd48f2..f8216d1 100644
+Binary files a/robot_description/black/assets/RR_calf.STL and b/robot_description/black/assets/RR_calf.STL differ
+diff --git a/robot_description/black/assets/RR_foot.STL b/robot_description/black/assets/RR_foot.STL
+index 76735de..7a40211 100644
+Binary files a/robot_description/black/assets/RR_foot.STL and b/robot_description/black/assets/RR_foot.STL differ
+diff --git a/robot_description/black/assets/RR_hip.STL b/robot_description/black/assets/RR_hip.STL
+index cd11975..b531aa2 100644
+Binary files a/robot_description/black/assets/RR_hip.STL and b/robot_description/black/assets/RR_hip.STL differ
+diff --git a/robot_description/black/assets/RR_thigh.STL b/robot_description/black/assets/RR_thigh.STL
+index fe403ac..f6fa677 100644
+Binary files a/robot_description/black/assets/RR_thigh.STL and b/robot_description/black/assets/RR_thigh.STL differ
+diff --git a/robot_description/black/assets/trunk.STL b/robot_description/black/assets/trunk.STL
+index 4b54050..02a2a8f 100644
+Binary files a/robot_description/black/assets/trunk.STL and b/robot_description/black/assets/trunk.STL differ
+diff --git a/robot_description/black/black_description.xml b/robot_description/black/black_description.xml
+index 0c7ba37..b21640d 100644
+--- a/robot_description/black/black_description.xml
++++ b/robot_description/black/black_description.xml
+@@ -35,16 +35,15 @@
+     <geom size="0.0005 0.0005 0.0005" type="box" contype="0" conaffinity="0" group="1" density="0"/>
+     <body name="trunk" pos= "0 0 0.5" childclass="black">
+       <freejoint/>
+-      <inertial pos="-0.0034324 0.00011667 -0.0701367" quat="0.499998 0.499162 -0.500917 0.499921" mass="5.723" diaginertia="0.012277 0.00872141 0.00759943"/>
++      <inertial pos="-0.034324 0.00011667 -0.0701367" quat="0.499998 0.499162 -0.500917 0.499921" mass="5.723" diaginertia="0.012277 0.00872141 0.00759943"/>
++      <!-- <inertial pos="-0.134324 0.00011667 -0.0701367" quat="0.499998 0.499162 -0.500917 0.499921" mass="6.723" diaginertia="0.012277 0.00872141 0.00759943"/> -->
+       <!-- <joint name="floating_base" pos="0 0 0" axis="1 0 0"/> -->
+-      <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.75294 0.75294 0.75294 1" mesh="trunk"/>
+       <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="trunk"/>
+       <geom size="0.0005 0.0005 0.0005" type="box" contype="0" conaffinity="0" group="1" density="0" rgba="0.8 0 0 1"/>
+       <site name="imu" pos="0 0 0" quat="1 0 0 0"/>
+       <body name="FR_hip" pos="0.1566 -0.059999 -0.06425">
+         <inertial pos="0.05138 -0.014784 -5.6642e-05" quat="0.718222 0.0109487 0.0108345 0.695644" mass="0.60559" diaginertia="0.000649601 0.00037398 0.000341509"/>
+         <joint name="FR_hip_joint" pos="0 0 0" axis="1 0 0" range="-10 10" actuatorfrcrange="-20 20"/>
+-        <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.75294 0.75294 0.75294 1" mesh="FR_hip"/>
+         <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="FR_hip"/>
+         <body name="FR_thigh" pos="0.056 -0.0336 0" quat="0.707105 0 0 -0.707108">
+           <inertial pos="0.039669 -0.0023188 -0.015479" quat="0.999775 -0.0212092 7.07592e-05 -9.25343e-05" mass="0.84232" diaginertia="0.0016834 0.00123603 0.000494576"/>
+@@ -54,7 +53,6 @@
+           <body name="FR_calf" pos="0.0618 0 -0.25">
+             <inertial pos="-6.80423e-05 0.0133885 -0.181221" quat="0.999779 0.0209922 -0.000251219 0.00128186" mass="0.35559" diaginertia="0.00175419 0.00171576 7.03881e-05"/>
+             <joint name="FR_calf_joint" pos="0 0 0" axis="1 0 0" range="-10 10" actuatorfrcrange="-20 20"/>
+-            <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.75294 0.75294 0.75294 1" mesh="FR_calf"/>
+             <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="FR_calf"/>
+             <geom size="0.02" pos="0 0.0078843 -0.25749" contype="0" conaffinity="0" group="1" density="0" rgba="0.12 0.15 0.2 1"/>
+             <geom class="foot" size="0.03" pos="0 0.0078843 -0.25749" rgba="0.12 0.15 0.2 1"/>
+@@ -64,7 +62,6 @@
+       <body name="FL_hip" pos="0.1566 0.060001 -0.06425">
+         <inertial pos="0.05138 0.014784 5.6642e-05" quat="0.695644 -0.0108345 -0.0109487 0.718222" mass="0.60559" diaginertia="0.000649601 0.00037398 0.000341509"/>
+         <joint name="FL_hip_joint" pos="0 0 0" axis="1 0 0" range="-10 10" actuatorfrcrange="-20 20"/>
+-        <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.75294 0.75294 0.75294 1" mesh="FL_hip"/>
+         <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="FL_hip"/>
+         <body name="FL_thigh" pos="0.056 0.0336 0" quat="0.707105 0 0 0.707108">
+           <inertial pos="0.039584 0.0023922 -0.015369" quat="0.999743 0.022652 8.07203e-05 -6.27535e-05" mass="0.83909" diaginertia="0.0016834 0.00123532 0.000495162"/>
+@@ -74,7 +71,6 @@
+           <body name="FL_calf" pos="0.0618 0 -0.25">
+             <inertial pos="6.80423e-05 -0.0133885 -0.181221" quat="0.999779 -0.0209922 0.000251214 0.00128192" mass="0.35559" diaginertia="0.00175419 0.00171576 7.03881e-05"/>
+             <joint name="FL_calf_joint" pos="0 0 0" axis="1 0 0" range="-10 10" actuatorfrcrange="-20 20"/>
+-            <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.75294 0.75294 0.75294 1" mesh="FL_calf"/>
+             <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="FL_calf"/>
+             <geom size="0.02" pos="0 -0.0078843 -0.25749" contype="0" conaffinity="0" group="1" density="0" rgba="0.12 0.15 0.2 1"/>
+             <geom class="foot" size="0.03" pos="0 -0.0078843 -0.25749" rgba="0.12 0.15 0.2 1"/>
+@@ -84,37 +80,31 @@
+       <body name="RR_hip" pos="-0.1566 -0.059999 -0.06425" quat="-3.67321e-06 0 0 -1">
+         <inertial pos="0.05138 0.014784 5.6642e-05" quat="0.695644 -0.0108345 -0.0109487 0.718222" mass="0.60559" diaginertia="0.000649601 0.00037398 0.000341509"/>
+         <joint name="RR_hip_joint" pos="0 0 0" axis="1 0 0" range="-10 10" actuatorfrcrange="-20 20"/>
+-        <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.75294 0.75294 0.75294 1" mesh="RR_hip"/>
+         <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="RR_hip"/>
+         <body name="RR_thigh" pos="0.056 0.0336 0" quat="0.707105 0 0 0.707108">
+           <inertial pos="0.039669 -0.0023188 -0.015479" quat="0.999775 -0.0212092 7.07592e-05 -9.25343e-05" mass="0.84232" diaginertia="0.0016834 0.00123603 0.000494576"/>
+           <joint name="RR_thigh_joint" pos="0 0 0" axis="1 0 0" range="-10 10" actuatorfrcrange="-20 20"/>
+           <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.75294 0.75294 0.75294 1" mesh="RR_thigh"/>
+-          <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="RR_thigh"/>
+           <body name="RR_calf" pos="0.0618 0 -0.25">
+             <inertial pos="-6.80423e-05 0.0133885 -0.181221" quat="0.999779 0.0209922 -0.000251219 0.00128186" mass="0.35559" diaginertia="0.00175419 0.00171576 7.03881e-05"/>
+             <joint name="RR_calf_joint" pos="0 0 0" axis="1 0 0" range="-10 10" actuatorfrcrange="-20 20"/>
+-            <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.75294 0.75294 0.75294 1" mesh="RR_calf"/>
+             <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="RR_calf"/>
+             <geom size="0.02" pos="0 0.0078843 -0.25749" contype="0" conaffinity="0" group="1" density="0" rgba="0.12 0.15 0.2 1"/>
+-            <geom size="0.03" pos="0 0.0078843 -0.25749" rgba="0.12 0.15 0.2 1"/>
++            <geom class="foot" size="0.03" pos="0 0.0078843 -0.25749" rgba="0.12 0.15 0.2 1"/>
+           </body>
+         </body>
+       </body>
+       <body name="RL_hip" pos="-0.1566 0.060001 -0.06425" quat="-3.67321e-06 0 0 -1">
+         <inertial pos="0.05138 -0.014784 -5.6642e-05" quat="0.718222 0.0109487 0.0108345 0.695644" mass="0.60559" diaginertia="0.000649601 0.00037398 0.000341509"/>
+         <joint name="RL_hip_joint" pos="0 0 0" axis="1 0 0" range="-10 10" actuatorfrcrange="-20 20"/>
+-        <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.75294 0.75294 0.75294 1" mesh="RL_hip"/>
+         <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="RL_hip"/>
+         <body name="RL_thigh" pos="0.056 -0.0336 0" quat="0.707105 0 0 -0.707108">
+           <inertial pos="0.039584 0.0023922 -0.015369" quat="0.999743 0.022652 8.07203e-05 -6.27535e-05" mass="0.83909" diaginertia="0.0016834 0.00123532 0.000495162"/>
+           <joint name="RL_thigh_joint" pos="0 0 0" axis="1 0 0" range="-10 10" actuatorfrcrange="-20 20"/>
+           <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.75294 0.75294 0.75294 1" mesh="RL_thigh"/>
+-          <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="RL_thigh"/>
+           <body name="RL_calf" pos="0.0618 0 -0.25">
+             <inertial pos="6.80423e-05 -0.0133885 -0.181221" quat="0.999779 -0.0209922 0.000251218 0.00128186" mass="0.35559" diaginertia="0.00175419 0.00171576 7.03881e-05"/>
+             <joint name="RL_calf_joint" pos="0 0 0" axis="1 0 0" range="-10 10" actuatorfrcrange="-20 20"/>
+-            <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.75294 0.75294 0.75294 1" mesh="RL_calf"/>
+             <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="RL_calf"/>
+             <geom size="0.02" pos="0 -0.0078843 -0.25749" contype="0" conaffinity="0" group="1" density="0" rgba="0.12 0.15 0.2 1"/>
+             <geom class="foot" size="0.03" pos="0 -0.0078843 -0.25749" rgba="0.12 0.15 0.2 1"/>
+diff --git a/robot_description/black/scene.xml b/robot_description/black/scene.xml
+index f56956d..010b3ac 100644
+--- a/robot_description/black/scene.xml
++++ b/robot_description/black/scene.xml
+@@ -18,6 +18,54 @@
+ 
+   <worldbody>
+     <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+-    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
++
++    <!-- 全局可碰撞平地：用于填充断桥周围区域，消除虚空 -->
++    <geom name="floor_solid" size="0 0 0.05" type="plane" material="groundplane"/>
++
++    <!-- 仅视觉地台：保留原有观感，避免与 floor_solid 产生重复碰撞 -->
++    <geom name="ground_platform"
++          type="box"
++          size="5 3 0.05"
++          pos="-4 0 -0.05"
++          material="groundplane"
++          contype="0"
++          conaffinity="0"
++          friction="1 0.005 0.0001"/>
++
++    <!-- 缓斜坡：长2m，宽4m(=>sy=2.0)，厚0.10m，倾角10deg
++         这里把“斜坡表面起点”对齐到 (x=1.0, z=0)，所以和地面连续 -->
++    <geom name="ramp"
++          type="box"
++          size="1.0 2.0 0.05"
++          pos="1.9934902 0 0.1244078"
++          quat="0.9961947 0 -0.0871557 0"
++          rgba="0.55 0.55 0.55 1"
++          friction="1 0.005 0.0001"/>
++
++    <!-- 断桥：每段0.40m，缝0.15m，桥面水平；宽4m(=>sy=2.0)，厚0.05m
++         桥顶面对齐斜坡末端顶面；并消除坡道到首段桥的 1cm 卡脚缝 -->
++    <body name="broken_bridge" pos="0 0 0">
++      <geom name="bridge_support_0" type="box" size="0.20 2.00 0.1486482" pos="3.1696155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_0" type="box" size="0.20 2.00 0.025" pos="3.1696155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_support_1" type="box" size="0.20 2.00 0.1486482" pos="3.7196155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_1" type="box" size="0.20 2.00 0.025" pos="3.7196155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_support_2" type="box" size="0.20 2.00 0.1486482" pos="4.2696155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_2" type="box" size="0.20 2.00 0.025" pos="4.2696155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_support_3" type="box" size="0.20 2.00 0.1486482" pos="4.8196155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_3" type="box" size="0.20 2.00 0.025" pos="4.8196155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_support_4" type="box" size="0.20 2.00 0.1486482" pos="5.3696155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_4" type="box" size="0.20 2.00 0.025" pos="5.3696155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_support_5" type="box" size="0.20 2.00 0.1486482" pos="5.9196155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_5" type="box" size="0.20 2.00 0.025" pos="5.9196155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_support_6" type="box" size="0.20 2.00 0.1486482" pos="6.4696155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_6" type="box" size="0.20 2.00 0.025" pos="6.4696155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_support_7" type="box" size="0.20 2.00 0.1486482" pos="7.0196155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_7" type="box" size="0.20 2.00 0.025" pos="7.0196155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_support_8" type="box" size="0.20 2.00 0.1486482" pos="7.5696155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_8" type="box" size="0.20 2.00 0.025" pos="7.5696155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_support_9" type="box" size="0.20 2.00 0.1486482" pos="8.1196155 0 0.1486482" rgba="0.45 0.45 0.6 1" friction="1 0.005 0.0001"/>
++      <geom name="bridge_9" type="box" size="0.20 2.00 0.025" pos="8.1196155 0 0.3222964" rgba="0.55 0.55 0.7 1" friction="1 0.005 0.0001"/>
++    </body>
++
+   </worldbody>
+ </mujoco>
+diff --git a/robot_description/black/scene_terrain.xml b/robot_description/black/scene_terrain.xml
+index 90dffec..e0e8eea 100644
+--- a/robot_description/black/scene_terrain.xml
++++ b/robot_description/black/scene_terrain.xml
+@@ -35,6 +35,8 @@
+ 
+     <geom name="bridge_gap_1" type="box" size="0.5 0.15 0.1" pos="-3.0 0 0.2" rgba="0.6 0.4 0.2 1"/>
+     <geom name="bridge_gap_2" type="box" size="0.5 0.15 0.1" pos="-4.2 0 0.2" rgba="0.6 0.4 0.2 1"/>
++    <geom name="bridge_gap_1_support" type="box" size="0.5 0.15 0.1" pos="-3.0 0 0.1" rgba="0.5 0.35 0.18 1"/>
++    <geom name="bridge_gap_2_support" type="box" size="0.5 0.15 0.1" pos="-4.2 0 0.1" rgba="0.5 0.35 0.18 1"/>
+     <geom name="bridge_start" type="box" size="0.2 0.4 0.1" pos="-2.3 0 0.1" rgba="0.5 0.5 0.5 1"/>
+ 
+     <body name="plank_bridge" pos="3.5 -2.5 0">
+@@ -45,6 +47,20 @@
+         <geom name="plank_5" type="box" size="0.2 0.4 0.1" pos="2.2 0 0.1" material="wood_mat" rgba="0.7 0.5 0.3 1"/>
+     </body>
+ 
++    <body name="staircase_10x30" pos="-1.0 -5.0 0">
++        
++        <geom name="stair_1" type="box" size="0.15 0.5 0.05" pos="0 0 0.05" rgba="0.6 0.5 0.4 1" friction="1.0 0.005 0.0001"/>
++        
++        <geom name="stair_2" type="box" size="0.15 0.5 0.10" pos="0.3 0 0.10" rgba="0.6 0.55 0.45 1" friction="1.0 0.005 0.0001"/>
++        
++        <geom name="stair_3" type="box" size="0.15 0.5 0.15" pos="0.6 0 0.15" rgba="0.6 0.6 0.5 1" friction="1.0 0.005 0.0001"/>
++        
++        <geom name="stair_4" type="box" size="0.15 0.5 0.20" pos="0.9 0 0.20" rgba="0.65 0.65 0.55 1" friction="1.0 0.005 0.0001"/>
++        
++        <geom name="stair_5" type="box" size="0.15 0.5 0.25" pos="1.2 0 0.25" rgba="0.7 0.7 0.6 1" friction="1.0 0.005 0.0001"/>
++
++        <geom name="stair_6" type="box" size="0.15 0.5 0.30" pos="1.5 0 0.30" rgba="0.75 0.75 0.65 1" friction="1.0 0.005 0.0001"/>
++    </body>
+ 
+     <body name="original_terrain_group" pos="0 4 0">
+       <geom pos="1.5 0.0 0.1" type="box" size="0.5 0.75 0.1" quat="1.0 0.0 0.0 0.0" />
+@@ -155,4 +171,4 @@
+     </body>
+ 
+   </worldbody>
+-</mujoco>
+\ No newline at end of file
++</mujoco>
+diff --git a/robot_msgs/CMakeLists.txt b/robot_msgs/CMakeLists.txt
+index 8b83a0d..2b5fca3 100644
+--- a/robot_msgs/CMakeLists.txt
++++ b/robot_msgs/CMakeLists.txt
+@@ -15,6 +15,8 @@ if($ENV{ROS_DISTRO} MATCHES "noetic")
+     RobotCommand.msg
+     RobotState.msg
+     IMU.msg
++    Gap.msg
++    GapModel.msg
+   )
+   generate_messages(
+     DEPENDENCIES
+@@ -37,12 +39,20 @@ if($ENV{ROS_DISTRO} MATCHES "noetic")
+ elseif($ENV{ROS_DISTRO} MATCHES "foxy|humble")
+   find_package(ament_cmake REQUIRED)
+   find_package(rosidl_default_generators REQUIRED)
++  find_package(std_msgs REQUIRED)
++
+   rosidl_generate_interfaces(${PROJECT_NAME}
+     "msg/MotorCommand.msg"
+     "msg/MotorState.msg"
+     "msg/RobotCommand.msg"
+     "msg/RobotState.msg"
+     "msg/IMU.msg"
++    "msg/Gap.msg"
++    "msg/GapModel.msg"
++    DEPENDENCIES
++    std_msgs
+   )
++
++  ament_export_dependencies(rosidl_default_runtime)
+   ament_package()
+ endif()
+diff --git a/robot_msgs/package.ros2.xml b/robot_msgs/package.ros2.xml
+index f1c0080..00b8f09 100644
+--- a/robot_msgs/package.ros2.xml
++++ b/robot_msgs/package.ros2.xml
+@@ -9,11 +9,12 @@
+ 
+   <buildtool_depend>ament_cmake</buildtool_depend>
+ 
+-  <export>
+-    <build_type>ament_cmake</build_type>
+-  </export>
+-
+   <build_depend>rosidl_default_generators</build_depend>
+   <exec_depend>rosidl_default_runtime</exec_depend>
++  <depend>std_msgs</depend>
+   <member_of_group>rosidl_interface_packages</member_of_group>
++
++  <export>
++    <build_type>ament_cmake</build_type>
++  </export>
+ </package>

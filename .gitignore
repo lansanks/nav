@@ -1,0 +1,29 @@
+# Build outputs
+build/
+install/
+log/
+
+# Editor and local tooling
+.vscode/
+.idea/
+.gitrepo/
+
+# Archives and generated binaries
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.o
+*.so
+*.a
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# CMake/colcon byproducts
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+.colcon_install_layout
