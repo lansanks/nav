@@ -67,8 +67,8 @@ class NavigationLauncher(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("Navigation Launcher")
-        self.geometry("760x430")
-        self.minsize(660, 370)
+        self.geometry("780x460")
+        self.minsize(720, 420)
 
         self.process: subprocess.Popen[str] | None = None
         self.reader_thread: threading.Thread | None = None
@@ -89,66 +89,66 @@ class NavigationLauncher(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _build_ui(self) -> None:
-        root = ttk.Frame(self, padding=8)
+        root = ttk.Frame(self, padding=6)
         root.grid(row=0, column=0, sticky="nsew")
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
-        root.columnconfigure(0, weight=1)
-        root.rowconfigure(7, weight=1)
+        root.columnconfigure((0, 1), weight=1, uniform="launcher")
+        root.rowconfigure(5, weight=1)
 
         source_frame = ttk.LabelFrame(root, text="信号源")
-        source_frame.grid(row=0, column=0, sticky="ew")
+        source_frame.grid(row=0, column=0, sticky="ew", padx=(0, 3))
         source_frame.columnconfigure((0, 1), weight=1)
 
         ttk.Radiobutton(
             source_frame,
-            text="仿真 / simulation (/odom)",
+            text="仿真 / simulation",
             variable=self.source_var,
             value="simulation",
             command=self._sync_mode_state,
-        ).grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        ).grid(row=0, column=0, sticky="w", padx=6, pady=4)
         ttk.Radiobutton(
             source_frame,
-            text="雷达 / radar (/Odometry)",
+            text="雷达 / radar",
             variable=self.source_var,
             value="radar",
             command=self._sync_mode_state,
-        ).grid(row=0, column=1, sticky="w", padx=8, pady=6)
+        ).grid(row=0, column=1, sticky="w", padx=6, pady=4)
 
         mode_frame = ttk.LabelFrame(root, text="启动方式")
-        mode_frame.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        mode_frame.grid(row=0, column=1, sticky="ew", padx=(3, 0))
         mode_frame.columnconfigure((0, 1), weight=1)
 
         ttk.Radiobutton(
             mode_frame,
-            text="只启动 navigation",
+            text="navigation",
             variable=self.launch_mode_var,
             value="navigation",
-        ).grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        ).grid(row=0, column=0, sticky="w", padx=6, pady=4)
         self.mujoco_mode = ttk.Radiobutton(
             mode_frame,
-            text="同时启动 MuJoCo + midware + navigation",
+            text="MuJoCo + midware",
             variable=self.launch_mode_var,
             value="mujoco_navigation",
         )
-        self.mujoco_mode.grid(row=0, column=1, sticky="w", padx=8, pady=6)
+        self.mujoco_mode.grid(row=0, column=1, sticky="w", padx=6, pady=4)
 
         # ---- 雷达设置 ----
         self.radar_frame = ttk.LabelFrame(root, text="雷达设置")
-        self.radar_frame.grid(row=2, column=0, sticky="ew", pady=(6, 0))
+        self.radar_frame.grid(row=1, column=0, sticky="ew", padx=(0, 3), pady=(4, 0))
         self.radar_frame.columnconfigure(1, weight=1)
 
         ttk.Label(self.radar_frame, text="config_file:").grid(
-            row=0, column=0, sticky="w", padx=8, pady=6
+            row=0, column=0, sticky="w", padx=6, pady=4
         )
         self.config_combo = ttk.Combobox(
             self.radar_frame,
             textvariable=self.config_var,
             values=self._detect_config_files(),
             state="readonly",
-            width=28,
+            width=20,
         )
-        self.config_combo.grid(row=0, column=1, sticky="w", padx=(4, 8), pady=6)
+        self.config_combo.grid(row=0, column=1, sticky="ew", padx=(4, 6), pady=4)
 
         # workspace status indicators
         lidar_ok = (LIDAR_WS / "install" / "setup.bash").exists()
@@ -162,44 +162,44 @@ class NavigationLauncher(tk.Tk):
             self.radar_frame,
             text=f"  unitree {lidar_mark}    livox {livox_mark}    fast_lio {lio_mark}",
         )
-        self.radar_status_label.grid(row=1, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 6))
+        self.radar_status_label.grid(row=1, column=0, columnspan=2, sticky="w", padx=6, pady=(0, 4))
 
         node_frame = ttk.LabelFrame(root, text="节点角色")
-        node_frame.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        node_frame.grid(row=1, column=1, sticky="ew", padx=(3, 0), pady=(4, 0))
         node_frame.columnconfigure((0, 1, 2), weight=1)
 
         ttk.Radiobutton(
             node_frame,
-            text="一体节点 / standalone",
+            text="standalone",
             variable=self.node_mode_var,
             value="standalone",
             command=self._sync_mode_state,
-        ).grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        ).grid(row=0, column=0, sticky="w", padx=6, pady=4)
         ttk.Radiobutton(
             node_frame,
-            text="机载核心 / core",
+            text="core",
             variable=self.node_mode_var,
             value="core",
             command=self._sync_mode_state,
-        ).grid(row=0, column=1, sticky="w", padx=8, pady=6)
+        ).grid(row=0, column=1, sticky="w", padx=6, pady=4)
         ttk.Radiobutton(
             node_frame,
-            text="本地界面 / remote UI",
+            text="remote UI",
             variable=self.node_mode_var,
             value="remote_ui",
             command=self._sync_mode_state,
-        ).grid(row=0, column=2, sticky="w", padx=8, pady=6)
+        ).grid(row=0, column=2, sticky="w", padx=6, pady=4)
 
         size_frame = ttk.LabelFrame(root, text="UI 大小")
-        size_frame.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        size_frame.grid(row=2, column=0, sticky="ew", columnspan=2, pady=(4, 0))
         size_frame.columnconfigure(1, weight=1)
 
-        ttk.Label(size_frame, text="导航界面大小 5-15，大屏推荐 10").grid(
+        ttk.Label(size_frame, text="导航界面大小 5-15").grid(
             row=0,
             column=0,
             sticky="w",
-            padx=8,
-            pady=6,
+            padx=6,
+            pady=4,
         )
         ttk.Spinbox(
             size_frame,
@@ -207,67 +207,69 @@ class NavigationLauncher(tk.Tk):
             to=15,
             textvariable=self.ui_size_var,
             width=6,
-        ).grid(row=0, column=1, sticky="w", padx=8, pady=6)
+        ).grid(row=0, column=1, sticky="w", padx=6, pady=4)
 
         race_frame = ttk.LabelFrame(root, text="赛事逻辑")
-        race_frame.grid(row=5, column=0, sticky="ew", pady=(6, 0))
-        race_frame.columnconfigure((0, 1, 2, 3), weight=1)
+        race_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        race_frame.columnconfigure((1, 7), weight=1)
 
         ttk.Radiobutton(
             race_frame,
-            text="障碍赛 / obstacle",
+            text="obstacle",
             variable=self.race_logic_var,
             value="obstacle",
-        ).grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        ).grid(row=0, column=0, sticky="w", padx=6, pady=4)
         ttk.Radiobutton(
             race_frame,
-            text="任务赛 / mission",
+            text="mission",
             variable=self.race_logic_var,
             value="mission",
-        ).grid(row=0, column=1, sticky="w", padx=8, pady=6)
-        ttk.Label(race_frame, text="恢复:").grid(row=0, column=2, sticky="e", padx=(8, 2), pady=6)
+        ).grid(row=0, column=1, sticky="w", padx=6, pady=4)
+        ttk.Label(race_frame, text="恢复:").grid(row=0, column=2, sticky="e", padx=(6, 2), pady=4)
         ttk.Combobox(
             race_frame,
             textvariable=self.mission_resume_event_var,
             values=("ack", "grabbed", "completed"),
             state="readonly",
             width=10,
-        ).grid(row=0, column=3, sticky="w", padx=(2, 8), pady=6)
-        ttk.Label(race_frame, text="半径(m):").grid(row=1, column=0, sticky="e", padx=(8, 2), pady=(0, 6))
+        ).grid(row=0, column=3, sticky="w", padx=(2, 6), pady=4)
+        ttk.Label(race_frame, text="半径:").grid(row=0, column=4, sticky="e", padx=(6, 2), pady=4)
         ttk.Entry(race_frame, textvariable=self.mission_task_radius_var, width=8).grid(
-            row=1,
-            column=1,
+            row=0,
+            column=5,
             sticky="w",
-            padx=(2, 8),
-            pady=(0, 6),
+            padx=(2, 6),
+            pady=4,
         )
-        ttk.Label(race_frame, text="重试(s):").grid(row=1, column=2, sticky="e", padx=(8, 2), pady=(0, 6))
+        ttk.Label(race_frame, text="重试:").grid(row=0, column=6, sticky="e", padx=(6, 2), pady=4)
         ttk.Entry(race_frame, textvariable=self.mission_arm_retry_period_var, width=8).grid(
-            row=1,
-            column=3,
+            row=0,
+            column=7,
             sticky="w",
-            padx=(2, 8),
-            pady=(0, 6),
+            padx=(2, 6),
+            pady=4,
         )
-        ttk.Label(race_frame, text="arm srv:").grid(row=2, column=0, sticky="e", padx=(8, 2), pady=(0, 6))
-        ttk.Entry(race_frame, textvariable=self.arm_mission_service_var, width=24).grid(
-            row=2,
+        ttk.Label(race_frame, text="arm srv:").grid(row=1, column=0, sticky="e", padx=(6, 2), pady=(0, 4))
+        ttk.Entry(race_frame, textvariable=self.arm_mission_service_var, width=22).grid(
+            row=1,
             column=1,
+            columnspan=3,
             sticky="ew",
-            padx=(2, 8),
-            pady=(0, 6),
+            padx=(2, 6),
+            pady=(0, 4),
         )
-        ttk.Label(race_frame, text="nav srv:").grid(row=2, column=2, sticky="e", padx=(8, 2), pady=(0, 6))
-        ttk.Entry(race_frame, textvariable=self.navigation_arm_event_service_var, width=24).grid(
-            row=2,
-            column=3,
+        ttk.Label(race_frame, text="nav srv:").grid(row=1, column=4, sticky="e", padx=(6, 2), pady=(0, 4))
+        ttk.Entry(race_frame, textvariable=self.navigation_arm_event_service_var, width=22).grid(
+            row=1,
+            column=5,
+            columnspan=3,
             sticky="ew",
-            padx=(2, 8),
-            pady=(0, 6),
+            padx=(2, 6),
+            pady=(0, 4),
         )
 
         action_frame = ttk.Frame(root)
-        action_frame.grid(row=6, column=0, sticky="ew", pady=(8, 5))
+        action_frame.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 4))
         action_frame.columnconfigure(2, weight=1)
 
         self.start_button = ttk.Button(action_frame, text="启动", command=self.start_launch)
@@ -278,11 +280,11 @@ class NavigationLauncher(tk.Tk):
         self.status_label.grid(row=0, column=2, sticky="e")
 
         log_frame = ttk.LabelFrame(root, text="日志")
-        log_frame.grid(row=7, column=0, sticky="nsew")
+        log_frame.grid(row=5, column=0, columnspan=2, sticky="nsew")
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
 
-        self.log_text = tk.Text(log_frame, height=4, wrap="word", state=tk.DISABLED)
+        self.log_text = tk.Text(log_frame, height=3, wrap="word", state=tk.DISABLED)
         self.log_text.grid(row=0, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
