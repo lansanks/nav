@@ -28,6 +28,7 @@ private:
   void onTimer();
   void applyFullscreenIfNeeded(int frame_width, int frame_height);
   void publishVelocity(const geometry_msgs::msg::Twist & command);
+  void recordCommandVelocity(const geometry_msgs::msg::Twist & command);
   void handleRemoteState(const nav_msgs::msg::Odometry::SharedPtr msg);
   void handleRemoteStatus(const std_msgs::msg::String::SharedPtr msg);
   void handleArmEvent(
@@ -41,6 +42,7 @@ private:
   NavigationMouseController mouse_controller_;
   std::unique_ptr<navigation::ui::WindowScrollController> scroll_controller_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr remote_state_subscription_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr remote_status_subscription_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr heartbeat_subscription_;

@@ -62,6 +62,10 @@ struct NavigationNodeContext
   bool remote_navigation_complete{false};
   std::size_t remote_navigation_target_index{0};
   std::size_t remote_navigation_point_count{0};
+  bool cmd_vel_valid{false};
+  double cmd_vel_linear_x{0.0};
+  double cmd_vel_linear_y{0.0};
+  double cmd_vel_angular_z{0.0};
   std::string radar_data_file;
   std::string radar_points_file;
   navigation::RobotNavigationState radar_latest_state;

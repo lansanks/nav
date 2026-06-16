@@ -516,7 +516,7 @@ struct TopViewMap::Impl
 
     if (state != nullptr && state->valid) {
       drawRobot(canvas, *state);
-      drawStatus(canvas, *state, ui_state.light_theme);
+      drawStatus(canvas, *state, ui_state);
     } else {
       cv::putText(
         canvas,
@@ -946,8 +946,12 @@ struct TopViewMap::Impl
     }
   }
 
-  void drawStatus(cv::Mat & canvas, const navigation::RobotNavigationState & state, bool light_theme) const
+  void drawStatus(
+    cv::Mat & canvas,
+    const navigation::RobotNavigationState & state,
+    const MapUiState & ui_state) const
   {
+    const bool light_theme = ui_state.light_theme;
     cv::rectangle(canvas, cv::Rect(10, 58, 410, 76), mapSurface(light_theme), cv::FILLED);
     cv::rectangle(canvas, cv::Rect(10, 58, 410, 76), mapSurfaceBorder(light_theme), 1);
 
@@ -961,13 +965,17 @@ struct TopViewMap::Impl
       state.x,
       state.y,
       state.yaw * 180.0 / kPi);
-    std::snprintf(
-      line2,
-      sizeof(line2),
-      "v %.2f m/s  vx %.2f  vy %.2f",
-      state.planar_speed,
-      state.linear_x,
-      state.linear_y);
+    if (ui_state.cmd_vel_valid) {
+      std::snprintf(
+        line2,
+        sizeof(line2),
+        "cmd_vel: vx %.2f  vy %.2f  w %.2f",
+        ui_state.cmd_vel_linear_x,
+        ui_state.cmd_vel_linear_y,
+        ui_state.cmd_vel_angular_z);
+    } else {
+      std::snprintf(line2, sizeof(line2), "cmd_vel: waiting");
+    }
 
     cv::putText(canvas, line1, cv::Point(20, 86), cv::FONT_HERSHEY_SIMPLEX, 0.55, mapText(light_theme), 1, cv::LINE_AA);
     cv::putText(canvas, line2, cv::Point(20, 114), cv::FONT_HERSHEY_SIMPLEX, 0.55, mapMutedText(light_theme), 1, cv::LINE_AA);

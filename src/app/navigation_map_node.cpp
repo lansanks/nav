@@ -176,6 +176,13 @@ NavigationMapNode::NavigationMapNode()
         context_.last_heartbeat_time = now();
       });
 
+    cmd_vel_subscription_ = create_subscription<geometry_msgs::msg::Twist>(
+      context_.cmd_vel_topic,
+      rclcpp::QoS(10),
+      [this](geometry_msgs::msg::Twist::SharedPtr msg) {
+        recordCommandVelocity(*msg);
+      });
+
     context_.navigation_status = "Waiting for core";
   } else {
     cmd_vel_publisher_ =
@@ -211,9 +218,10 @@ NavigationMapNode::NavigationMapNode()
     RCLCPP_INFO(
       get_logger(),
       "Remote UI mode. services on /navigation/{set_waypoints,set_config,start,stop}, "
-      "state: %s, status: %s",
+      "state: %s, status: %s, cmd_vel: %s",
       state_topic.c_str(),
-      status_topic.c_str());
+      status_topic.c_str(),
+      context_.cmd_vel_topic.c_str());
   } else {
     RCLCPP_INFO(get_logger(), "Navigation command topic: %s", context_.cmd_vel_topic.c_str());
   }
@@ -235,9 +243,19 @@ void NavigationMapNode::publishVelocity(const geometry_msgs::msg::Twist & comman
     return;
   }
 
+  recordCommandVelocity(command);
+
   if (cmd_vel_publisher_ != nullptr) {
     cmd_vel_publisher_->publish(command);
   }
+}
+
+void NavigationMapNode::recordCommandVelocity(const geometry_msgs::msg::Twist & command)
+{
+  context_.cmd_vel_valid = true;
+  context_.cmd_vel_linear_x = command.linear.x;
+  context_.cmd_vel_linear_y = command.linear.y;
+  context_.cmd_vel_angular_z = command.angular.z;
 }
 
 void NavigationMapNode::handleRemoteState(const nav_msgs::msg::Odometry::SharedPtr msg)

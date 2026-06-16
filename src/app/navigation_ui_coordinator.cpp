@@ -451,6 +451,10 @@ navigation::ui::MapUiState NavigationUiCoordinator::buildUiState()
   ui_state.panel_collapsed = context_.panel_collapsed;
   ui_state.fullscreen = context_.fullscreen;
   ui_state.core_connected = !context_.remote_control || context_.core_connected;
+  ui_state.cmd_vel_valid = context_.cmd_vel_valid;
+  ui_state.cmd_vel_linear_x = context_.cmd_vel_linear_x;
+  ui_state.cmd_vel_linear_y = context_.cmd_vel_linear_y;
+  ui_state.cmd_vel_angular_z = context_.cmd_vel_angular_z;
   return ui_state;
 }
 

@@ -95,6 +95,10 @@ struct MapUiState
   bool panel_collapsed{false};
   bool fullscreen{false};
   bool core_connected{true};
+  bool cmd_vel_valid{false};
+  double cmd_vel_linear_x{0.0};
+  double cmd_vel_linear_y{0.0};
+  double cmd_vel_angular_z{0.0};
 };
 
 }  // namespace navigation::ui

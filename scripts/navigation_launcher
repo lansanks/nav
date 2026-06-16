@@ -76,8 +76,10 @@ class NavigationLauncher(tk.Tk):
         self.minsize(720, 420)
 
         self.process: subprocess.Popen[str] | None = None
+        self.process_pgid: int | None = None
         self.reader_thread: threading.Thread | None = None
         self.self_check_failed = False
+        self.close_after_stop = False
 
         self.source_var = tk.StringVar(value="simulation")
         self.launch_mode_var = tk.StringVar(value="navigation")
@@ -382,8 +384,10 @@ class NavigationLauncher(tk.Tk):
                 bufsize=1,
                 preexec_fn=os.setsid,
             )
+            self.process_pgid = os.getpgid(self.process.pid)
         except OSError as exc:
             self.process = None
+            self.process_pgid = None
             messagebox.showerror("Navigation Launcher", f"启动失败:\n{exc}", parent=self)
             return
 
@@ -391,6 +395,7 @@ class NavigationLauncher(tk.Tk):
         self.stop_button.configure(state=tk.NORMAL)
         self.status_label.configure(text="自检中" if self._should_start_radar_pipeline() else "运行中")
         self.self_check_failed = False
+        self.close_after_stop = False
         self.reader_thread = threading.Thread(target=self._read_process_output, daemon=True)
         self.reader_thread.start()
 
@@ -611,12 +616,19 @@ class NavigationLauncher(tk.Tk):
         return f"{value:.3f}"
 
     def _read_process_output(self) -> None:
-        assert self.process is not None
-        assert self.process.stdout is not None
-        for line in self.process.stdout:
-            self.after(0, self._handle_process_output_line, line)
-        return_code = self.process.wait()
-        self.after(0, self._process_finished, return_code)
+        process = self.process
+        assert process is not None
+        assert process.stdout is not None
+        for line in process.stdout:
+            try:
+                self.after(0, self._handle_process_output_line, line)
+            except tk.TclError:
+                return
+        return_code = process.wait()
+        try:
+            self.after(0, self._process_finished, process, return_code)
+        except tk.TclError:
+            pass
 
     def _handle_process_output_line(self, line: str) -> None:
         self.append_log(line)
@@ -633,40 +645,94 @@ class NavigationLauncher(tk.Tk):
             self.status_label.configure(text="自检失败")
             messagebox.showerror("Navigation Launcher", message, parent=self)
 
-    def _process_finished(self, return_code: int) -> None:
+    def _process_finished(self, process: subprocess.Popen[str], return_code: int) -> None:
+        if self.process is not process:
+            return
+        pgid = self.process_pgid
         self.append_log(f"\n[process exited with code {return_code}]\n")
+        self._cleanup_process_group(pgid)
         self.process = None
+        self.process_pgid = None
         self.start_button.configure(state=tk.NORMAL)
         self.stop_button.configure(state=tk.DISABLED)
         self.status_label.configure(text="自检失败" if self.self_check_failed else "已退出")
+        if self.close_after_stop:
+            self.status_label.configure(text="正在退出")
+            self.after(1200, self.destroy)
 
-    def stop_launch(self) -> None:
+    def _signal_process_group(self, pgid: int | None, sig: signal.Signals) -> bool:
+        if pgid is None:
+            return False
+        try:
+            os.killpg(pgid, sig)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError as exc:
+            self.append_log(f"\n[failed to send {sig.name} to process group {pgid}: {exc}]\n")
+            return False
+
+    def _process_group_alive(self, pgid: int | None) -> bool:
+        if pgid is None:
+            return False
+        try:
+            os.killpg(pgid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+
+    def _cleanup_process_group(self, pgid: int | None) -> None:
+        if not self._process_group_alive(pgid):
+            return
+        self.append_log("\n[cleaning remaining launch process group]\n")
+        self._signal_process_group(pgid, signal.SIGTERM)
+        self.after(1000, lambda: self._kill_process_group_if_alive(pgid))
+
+    def stop_launch(self, *, close_after_stop: bool = False) -> None:
         if self.process is None:
             return
+        process = self.process
+        pgid = self.process_pgid
+        self.close_after_stop = self.close_after_stop or close_after_stop
         self.append_log("\n[stopping launch process]\n")
-        try:
-            os.killpg(os.getpgid(self.process.pid), signal.SIGINT)
-        except ProcessLookupError:
-            return
-        self.after(4000, self._terminate_if_needed)
+        self.stop_button.configure(state=tk.DISABLED)
+        self.status_label.configure(text="正在停止并退出" if self.close_after_stop else "正在停止")
+        self._signal_process_group(pgid, signal.SIGINT)
+        self.after(4000, lambda: self._terminate_if_needed(process, pgid))
 
-    def _terminate_if_needed(self) -> None:
-        if self.process is None or self.process.poll() is not None:
+    def _terminate_if_needed(self, process: subprocess.Popen[str], pgid: int | None) -> None:
+        if self.process is not process or process.poll() is not None:
             return
-        try:
-            os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
-        except ProcessLookupError:
-            pass
+        self.append_log("\n[launch process still running, sending SIGTERM]\n")
+        self._signal_process_group(pgid, signal.SIGTERM)
+        self.after(3000, lambda: self._kill_if_needed(process, pgid))
+
+    def _kill_if_needed(self, process: subprocess.Popen[str], pgid: int | None) -> None:
+        if self.process is not process or process.poll() is not None:
+            return
+        self.append_log("\n[launch process still running, sending SIGKILL]\n")
+        self._signal_process_group(pgid, signal.SIGKILL)
+
+    def _kill_process_group_if_alive(self, pgid: int | None) -> None:
+        if not self._process_group_alive(pgid):
+            return
+        self.append_log("\n[remaining launch process group still alive, sending SIGKILL]\n")
+        self._signal_process_group(pgid, signal.SIGKILL)
 
     def _on_close(self) -> None:
         if self.process is not None:
+            if self.close_after_stop:
+                return
             if not messagebox.askyesno(
                 "Navigation Launcher",
                 "启动进程还在运行，是否停止并退出？",
                 parent=self,
             ):
                 return
-            self.stop_launch()
+            self.stop_launch(close_after_stop=True)
+            return
         self.destroy()
 
 
