@@ -528,7 +528,10 @@ class NavigationLauncher(tk.Tk):
     def _topic_echo_once_command(setup_file: Path, topic: str, timeout_seconds: int) -> str:
         inner = (
             f"source {shlex.quote(str(setup_file))} && "
-            f"ros2 topic echo {shlex.quote(topic)} --once >/dev/null"
+            "while true; do "
+            f"timeout 2s ros2 topic echo {shlex.quote(topic)} --once >/dev/null 2>&1 && exit 0; "
+            "sleep 0.5; "
+            "done"
         )
         return f"timeout {timeout_seconds}s bash -lc {shlex.quote(inner)}"
 
