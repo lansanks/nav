@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -21,6 +22,10 @@ LIVOX_WS = Path.home() / "lidar" / "radar" / "livox" / "livox_ws"
 FAST_LIO_WS = Path.home() / "lidar" / "lio" / "fast_lio_ws"
 LIDAR_INIT_DELAY = 2
 FAST_LIO_INIT_DELAY = 2
+LIDAR_TOPIC_TIMEOUT = 10
+FAST_LIO_TOPIC_TIMEOUT = 12
+FAST_LIO_ODOM_TOPIC = "/Odometry"
+SELF_CHECK_MARKER = "__NAVIGATION_SELF_CHECK__:"
 
 FAST_LIO_CONFIG_DIR = FAST_LIO_WS / "src" / "FAST_LIO_ROS2" / "config"
 
@@ -72,6 +77,7 @@ class NavigationLauncher(tk.Tk):
 
         self.process: subprocess.Popen[str] | None = None
         self.reader_thread: threading.Thread | None = None
+        self.self_check_failed = False
 
         self.source_var = tk.StringVar(value="simulation")
         self.launch_mode_var = tk.StringVar(value="navigation")
@@ -342,7 +348,7 @@ class NavigationLauncher(tk.Tk):
             return
 
         try:
-            if self.source_var.get() == "radar":
+            if self._should_start_radar_pipeline():
                 config_file = self.config_var.get()
                 lidar_ws, _ = self._resolve_lidar_driver(config_file)
 
@@ -383,7 +389,8 @@ class NavigationLauncher(tk.Tk):
 
         self.start_button.configure(state=tk.DISABLED)
         self.stop_button.configure(state=tk.NORMAL)
-        self.status_label.configure(text="运行中")
+        self.status_label.configure(text="自检中" if self._should_start_radar_pipeline() else "运行中")
+        self.self_check_failed = False
         self.reader_thread = threading.Thread(target=self._read_process_output, daemon=True)
         self.reader_thread.start()
 
@@ -399,8 +406,10 @@ class NavigationLauncher(tk.Tk):
         mode = self.launch_mode_var.get()
         node_mode = self.node_mode_var.get()
 
-        # radar pipeline: lidar → fast_lio before navigation
-        if source == "radar":
+        # radar pipeline: lidar → fast_lio before local navigation/core.
+        # remote_ui consumes the remote core state and must not start local radar processes.
+        if self._should_start_radar_pipeline():
+            parts.append("trap 'for pid in $(jobs -pr); do kill \"$pid\" 2>/dev/null || true; done' EXIT")
             parts.extend(self._build_radar_pipeline_commands())
 
         parts.append(f"source {shlex.quote(str(local_setup))}")
@@ -465,24 +474,88 @@ class NavigationLauncher(tk.Tk):
         lidar_ws, launch_args = self._resolve_lidar_driver(config_file)
         lidar_setup = Path(lidar_ws) / "install" / "setup.bash"
         lio_setup = FAST_LIO_WS / "install" / "setup.bash"
+        lidar_topics = self._fast_lio_input_topics(config_file)
 
         # 注意：source 路径不能用 shlex.quote() 包起来 — 单引号会阻止 ~ 展开
         # 路径来自 Path.home() 的子目录，不含空格或特殊字符，直接拼接是安全的
         lidar_source_path = self._tilde(lidar_setup)
         lio_source_path = self._tilde(lio_setup)
 
-        return [
+        commands = [
+            f"echo {shlex.quote('[self-check] 启动雷达驱动...')}",
             # Step 1: lidar driver (subshell for clean environment)
             # 不能用 "& &&" — bash 里 & 是命令终止符，后面跟 && 会语法错误
             # 所以把 & 和 sleep 写进同一个 part，避免 join(" && ") 插入 &&
-            f"(source {lidar_source_path} && "
+            f"{{ (source {lidar_source_path} && "
             f"{' '.join(shlex.quote(arg) for arg in launch_args)}) & "
-            f"sleep {LIDAR_INIT_DELAY}",
-            # Step 2: fast_lio (subshell for clean environment)
-            f"(source {lio_source_path} && "
-            f"ros2 launch fast_lio mapping.launch.py config_file:={shlex.quote(config_file)}) & "
-            f"sleep {FAST_LIO_INIT_DELAY}",
+            f"sleep {LIDAR_INIT_DELAY}; }}",
         ]
+
+        for label, topic in lidar_topics:
+            commands.append(
+                f"echo {shlex.quote(f'[self-check] 等待雷达 {label}: {topic}')}"
+            )
+            commands.append(
+                f"if ! {self._topic_echo_once_command(lidar_setup, topic, LIDAR_TOPIC_TIMEOUT)}; "
+                f"then echo {shlex.quote(self._self_check_marker('FAIL', f'雷达自检失败：{label} {topic} 在 {LIDAR_TOPIC_TIMEOUT}s 内没有收到消息'))}; "
+                "exit 1; fi"
+            )
+
+        commands.extend(
+            [
+                f"echo {shlex.quote('[self-check] 雷达输入正常，启动 FastLIO...')}",
+            # Step 2: fast_lio (subshell for clean environment)
+            f"{{ (source {lio_source_path} && "
+            f"ros2 launch fast_lio mapping.launch.py config_file:={shlex.quote(config_file)}) & "
+            f"sleep {FAST_LIO_INIT_DELAY}; }}",
+                f"echo {shlex.quote(f'[self-check] 等待 FastLIO 输出: {FAST_LIO_ODOM_TOPIC}')}",
+                f"if ! {self._topic_echo_once_command(lio_setup, FAST_LIO_ODOM_TOPIC, FAST_LIO_TOPIC_TIMEOUT)}; "
+                f"then echo {shlex.quote(self._self_check_marker('FAIL', f'FastLIO 自检失败：{FAST_LIO_ODOM_TOPIC} 在 {FAST_LIO_TOPIC_TIMEOUT}s 内没有收到消息'))}; "
+                "exit 1; fi",
+                f"echo {shlex.quote(self._self_check_marker('OK', f'雷达和 FastLIO 自检通过：{lidar_topics[0][1]} / {lidar_topics[1][1]} / {FAST_LIO_ODOM_TOPIC} 正常'))}",
+            ]
+        )
+        return commands
+
+    def _should_start_radar_pipeline(self) -> bool:
+        return self.source_var.get() == "radar" and self.node_mode_var.get() != "remote_ui"
+
+    @staticmethod
+    def _self_check_marker(status: str, message: str) -> str:
+        return f"{SELF_CHECK_MARKER}{status}:{message}"
+
+    @staticmethod
+    def _topic_echo_once_command(setup_file: Path, topic: str, timeout_seconds: int) -> str:
+        inner = (
+            f"source {shlex.quote(str(setup_file))} && "
+            f"ros2 topic echo {shlex.quote(topic)} --once >/dev/null"
+        )
+        return f"timeout {timeout_seconds}s bash -lc {shlex.quote(inner)}"
+
+    @staticmethod
+    def _extract_yaml_topic(text: str, key: str) -> str | None:
+        match = re.search(rf"^\s*{re.escape(key)}\s*:\s*['\"]?([^'\"\s#]+)", text, re.MULTILINE)
+        return match.group(1) if match else None
+
+    def _fast_lio_input_topics(self, config_file: str) -> list[tuple[str, str]]:
+        defaults = {
+            "mid360": [("lidar", "/livox/lidar"), ("imu", "/livox/imu")],
+            "unilidar": [("lidar", "/unilidar/cloud"), ("imu", "/unilidar/imu")],
+        }
+        topics = defaults["mid360"] if config_file.startswith("mid360") else defaults["unilidar"]
+
+        config_path = FAST_LIO_CONFIG_DIR / config_file
+        if not config_path.exists():
+            return topics
+
+        try:
+            text = config_path.read_text(encoding="utf-8")
+        except OSError:
+            return topics
+
+        lid_topic = self._extract_yaml_topic(text, "lid_topic") or topics[0][1]
+        imu_topic = self._extract_yaml_topic(text, "imu_topic") or topics[1][1]
+        return [("lidar", lid_topic), ("imu", imu_topic)]
 
     @staticmethod
     def _resolve_lidar_driver(config_file: str) -> tuple[str, list[str]]:
@@ -538,16 +611,31 @@ class NavigationLauncher(tk.Tk):
         assert self.process is not None
         assert self.process.stdout is not None
         for line in self.process.stdout:
-            self.after(0, self.append_log, line)
+            self.after(0, self._handle_process_output_line, line)
         return_code = self.process.wait()
         self.after(0, self._process_finished, return_code)
+
+    def _handle_process_output_line(self, line: str) -> None:
+        self.append_log(line)
+        if SELF_CHECK_MARKER not in line:
+            return
+
+        marker = line.split(SELF_CHECK_MARKER, 1)[1].strip()
+        status, _, message = marker.partition(":")
+        if status == "OK":
+            self.status_label.configure(text="自检通过，运行中")
+            messagebox.showinfo("Navigation Launcher", message, parent=self)
+        elif status == "FAIL":
+            self.self_check_failed = True
+            self.status_label.configure(text="自检失败")
+            messagebox.showerror("Navigation Launcher", message, parent=self)
 
     def _process_finished(self, return_code: int) -> None:
         self.append_log(f"\n[process exited with code {return_code}]\n")
         self.process = None
         self.start_button.configure(state=tk.NORMAL)
         self.stop_button.configure(state=tk.DISABLED)
-        self.status_label.configure(text="已退出")
+        self.status_label.configure(text="自检失败" if self.self_check_failed else "已退出")
 
     def stop_launch(self) -> None:
         if self.process is None:
