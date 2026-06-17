@@ -25,6 +25,7 @@ FAST_LIO_CONFIG_DIR = FAST_LIO_WS / "src" / "FAST_LIO_ROS2" / "config"
 FAST_LIO_MAP_ROOT = Path.home() / "lidar" / "lio" / "maps"
 FAST_LIO_DEFAULT_SAVE_DIR = FAST_LIO_MAP_ROOT / "map"
 TEMP_CONFIG_DIR = Path("/tmp/navigation_core_launcher_fast_lio")
+DEFAULT_CALIBRATION_FILE = "radar_points__to__cali505.yaml"
 
 LIDAR_INIT_DELAY = 2
 FAST_LIO_INIT_DELAY = 2
@@ -90,6 +91,7 @@ class NavigationCoreLauncher(tk.Tk):
 
         self.config_var = tk.StringVar(value=self._default_config_file())
         self.pcd_var = tk.StringVar(value="")
+        self.calibration_var = tk.StringVar(value=self._default_calibration_file())
         self.race_logic_var = tk.StringVar(value="mission")
         self.mission_resume_event_var = tk.StringVar(value="completed")
         self.mission_task_radius_var = tk.StringVar(value="0.40")
@@ -97,6 +99,7 @@ class NavigationCoreLauncher(tk.Tk):
 
         self._build_ui()
         self._refresh_pcd_files(select_first=True)
+        self._refresh_calibration_files(select_default=True)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _build_ui(self) -> None:
@@ -138,6 +141,23 @@ class NavigationCoreLauncher(tk.Tk):
             pady=4,
         )
 
+        ttk.Label(radar_frame, text="标定文件:").grid(row=2, column=0, sticky="w", padx=6, pady=4)
+        self.calibration_combo = ttk.Combobox(
+            radar_frame,
+            textvariable=self.calibration_var,
+            values=[],
+            state="readonly",
+            width=48,
+        )
+        self.calibration_combo.grid(row=2, column=1, sticky="ew", padx=(4, 6), pady=4)
+        ttk.Button(radar_frame, text="刷新标定", command=self._refresh_calibration_files).grid(
+            row=2,
+            column=2,
+            sticky="ew",
+            padx=(0, 6),
+            pady=4,
+        )
+
         lidar_ok = (LIDAR_WS / "install" / "setup.bash").exists()
         livox_ok = (LIVOX_WS / "install" / "setup.bash").exists()
         lio_ok = (FAST_LIO_WS / "install" / "setup.bash").exists()
@@ -148,10 +168,10 @@ class NavigationCoreLauncher(tk.Tk):
             radar_frame,
             text=f"unitree {lidar_mark}    livox {livox_mark}    fast_lio {lio_mark}",
         )
-        self.radar_status_label.grid(row=2, column=0, columnspan=3, sticky="w", padx=6, pady=(0, 4))
+        self.radar_status_label.grid(row=3, column=0, columnspan=3, sticky="w", padx=6, pady=(0, 4))
 
         self.mapping_save_label = ttk.Label(radar_frame, text="建图保存: 未开始")
-        self.mapping_save_label.grid(row=3, column=0, columnspan=3, sticky="w", padx=6, pady=(0, 4))
+        self.mapping_save_label.grid(row=4, column=0, columnspan=3, sticky="w", padx=6, pady=(0, 4))
 
         race_frame = ttk.LabelFrame(root, text="赛事逻辑")
         race_frame.grid(row=1, column=0, sticky="ew", pady=(4, 0))
@@ -237,6 +257,11 @@ class NavigationCoreLauncher(tk.Tk):
         configs = sorted(p.name for p in FAST_LIO_CONFIG_DIR.glob("*.yaml"))
         return configs if configs else ["unilidar.yaml"]
 
+    @staticmethod
+    def _default_calibration_file() -> str:
+        files = NavigationCoreLauncher._detect_calibration_files()
+        return DEFAULT_CALIBRATION_FILE if DEFAULT_CALIBRATION_FILE in files else (files[0] if files else "")
+
     def _refresh_pcd_files(self, *, select_first: bool = False) -> None:
         values = self._detect_pcd_files()
         current = self.pcd_var.get()
@@ -246,6 +271,16 @@ class NavigationCoreLauncher(tk.Tk):
         elif not values:
             self.pcd_var.set("")
         self.append_log(f"[maps] 找到 {len(values)} 个 PCD 地图。\n")
+
+    def _refresh_calibration_files(self, *, select_default: bool = False) -> None:
+        values = self._detect_calibration_files()
+        current = self.calibration_var.get()
+        self.calibration_combo.configure(values=values)
+        if values and (select_default or current not in values):
+            self.calibration_var.set(DEFAULT_CALIBRATION_FILE if DEFAULT_CALIBRATION_FILE in values else values[0])
+        elif not values:
+            self.calibration_var.set("")
+        self.append_log(f"[calibration] 找到 {len(values)} 个标定文件。\n")
 
     @staticmethod
     def _detect_pcd_files() -> list[str]:
@@ -258,6 +293,16 @@ class NavigationCoreLauncher(tk.Tk):
             except ValueError:
                 values.append(str(path))
         return values
+
+    @staticmethod
+    def _detect_calibration_files() -> list[str]:
+        calibration_dir = NavigationCoreLauncher._calibration_dir()
+        if calibration_dir is None or not calibration_dir.exists():
+            return []
+        return sorted(
+            path.name for path in calibration_dir.iterdir()
+            if path.is_file() and path.suffix in {".yaml", ".yml"}
+        )
 
     def append_log(self, line: str) -> None:
         self.log_text.configure(state=tk.NORMAL)
@@ -282,6 +327,9 @@ class NavigationCoreLauncher(tk.Tk):
         pcd_path = self._selected_pcd_path()
         if pcd_path is None:
             return
+        calibration_path = self._selected_calibration_path()
+        if calibration_path is None:
+            return
 
         try:
             self._check_radar_workspaces()
@@ -292,7 +340,7 @@ class NavigationCoreLauncher(tk.Tk):
                 save_path=pcd_path,
                 suffix="core",
             )
-            command = self._build_core_command(local_setup, fast_lio_config)
+            command = self._build_core_command(local_setup, fast_lio_config, calibration_path)
         except ValueError as exc:
             messagebox.showerror("Navigation Core Launcher", str(exc), parent=self)
             return
@@ -383,7 +431,7 @@ class NavigationCoreLauncher(tk.Tk):
         if self.running_mode == "mapping" and self.process is not None:
             self.finish_mapping_button.configure(state=tk.NORMAL)
 
-    def _build_core_command(self, local_setup: Path, fast_lio_config: Path) -> str:
+    def _build_core_command(self, local_setup: Path, fast_lio_config: Path, calibration_path: Path) -> str:
         parts = self._base_shell_parts()
         parts.append("trap 'for pid in $(jobs -pr); do kill \"$pid\" 2>/dev/null || true; done' EXIT")
         parts.extend(self._build_radar_pipeline_commands(fast_lio_config, rviz=False))
@@ -403,6 +451,7 @@ class NavigationCoreLauncher(tk.Tk):
             "sim_odom_topic:=/odom",
             "radar_odom_topic:=/Odometry",
             "radar_calibration_topic:=/Odometry",
+            f"radar_calibration_file:={calibration_path}",
             "ui_size:=10",
             "map_padding_px:=20.0",
             "panel_collapsed:=true",
@@ -551,6 +600,37 @@ class NavigationCoreLauncher(tk.Tk):
             messagebox.showerror("Navigation Core Launcher", f"PCD 地图不存在:\n{path}", parent=self)
             return None
         return path
+
+    def _selected_calibration_path(self) -> Path | None:
+        selected = self.calibration_var.get().strip()
+        if not selected:
+            messagebox.showerror("Navigation Core Launcher", "没有可用的标定文件。", parent=self)
+            return None
+        path = Path(selected)
+        if not path.is_absolute():
+            calibration_dir = self._calibration_dir()
+            if calibration_dir is None:
+                messagebox.showerror("Navigation Core Launcher", "找不到 calibration/cali_params 目录。", parent=self)
+                return None
+            path = calibration_dir / selected
+        if not path.exists():
+            messagebox.showerror("Navigation Core Launcher", f"标定文件不存在:\n{path}", parent=self)
+            return None
+        return path
+
+    @staticmethod
+    def _calibration_dir() -> Path | None:
+        script_path = Path(__file__).resolve()
+        for parent in script_path.parents:
+            candidates = [
+                parent / "config" / "calibration" / "cali_params",
+                parent / "share" / "navigation" / "config" / "calibration" / "cali_params",
+                parent / "navigation" / "share" / "navigation" / "config" / "calibration" / "cali_params",
+            ]
+            for candidate in candidates:
+                if candidate.exists():
+                    return candidate
+        return None
 
     @staticmethod
     def _tilde(path: Path) -> str:
