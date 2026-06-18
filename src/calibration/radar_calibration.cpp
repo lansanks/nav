@@ -27,10 +27,58 @@ void setError(std::string * error_message, const std::string & message)
 std::filesystem::path defaultConfigDir()
 {
   try {
-    return std::filesystem::path(ament_index_cpp::get_package_share_directory("navigation")) / "config";
+    const auto package_share = std::filesystem::path(
+      ament_index_cpp::get_package_share_directory("navigation"));
+    for (auto path = package_share; !path.empty(); path = path.parent_path()) {
+      const auto source_config = path / "src" / "navigation" / "config";
+      std::error_code error;
+      if (std::filesystem::exists(source_config, error)) {
+        return source_config;
+      }
+      if (path == path.root_path()) {
+        break;
+      }
+    }
+    return package_share / "config";
   } catch (const std::exception &) {
     return std::filesystem::path("config");
   }
+}
+
+std::filesystem::path installedConfigDir()
+{
+  try {
+    return std::filesystem::path(ament_index_cpp::get_package_share_directory("navigation")) / "config";
+  } catch (const std::exception &) {
+    return {};
+  }
+}
+
+std::string packagePathIfNavigationConfig(const std::string & path_text)
+{
+  const std::filesystem::path input(path_text);
+  if (path_text.rfind("package://", 0) == 0 || input.empty()) {
+    return path_text;
+  }
+
+  const auto normalized = input.lexically_normal();
+  const std::vector<std::filesystem::path> config_dirs = {
+    defaultConfigDir().lexically_normal(),
+    installedConfigDir().lexically_normal(),
+  };
+
+  for (const auto & config_dir : config_dirs) {
+    if (config_dir.empty()) {
+      continue;
+    }
+    std::error_code error;
+    const auto relative = std::filesystem::relative(normalized, config_dir, error);
+    if (!error && !relative.empty() && relative.native().rfind("..", 0) != 0) {
+      return "package://navigation/config/" + relative.generic_string();
+    }
+  }
+
+  return path_text;
 }
 
 std::string sanitizedStem(const std::string & path_text)
@@ -169,8 +217,8 @@ bool saveCalibrationParams(
   }
 
   output << std::fixed << std::setprecision(9);
-  output << "radar_points_file: " << radar_points_file << "\n";
-  output << "mujoco_points_file: " << mujoco_points_file << "\n";
+  output << "radar_points_file: " << packagePathIfNavigationConfig(radar_points_file) << "\n";
+  output << "mujoco_points_file: " << packagePathIfNavigationConfig(mujoco_points_file) << "\n";
   output << "point_count: " << result.errors.size() << "\n";
   output << "rotation:\n";
   output << "  - [" << result.r00 << ", " << result.r01 << "]\n";

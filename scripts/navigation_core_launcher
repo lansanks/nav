@@ -26,6 +26,8 @@ FAST_LIO_MAP_ROOT = Path.home() / "lidar" / "lio" / "maps"
 FAST_LIO_DEFAULT_SAVE_DIR = FAST_LIO_MAP_ROOT / "map"
 TEMP_CONFIG_DIR = Path("/tmp/navigation_core_launcher_fast_lio")
 DEFAULT_CALIBRATION_FILE = "radar_points__to__cali505.yaml"
+NO_CALIBRATION_LABEL = "无"
+NO_CALIBRATION_PATH = Path("/tmp/navigation_core_launcher_no_calibration.yaml")
 
 LIDAR_INIT_DELAY = 2
 FAST_LIO_INIT_DELAY = 2
@@ -260,7 +262,7 @@ class NavigationCoreLauncher(tk.Tk):
     @staticmethod
     def _default_calibration_file() -> str:
         files = NavigationCoreLauncher._detect_calibration_files()
-        return DEFAULT_CALIBRATION_FILE if DEFAULT_CALIBRATION_FILE in files else (files[0] if files else "")
+        return DEFAULT_CALIBRATION_FILE if DEFAULT_CALIBRATION_FILE in files else NO_CALIBRATION_LABEL
 
     def _refresh_pcd_files(self, *, select_first: bool = False) -> None:
         values = self._detect_pcd_files()
@@ -273,14 +275,12 @@ class NavigationCoreLauncher(tk.Tk):
         self.append_log(f"[maps] 找到 {len(values)} 个 PCD 地图。\n")
 
     def _refresh_calibration_files(self, *, select_default: bool = False) -> None:
-        values = self._detect_calibration_files()
+        values = [NO_CALIBRATION_LABEL, *self._detect_calibration_files()]
         current = self.calibration_var.get()
         self.calibration_combo.configure(values=values)
         if values and (select_default or current not in values):
-            self.calibration_var.set(DEFAULT_CALIBRATION_FILE if DEFAULT_CALIBRATION_FILE in values else values[0])
-        elif not values:
-            self.calibration_var.set("")
-        self.append_log(f"[calibration] 找到 {len(values)} 个标定文件。\n")
+            self.calibration_var.set(DEFAULT_CALIBRATION_FILE if DEFAULT_CALIBRATION_FILE in values else NO_CALIBRATION_LABEL)
+        self.append_log(f"[calibration] 找到 {len(values) - 1} 个标定文件。\n")
 
     @staticmethod
     def _detect_pcd_files() -> list[str]:
@@ -296,13 +296,12 @@ class NavigationCoreLauncher(tk.Tk):
 
     @staticmethod
     def _detect_calibration_files() -> list[str]:
-        calibration_dir = NavigationCoreLauncher._calibration_dir()
-        if calibration_dir is None or not calibration_dir.exists():
-            return []
-        return sorted(
-            path.name for path in calibration_dir.iterdir()
-            if path.is_file() and path.suffix in {".yaml", ".yml"}
-        )
+        files: set[str] = set()
+        for calibration_dir in NavigationCoreLauncher._calibration_dirs():
+            for path in calibration_dir.iterdir():
+                if path.is_file() and path.suffix in {".yaml", ".yml"}:
+                    files.add(path.name)
+        return sorted(files)
 
     def append_log(self, line: str) -> None:
         self.log_text.configure(state=tk.NORMAL)
@@ -431,7 +430,7 @@ class NavigationCoreLauncher(tk.Tk):
         if self.running_mode == "mapping" and self.process is not None:
             self.finish_mapping_button.configure(state=tk.NORMAL)
 
-    def _build_core_command(self, local_setup: Path, fast_lio_config: Path, calibration_path: Path) -> str:
+    def _build_core_command(self, local_setup: Path, fast_lio_config: Path, calibration_path: str) -> str:
         parts = self._base_shell_parts()
         parts.append("trap 'for pid in $(jobs -pr); do kill \"$pid\" 2>/dev/null || true; done' EXIT")
         parts.extend(self._build_radar_pipeline_commands(fast_lio_config, rviz=False))
@@ -601,36 +600,37 @@ class NavigationCoreLauncher(tk.Tk):
             return None
         return path
 
-    def _selected_calibration_path(self) -> Path | None:
+    def _selected_calibration_path(self) -> str | None:
         selected = self.calibration_var.get().strip()
-        if not selected:
-            messagebox.showerror("Navigation Core Launcher", "没有可用的标定文件。", parent=self)
-            return None
+        if not selected or selected == NO_CALIBRATION_LABEL:
+            return str(NO_CALIBRATION_PATH)
         path = Path(selected)
         if not path.is_absolute():
-            calibration_dir = self._calibration_dir()
-            if calibration_dir is None:
+            calibration_dirs = self._calibration_dirs()
+            if not calibration_dirs:
                 messagebox.showerror("Navigation Core Launcher", "找不到 calibration/cali_params 目录。", parent=self)
                 return None
-            path = calibration_dir / selected
+            path = next((candidate / selected for candidate in calibration_dirs if (candidate / selected).exists()), calibration_dirs[0] / selected)
         if not path.exists():
             messagebox.showerror("Navigation Core Launcher", f"标定文件不存在:\n{path}", parent=self)
             return None
-        return path
+        return f"package://navigation/config/calibration/cali_params/{path.name}"
 
     @staticmethod
-    def _calibration_dir() -> Path | None:
+    def _calibration_dirs() -> list[Path]:
         script_path = Path(__file__).resolve()
+        dirs: list[Path] = []
         for parent in script_path.parents:
             candidates = [
                 parent / "config" / "calibration" / "cali_params",
                 parent / "share" / "navigation" / "config" / "calibration" / "cali_params",
                 parent / "navigation" / "share" / "navigation" / "config" / "calibration" / "cali_params",
+                parent / "install" / "navigation" / "share" / "navigation" / "config" / "calibration" / "cali_params",
             ]
             for candidate in candidates:
-                if candidate.exists():
-                    return candidate
-        return None
+                if candidate.exists() and candidate not in dirs:
+                    dirs.append(candidate)
+        return dirs
 
     @staticmethod
     def _tilde(path: Path) -> str:

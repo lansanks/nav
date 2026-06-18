@@ -1,0 +1,30 @@
+radar_points_file: package://navigation/config/calibration/datas/505center.yaml
+mujoco_points_file: package://navigation/config/points/cali505.yaml
+point_count: 8
+rotation:
+  - [-0.532166530, -0.846639702]
+  - [0.846639702, -0.532166530]
+translation:
+  x: -1.315446493
+  y: -0.425529153
+yaw_offset: 2.131953815
+mean_error: 0.021464948
+max_error: 0.042740716
+unstable: false
+errors:
+  - id: 1
+    error: 0.011776354
+  - id: 2
+    error: 0.002406648
+  - id: 3
+    error: 0.020456877
+  - id: 4
+    error: 0.025720984
+  - id: 5
+    error: 0.022385440
+  - id: 6
+    error: 0.042740716
+  - id: 7
+    error: 0.038478899
+  - id: 8
+    error: 0.007753662

@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 
+#include "ament_index_cpp/get_package_share_directory.hpp"
 #include "calibration/radar_calibration.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 
@@ -87,9 +88,30 @@ bool parseRotationRow(const std::string & text, std::array<double, 2> & row)
 
 std::string defaultRadarCalibrationFilePath()
 {
-  return (
-    std::filesystem::path(navigation::calibration::defaultCalibrationParamsDir()) /
-    "radar_points__to__cali505.yaml").string();
+  return "package://navigation/config/calibration/cali_params/radar_points__to__cali505.yaml";
+}
+
+std::string resolvePackageUrl(const std::string & path)
+{
+  const std::string prefix = "package://";
+  if (path.rfind(prefix, 0) != 0) {
+    return path;
+  }
+
+  const auto package_start = prefix.size();
+  const auto slash = path.find('/', package_start);
+  if (slash == std::string::npos) {
+    return path;
+  }
+
+  const auto package_name = path.substr(package_start, slash - package_start);
+  const auto relative_path = path.substr(slash + 1);
+  try {
+    return (std::filesystem::path(ament_index_cpp::get_package_share_directory(package_name)) /
+           relative_path).string();
+  } catch (const std::exception &) {
+    return path;
+  }
 }
 
 bool loadRadarCalibration(
@@ -97,7 +119,8 @@ bool loadRadarCalibration(
   RadarCalibrationTransform & calibration,
   std::string & error_message)
 {
-  std::ifstream input(path);
+  const auto resolved_path = resolvePackageUrl(path);
+  std::ifstream input(resolved_path);
   if (!input.is_open()) {
     error_message = "calibration file not found: " + path;
     return false;
