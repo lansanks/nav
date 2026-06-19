@@ -34,7 +34,7 @@ STATE_FILE = STATE_DIR / "core_launcher_state.json"
 
 LIDAR_INIT_DELAY = 2
 FAST_LIO_INIT_DELAY = 2
-LIDAR_TOPIC_TIMEOUT = 10
+LIDAR_TOPIC_TIMEOUT = 30
 FAST_LIO_TOPIC_TIMEOUT = 12
 MAP_SAVE_TIMEOUT = 30
 FAST_LIO_ODOM_TOPIC = "/Odometry"
@@ -705,12 +705,12 @@ class NavigationCoreLauncher(tk.Tk):
     def _topic_echo_once_command(setup_file: Path, topic: str, timeout_seconds: int) -> str:
         inner = (
             f"source {shlex.quote(str(setup_file))} && "
-            "while true; do "
-            f"timeout 2s ros2 topic echo {shlex.quote(topic)} --once >/dev/null 2>&1 && exit 0; "
-            "sleep 0.5; "
-            "done"
+            f"timeout {timeout_seconds}s ros2 topic echo "
+            "--no-daemon --spin-time 5 "
+            "--qos-profile sensor_data --qos-reliability best_effort "
+            f"--once {shlex.quote(topic)} >/dev/null 2>&1"
         )
-        return f"timeout {timeout_seconds}s bash -lc {shlex.quote(inner)}"
+        return f"bash -lc {shlex.quote(inner)}"
 
     @staticmethod
     def _extract_yaml_topic(text: str, key: str) -> str | None:
