@@ -582,7 +582,7 @@ class NavigationLauncher(tk.Tk):
         if config_file.startswith("unilidar"):
             return (
                 str(LIDAR_WS),
-                ["ros2", "launch", "unitree_lidar_ros2", "launch.py"],
+                ["ros2", "launch", "unitree_lidar_ros2", "launch.py", "rviz:=false"],
             )
         raise ValueError(
             f"不支持该 config_file 对应的雷达驱动: {config_file}\n"
