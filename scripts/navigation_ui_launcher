@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import glob
+import json
 import os
 import shlex
 import signal
@@ -15,6 +16,8 @@ from tkinter import messagebox, ttk
 
 
 UNITREE_CYCLONEDDS_SETUP = Path.home() / "unitree_ros2" / "cyclonedds_ws" / "install" / "setup.bash"
+STATE_DIR = Path.home() / ".config" / "navigation_launcher"
+STATE_FILE = STATE_DIR / "ui_launcher_state.json"
 
 
 def detect_workspace_setup() -> tuple[Path | None, Path]:
@@ -83,6 +86,7 @@ class NavigationUiLauncher(tk.Tk):
 
         self.ui_size_var = tk.StringVar(value="10")
         self.points_file_var = tk.StringVar(value="points.yaml")
+        self._load_state()
 
         self._build_ui()
         self._refresh_points_files(select_default=True)
@@ -152,11 +156,38 @@ class NavigationUiLauncher(tk.Tk):
         values = self._detect_points_files()
         current = self.points_file_var.get()
         self.points_combo.configure(values=values)
-        if values and (select_default or current not in values):
+        if values and current in values:
+            pass
+        elif values and (select_default or current not in values):
             self.points_file_var.set("points.yaml" if "points.yaml" in values else values[0])
         elif not values:
             self.points_file_var.set("points.yaml")
         self.append_log(f"[points] 找到 {len(values)} 个点位文件。\n")
+
+    def _load_state(self) -> None:
+        try:
+            data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(data, dict):
+            return
+        self.ui_size_var.set(str(data.get("ui_size", self.ui_size_var.get())))
+        self.points_file_var.set(str(data.get("points_file", self.points_file_var.get())))
+
+    def _save_state(self) -> None:
+        data = {
+            "ui_size": self.ui_size_var.get(),
+            "points_file": self.points_file_var.get(),
+        }
+        try:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            STATE_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except OSError as exc:
+            self.append_log(f"\n[failed to save launcher state: {exc}]\n")
+
+    def _destroy_after_save(self) -> None:
+        self._save_state()
+        self.destroy()
 
     @staticmethod
     def _detect_points_files() -> list[str]:
@@ -282,7 +313,7 @@ class NavigationUiLauncher(tk.Tk):
         self.status_label.configure(text="已退出")
         if self.close_after_stop:
             self.status_label.configure(text="正在退出")
-            self.after(1200, self.destroy)
+            self.after(1200, self._destroy_after_save)
 
     def _signal_process_group(self, pgid: int | None, sig: signal.Signals) -> bool:
         if pgid is None:
@@ -355,9 +386,10 @@ class NavigationUiLauncher(tk.Tk):
                 parent=self,
             ):
                 return
+            self._save_state()
             self.stop_launch(close_after_stop=True)
             return
-        self.destroy()
+        self._destroy_after_save()
 
 
 if __name__ == "__main__":

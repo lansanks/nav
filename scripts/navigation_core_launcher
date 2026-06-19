@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import glob
+import json
 import os
 import re
 import shlex
@@ -28,6 +29,8 @@ TEMP_CONFIG_DIR = Path("/tmp/navigation_core_launcher_fast_lio")
 DEFAULT_CALIBRATION_FILE = "radar_points__to__cali505.yaml"
 NO_CALIBRATION_LABEL = "无"
 NO_CALIBRATION_PATH = Path("/tmp/navigation_core_launcher_no_calibration.yaml")
+STATE_DIR = Path.home() / ".config" / "navigation_launcher"
+STATE_FILE = STATE_DIR / "core_launcher_state.json"
 
 LIDAR_INIT_DELAY = 2
 FAST_LIO_INIT_DELAY = 2
@@ -98,6 +101,7 @@ class NavigationCoreLauncher(tk.Tk):
         self.mission_resume_event_var = tk.StringVar(value="completed")
         self.mission_task_radius_var = tk.StringVar(value="0.40")
         self.mission_arm_retry_period_var = tk.StringVar(value="1.0")
+        self._load_state()
 
         self._build_ui()
         self._refresh_pcd_files(select_first=True)
@@ -268,7 +272,9 @@ class NavigationCoreLauncher(tk.Tk):
         values = self._detect_pcd_files()
         current = self.pcd_var.get()
         self.pcd_combo.configure(values=values)
-        if values and (select_first or current not in values):
+        if values and current in values:
+            pass
+        elif values and (select_first or current not in values):
             self.pcd_var.set(values[0])
         elif not values:
             self.pcd_var.set("")
@@ -278,9 +284,60 @@ class NavigationCoreLauncher(tk.Tk):
         values = [NO_CALIBRATION_LABEL, *self._detect_calibration_files()]
         current = self.calibration_var.get()
         self.calibration_combo.configure(values=values)
-        if values and (select_default or current not in values):
+        if values and current in values:
+            pass
+        elif values and (select_default or current not in values):
             self.calibration_var.set(DEFAULT_CALIBRATION_FILE if DEFAULT_CALIBRATION_FILE in values else NO_CALIBRATION_LABEL)
         self.append_log(f"[calibration] 找到 {len(values) - 1} 个标定文件。\n")
+
+    def _load_state(self) -> None:
+        try:
+            data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(data, dict):
+            return
+
+        config = str(data.get("config_file", self.config_var.get()))
+        if config in self._detect_config_files():
+            self.config_var.set(config)
+        self.pcd_var.set(str(data.get("pcd_file", self.pcd_var.get())))
+        self.calibration_var.set(str(data.get("calibration_file", self.calibration_var.get())))
+
+        race_logic = str(data.get("race_logic", self.race_logic_var.get()))
+        if race_logic in {"obstacle", "mission"}:
+            self.race_logic_var.set(race_logic)
+
+        resume_event = str(data.get("mission_resume_event", self.mission_resume_event_var.get()))
+        if resume_event in {"ack", "grabbed", "completed"}:
+            self.mission_resume_event_var.set(resume_event)
+
+        self.mission_task_radius_var.set(
+            str(data.get("mission_task_radius", self.mission_task_radius_var.get()))
+        )
+        self.mission_arm_retry_period_var.set(
+            str(data.get("mission_arm_retry_period", self.mission_arm_retry_period_var.get()))
+        )
+
+    def _save_state(self) -> None:
+        data = {
+            "config_file": self.config_var.get(),
+            "pcd_file": self.pcd_var.get(),
+            "calibration_file": self.calibration_var.get(),
+            "race_logic": self.race_logic_var.get(),
+            "mission_resume_event": self.mission_resume_event_var.get(),
+            "mission_task_radius": self.mission_task_radius_var.get(),
+            "mission_arm_retry_period": self.mission_arm_retry_period_var.get(),
+        }
+        try:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            STATE_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except OSError as exc:
+            self.append_log(f"\n[failed to save launcher state: {exc}]\n")
+
+    def _destroy_after_save(self) -> None:
+        self._save_state()
+        self.destroy()
 
     @staticmethod
     def _detect_pcd_files() -> list[str]:
@@ -795,7 +852,7 @@ class NavigationCoreLauncher(tk.Tk):
         self.status_label.configure(text="自检失败" if self.self_check_failed else "已退出")
         if self.close_after_stop:
             self.status_label.configure(text="正在退出")
-            self.after(1200, self.destroy)
+            self.after(1200, self._destroy_after_save)
 
     def _signal_process_group(self, pgid: int | None, sig: signal.Signals) -> bool:
         if pgid is None:
@@ -869,9 +926,10 @@ class NavigationCoreLauncher(tk.Tk):
                 parent=self,
             ):
                 return
+            self._save_state()
             self.stop_launch(close_after_stop=True)
             return
-        self.destroy()
+        self._destroy_after_save()
 
 
 if __name__ == "__main__":
