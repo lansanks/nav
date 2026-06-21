@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -51,6 +52,7 @@ set(NAVIGATION_UI_SOURCES
   src/params/navigation_params.cpp
   src/maps/navigation_map_helpers.cpp
   src/maps/point_store.cpp
+  src/optim/task_order_planner.cpp
   src/maps/top_view_map.cpp
   src/interface/simulation_interface.cpp
   src/interface/radar_interface.cpp
@@ -130,6 +132,8 @@ install(PROGRAMS
   scripts/mock_arm_node
   DESTINATION lib/${PROJECT_NAME}
 )
+
+ament_python_install_package(optim PACKAGE_DIR src/optim)
 
 install(DIRECTORY include/
   DESTINATION include

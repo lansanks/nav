@@ -37,11 +37,16 @@ private:
   cv::Rect paramsPopupRect(const MapUiState & ui_state) const;
   cv::Rect textInputPopupRect(const MapUiState & ui_state) const;
   cv::Rect textInputCloseButtonRect(const MapUiState & ui_state) const;
+  cv::Rect settingsPopupRect(const MapUiState & ui_state) const;
+  cv::Rect settingsCloseButtonRect(const MapUiState & ui_state) const;
+  cv::Rect settingsApplyButtonRect(const MapUiState & ui_state) const;
+  std::vector<cv::Rect> settingsFieldRects(const MapUiState & ui_state) const;
   std::vector<cv::Rect> paramRowRects(const MapUiState & ui_state) const;
   cv::Rect paramsSaveButtonRect(const MapUiState & ui_state) const;
   cv::Rect paramsLoadButtonRect(const MapUiState & ui_state) const;
   cv::Rect paramsWindowCloseButtonRect(const MapUiState & ui_state) const;
   int hitTestParamRow(int pixel_x, int pixel_y, const MapUiState & ui_state) const;
+  int hitTestSettingsField(int pixel_x, int pixel_y, const MapUiState & ui_state) const;
   cv::Rect radarPopupRect(const MapUiState & ui_state) const;
   cv::Rect radarListenButtonRect(const MapUiState & ui_state) const;
   cv::Rect radarSavePointButtonRect(const MapUiState & ui_state) const;
@@ -55,6 +60,7 @@ private:
   std::vector<cv::Rect> radarDropdownItemRects(const MapUiState & ui_state) const;
   cv::Rect fullscreenToggleRect() const;
   cv::Rect themeToggleRect() const;
+  cv::Rect missionPlanToggleRect() const;
 
   static std::string shortenMiddle(const std::string & text, std::size_t max_len);
   static void putPanelText(
@@ -68,8 +74,10 @@ private:
   void drawPanelToggle(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawFullscreenToggle(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawThemeToggle(cv::Mat & canvas, const MapUiState & ui_state) const;
+  void drawMissionPlanToggle(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawDropdownMenu(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawTextInputPopup(cv::Mat & canvas, const MapUiState & ui_state) const;
+  void drawSettingsPopup(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawParamsPopup(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawRadarPopup(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawRadarButton(

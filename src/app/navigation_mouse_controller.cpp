@@ -60,6 +60,7 @@ void NavigationMouseController::handleWheelDelta(int x, int y, int delta)
 {
   if (context_.input_mode != navigation::keyboards::TextInputMode::None ||
     context_.params_session.active() ||
+    context_.settings_popup_active ||
     context_.radar_popup_active)
   {
     return;
@@ -70,7 +71,7 @@ void NavigationMouseController::handleWheelDelta(int x, int y, int delta)
   }
 
   if (!context_.panel_collapsed && x >= context_.map_width_px) {
-    const int content_height = 790;
+    const int content_height = 900;
     const int max_scroll = std::max(0, content_height - context_.map_height_px);
     context_.panel_scroll_px =
       std::clamp(context_.panel_scroll_px - delta / 2, 0, max_scroll);
@@ -106,6 +107,7 @@ void NavigationMouseController::handleMiddleDown(int x, int y)
 {
   if (context_.input_mode != navigation::keyboards::TextInputMode::None ||
     context_.params_session.active() ||
+    context_.settings_popup_active ||
     context_.radar_popup_active)
   {
     return;
@@ -186,6 +188,7 @@ void NavigationMouseController::handleRightClick()
 {
   if (context_.input_mode != navigation::keyboards::TextInputMode::None ||
     context_.params_session.active() ||
+    context_.settings_popup_active ||
     context_.radar_popup_active)
   {
     return;

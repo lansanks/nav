@@ -33,7 +33,12 @@ enum class MapUiAction
   RadarRejectCalibration,
   ToggleTheme,
   ToggleFullscreen,
+  ToggleMissionPlan,
   ToggleRaceLogic,
+  Settings,
+  SettingsField,
+  SettingsApply,
+  SettingsClose,
   DropdownOption,
   TogglePanel,
   UiOnly,
@@ -54,6 +59,20 @@ struct MapUiHit
 {
   MapUiAction action{MapUiAction::None};
   int option_index{-1};
+};
+
+enum class MapPlanDisplayMode
+{
+  Full,
+  OrderOnly,
+  Hidden,
+};
+
+struct MapPlanPoint
+{
+  double x{0.0};
+  double y{0.0};
+  bool loaded_segment_to_here{false};
 };
 
 struct MapUiState
@@ -94,11 +113,20 @@ struct MapUiState
   int panel_scroll_px{0};
   bool panel_collapsed{false};
   bool fullscreen{false};
+  MapPlanDisplayMode mission_plan_display_mode{MapPlanDisplayMode::Full};
   bool core_connected{true};
   bool cmd_vel_valid{false};
   double cmd_vel_linear_x{0.0};
   double cmd_vel_linear_y{0.0};
   double cmd_vel_angular_z{0.0};
+  bool settings_active{false};
+  bool settings_editing{false};
+  int settings_selected_index{0};
+  std::string settings_edit_text;
+  std::vector<std::string> settings_field_names;
+  std::vector<std::string> settings_field_values;
+  std::string mission_plan_summary;
+  std::vector<MapPlanPoint> mission_plan_points;
 };
 
 }  // namespace navigation::ui

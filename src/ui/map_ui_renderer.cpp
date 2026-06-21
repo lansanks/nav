@@ -118,6 +118,17 @@ std::string fitTextToWidth(
   return text.substr(0, left) + ellipsis;
 }
 
+std::string planToggleLabel(MapPlanDisplayMode mode)
+{
+  if (mode == MapPlanDisplayMode::Full) {
+    return "Plan Full";
+  }
+  if (mode == MapPlanDisplayMode::OrderOnly) {
+    return "Plan No.";
+  }
+  return "Plan Off";
+}
+
 }  // namespace
 
 MapUiRenderer::MapUiRenderer(int width, int height, int panel_width)
@@ -156,6 +167,10 @@ MapUiHit MapUiRenderer::hitTest(int pixel_x, int pixel_y, const MapUiState & ui_
 
   if (themeToggleRect().contains(cv::Point(pixel_x, pixel_y))) {
     return {MapUiAction::ToggleTheme, -1};
+  }
+
+  if (missionPlanToggleRect().contains(cv::Point(pixel_x, pixel_y))) {
+    return {MapUiAction::ToggleMissionPlan, -1};
   }
 
   if (ui_state.radar_active) {
@@ -204,6 +219,23 @@ MapUiHit MapUiRenderer::hitTest(int pixel_x, int pixel_y, const MapUiState & ui_
     }
     if (radarCloseButtonRect(ui_state).contains(cv::Point(pixel_x, pixel_y))) {
       return {MapUiAction::RadarClose, -1};
+    }
+    return {MapUiAction::UiOnly, -1};
+  }
+
+  if (ui_state.settings_active) {
+    const cv::Point point(pixel_x, pixel_y);
+    if (settingsCloseButtonRect(ui_state).contains(point) ||
+      !settingsPopupRect(ui_state).contains(point))
+    {
+      return {MapUiAction::SettingsClose, -1};
+    }
+    if (settingsApplyButtonRect(ui_state).contains(point)) {
+      return {MapUiAction::SettingsApply, -1};
+    }
+    const int field_index = hitTestSettingsField(pixel_x, pixel_y, ui_state);
+    if (field_index >= 0) {
+      return {MapUiAction::SettingsField, field_index};
     }
     return {MapUiAction::UiOnly, -1};
   }
@@ -290,7 +322,7 @@ std::vector<MapUiRenderer::UiButton> MapUiRenderer::uiButtons(
   const int button_height = 36;
   const int gap = 12;
   std::vector<UiButton> buttons;
-  buttons.reserve(8);
+  buttons.reserve(9);
 
   auto add_button = [&](MapUiAction action, const std::string & label) {
     buttons.push_back({action, cv::Rect(left, top, button_width, button_height), label});
@@ -305,6 +337,7 @@ std::vector<MapUiRenderer::UiButton> MapUiRenderer::uiButtons(
     MapUiAction::ToggleRaceLogic,
     ui_state.race_logic == "mission" ? "Race: Mission" : "Race: Obstacle");
   add_button(MapUiAction::StartNavigation, navigation_active ? "Stop Navigation" : "Start Navigation");
+  add_button(MapUiAction::Settings, "Task Settings");
   add_button(MapUiAction::OnlineParams, "Online Params");
   add_button(MapUiAction::Radar, "Radar");
   return buttons;
@@ -400,6 +433,42 @@ cv::Rect MapUiRenderer::textInputCloseButtonRect(const MapUiState & ui_state) co
   return cv::Rect(popup.x + popup.width - 42, popup.y + 12, 26, 26);
 }
 
+cv::Rect MapUiRenderer::settingsPopupRect(const MapUiState & ui_state) const
+{
+  const int canvas_width = canvasWidth(ui_state);
+  const int popup_width = 680;
+  const int popup_height = 540;
+  const int popup_x = (canvas_width - popup_width) / 2;
+  const int popup_y = std::max(18, (height_ - popup_height) / 2);
+  return cv::Rect(popup_x, popup_y, popup_width, popup_height);
+}
+
+cv::Rect MapUiRenderer::settingsCloseButtonRect(const MapUiState & ui_state) const
+{
+  const auto popup = settingsPopupRect(ui_state);
+  return cv::Rect(popup.x + popup.width - 42, popup.y + 12, 26, 26);
+}
+
+cv::Rect MapUiRenderer::settingsApplyButtonRect(const MapUiState & ui_state) const
+{
+  const auto popup = settingsPopupRect(ui_state);
+  return cv::Rect(popup.x + popup.width - 150, popup.y + popup.height - 70, 104, 36);
+}
+
+std::vector<cv::Rect> MapUiRenderer::settingsFieldRects(const MapUiState & ui_state) const
+{
+  std::vector<cv::Rect> rects;
+  const auto popup = settingsPopupRect(ui_state);
+  constexpr int row_height = 42;
+  int y = popup.y + 80;
+  rects.reserve(ui_state.settings_field_names.size());
+  for (std::size_t i = 0; i < ui_state.settings_field_names.size(); ++i) {
+    rects.emplace_back(popup.x + 24, y, popup.width - 48, row_height - 6);
+    y += row_height;
+  }
+  return rects;
+}
+
 std::vector<cv::Rect> MapUiRenderer::paramRowRects(const MapUiState & ui_state) const
 {
   std::vector<cv::Rect> rects;
@@ -440,6 +509,11 @@ cv::Rect MapUiRenderer::fullscreenToggleRect() const
 cv::Rect MapUiRenderer::themeToggleRect() const
 {
   return cv::Rect(136, 12, 112, 34);
+}
+
+cv::Rect MapUiRenderer::missionPlanToggleRect() const
+{
+  return cv::Rect(260, 12, 128, 34);
 }
 
 cv::Rect MapUiRenderer::radarPopupRect(const MapUiState & ui_state) const
@@ -543,6 +617,21 @@ int MapUiRenderer::hitTestParamRow(int pixel_x, int pixel_y, const MapUiState & 
   return -1;
 }
 
+int MapUiRenderer::hitTestSettingsField(int pixel_x, int pixel_y, const MapUiState & ui_state) const
+{
+  if (!settingsPopupRect(ui_state).contains(cv::Point(pixel_x, pixel_y))) {
+    return -1;
+  }
+
+  const auto rects = settingsFieldRects(ui_state);
+  for (std::size_t i = 0; i < rects.size(); ++i) {
+    if (rects[i].contains(cv::Point(pixel_x, pixel_y))) {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
+
 std::string MapUiRenderer::shortenMiddle(const std::string & text, std::size_t max_len)
 {
   if (text.size() <= max_len) {
@@ -573,6 +662,7 @@ void MapUiRenderer::drawUiPanel(cv::Mat & canvas, const MapUiState & ui_state, s
   const int active_panel_width = panelWidth(ui_state);
   drawFullscreenToggle(canvas, ui_state);
   drawThemeToggle(canvas, ui_state);
+  drawMissionPlanToggle(canvas, ui_state);
 
   if (!ui_state.message.empty()) {
     constexpr int margin = 12;
@@ -619,14 +709,15 @@ void MapUiRenderer::drawUiPanel(cv::Mat & canvas, const MapUiState & ui_state, s
   putPanelText(canvas, "Left click map: add point", cv::Point(panel_left + 22, 66), 0.48, palette.text);
   putPanelText(canvas, "Wheel: zoom, middle drag: pan", cv::Point(panel_left + 22, 86), 0.43, palette.text_muted);
 
-  for (const auto & button : uiButtons(ui_state, ui_state.navigation_active)) {
+  const auto buttons = uiButtons(ui_state, ui_state.navigation_active);
+  for (const auto & button : buttons) {
     cv::rectangle(canvas, button.rect, palette.button, cv::FILLED);
     cv::rectangle(canvas, button.rect, palette.button_border, 1, cv::LINE_AA);
     cv::putText(canvas, button.label, cv::Point(button.rect.x + 14, button.rect.y + 24), cv::FONT_HERSHEY_SIMPLEX, 0.52, palette.text, 1, cv::LINE_AA);
   }
 
   const int scroll_y = std::max(0, ui_state.panel_scroll_px);
-  int y = 516 - scroll_y;
+  int y = buttons.empty() ? 516 - scroll_y : buttons.back().rect.y + buttons.back().rect.height + 28;
   putPanelText(canvas, "Points: " + std::to_string(point_count), cv::Point(panel_left + 22, y), 0.48, palette.text);
   putPanelText(canvas, "Right click: remove last", cv::Point(panel_left + 22, y + 24), 0.43, palette.text_muted);
   putPanelText(canvas, "Press C: clear", cv::Point(panel_left + 22, y + 50), 0.43, palette.text_muted);
@@ -665,7 +756,7 @@ void MapUiRenderer::drawUiPanel(cv::Mat & canvas, const MapUiState & ui_state, s
   const auto core_color = ui_state.core_connected ? palette.text_muted : cv::Scalar(64, 128, 255);
   putPanelText(canvas, core_status, cv::Point(panel_left + 22, y + 28), 0.43, core_color);
 
-  const int content_height = 790;
+  const int content_height = 900;
   const int max_scroll = std::max(0, content_height - height_);
   if (max_scroll > 0) {
     const int track_x = panel_left + active_panel_width - 8;
@@ -678,6 +769,9 @@ void MapUiRenderer::drawUiPanel(cv::Mat & canvas, const MapUiState & ui_state, s
   }
 
   drawDropdownMenu(canvas, ui_state);
+  if (ui_state.settings_active) {
+    drawSettingsPopup(canvas, ui_state);
+  }
   if (ui_state.params_active) {
     drawParamsPopup(canvas, ui_state);
   }
@@ -728,6 +822,20 @@ void MapUiRenderer::drawFullscreenToggle(cv::Mat & canvas, const MapUiState & ui
   putPanelText(
     canvas,
     ui_state.fullscreen ? "Window" : "Full",
+    cv::Point(rect.x + 16, rect.y + 23),
+    0.50,
+    palette.text);
+}
+
+void MapUiRenderer::drawMissionPlanToggle(cv::Mat & canvas, const MapUiState & ui_state) const
+{
+  const auto palette = paletteFor(ui_state.light_theme);
+  const auto rect = missionPlanToggleRect();
+  cv::rectangle(canvas, rect, palette.button, cv::FILLED);
+  cv::rectangle(canvas, rect, palette.button_border, 1, cv::LINE_AA);
+  putPanelText(
+    canvas,
+    planToggleLabel(ui_state.mission_plan_display_mode),
     cv::Point(rect.x + 16, rect.y + 23),
     0.50,
     palette.text);
@@ -807,6 +915,78 @@ void MapUiRenderer::drawTextInputPopup(cv::Mat & canvas, const MapUiState & ui_s
   cv::rectangle(canvas, input_rect, palette.button_border, 1, cv::LINE_AA);
   putPanelText(canvas, shortenMiddle(ui_state.input_text + "_", 44), cv::Point(input_rect.x + 12, input_rect.y + 27), 0.52, palette.text);
   putPanelText(canvas, "Enter confirm, Esc cancel", cv::Point(popup_x + 24, popup_y + 128), 0.44, palette.text_muted);
+}
+
+void MapUiRenderer::drawSettingsPopup(cv::Mat & canvas, const MapUiState & ui_state) const
+{
+  const auto palette = paletteFor(ui_state.light_theme);
+  const int canvas_width = canvasWidth(ui_state);
+  cv::Mat overlay = canvas.clone();
+  cv::rectangle(overlay, cv::Rect(0, 0, canvas_width, height_), palette.overlay, cv::FILLED);
+  cv::addWeighted(overlay, 0.48, canvas, 0.52, 0.0, canvas);
+
+  const auto popup = settingsPopupRect(ui_state);
+  cv::rectangle(canvas, popup, palette.surface, cv::FILLED);
+  cv::rectangle(canvas, popup, palette.button_border, 1, cv::LINE_AA);
+
+  const auto close_rect = settingsCloseButtonRect(ui_state);
+  cv::rectangle(canvas, close_rect, palette.button, cv::FILLED);
+  cv::rectangle(canvas, close_rect, palette.button_border, 1, cv::LINE_AA);
+  putPanelText(canvas, "X", cv::Point(close_rect.x + 7, close_rect.y + 19), 0.50, palette.text);
+
+  putPanelText(canvas, "Task Settings", cv::Point(popup.x + 24, popup.y + 38), 0.68, palette.title);
+  putPanelText(
+    canvas,
+    "Slot categories are slot 0..7 category ids: 0 food, 1 tool, 2 instrument, 3 medicine.",
+    cv::Point(popup.x + 24, popup.y + 62),
+    0.36,
+    palette.text_muted);
+
+  const int name_x = popup.x + 36;
+  const int value_x = popup.x + 292;
+  const auto field_rects = settingsFieldRects(ui_state);
+  for (std::size_t i = 0; i < ui_state.settings_field_names.size(); ++i) {
+    const auto & row = field_rects[i];
+    if (static_cast<int>(i) == ui_state.settings_selected_index) {
+      cv::rectangle(canvas, row, palette.selected, cv::FILLED);
+    } else {
+      cv::rectangle(canvas, row, palette.surface_alt, cv::FILLED);
+    }
+    cv::rectangle(canvas, row, palette.button_border, 1, cv::LINE_AA);
+
+    const int text_y = row.y + 24;
+    putPanelText(canvas, ui_state.settings_field_names[i], cv::Point(name_x, text_y), 0.44, palette.text);
+    std::string value = i < ui_state.settings_field_values.size() ? ui_state.settings_field_values[i] : "";
+    if (ui_state.settings_editing && static_cast<int>(i) == ui_state.settings_selected_index) {
+      value = ui_state.settings_edit_text + "_";
+    }
+    putPanelText(
+      canvas,
+      fitTextToWidth(value, popup.x + popup.width - value_x - 36, 0.44),
+      cv::Point(value_x, text_y),
+      0.44,
+      palette.text);
+  }
+
+  if (!ui_state.mission_plan_summary.empty()) {
+    putPanelText(
+      canvas,
+      fitTextToWidth(ui_state.mission_plan_summary, popup.width - 48, 0.42),
+      cv::Point(popup.x + 24, popup.y + popup.height - 100),
+      0.42,
+      palette.text_muted);
+  }
+
+  const auto apply_rect = settingsApplyButtonRect(ui_state);
+  cv::rectangle(canvas, apply_rect, palette.button, cv::FILLED);
+  cv::rectangle(canvas, apply_rect, palette.button_border, 1, cv::LINE_AA);
+  putPanelText(canvas, "Apply", cv::Point(apply_rect.x + 27, apply_rect.y + 23), 0.48, palette.text);
+  putPanelText(
+    canvas,
+    "Enter edit/apply field  Up/Down select  Esc close",
+    cv::Point(popup.x + 24, popup.y + popup.height - 18),
+    0.38,
+    palette.text_muted);
 }
 
 void MapUiRenderer::drawParamsPopup(cv::Mat & canvas, const MapUiState & ui_state) const

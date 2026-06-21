@@ -54,6 +54,8 @@ struct NavigationNodeContext
   bool light_theme{true};
   bool fullscreen{false};
   bool fullscreen_dirty{false};
+  navigation::ui::MapPlanDisplayMode mission_plan_display_mode{
+    navigation::ui::MapPlanDisplayMode::Full};
   bool radar_popup_active{false};
   bool radar_result_pending{false};
   bool radar_save_file_confirmed{false};
@@ -83,6 +85,19 @@ struct NavigationNodeContext
   std::string arm_mission_service{"/arm/mission_event"};
   std::string navigation_arm_event_service{"/navigation/arm_event"};
   double mission_arm_retry_period{1.0};
+  bool settings_popup_active{false};
+  int settings_selected_index{0};
+  bool settings_editing{false};
+  std::string settings_edit_text;
+  std::string mission_slot_categories_text;
+  std::string mission_high_score_category_text{"-1"};
+  std::string mission_cost_budget_text{"999.0"};
+  std::string mission_alpha_text{"1.0"};
+  std::string mission_beta_text{"0.3"};
+  std::string mission_eta_text{"0.4"};
+  std::string mission_g_pick_place_text{"0.0"};
+  std::string mission_plan_summary;
+  std::vector<navigation::ui::MapPlanPoint> mission_plan_points;
 
   struct MissionTaskState
   {

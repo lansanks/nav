@@ -1,0 +1,276 @@
+map_geometry:
+  version: "1.0"
+  name: "robocon_task_field_single"
+  unit: "meter"
+
+  frame:
+    frame_id: "mujoco_world"
+    origin_definition: "same_as_scene_task_xml_world_frame"
+    x_axis: "field_width_direction"
+    y_axis: "field_length_direction"
+    yaw_unit: "rad"
+    coordinate_note: "All coordinates are expressed in the current scene_task.xml MuJoCo world frame, not in a bottom-left-corner field frame."
+    frame_convention:
+      field_min_x: 1.7
+      field_max_x: 5.7
+      field_min_y: -9.0
+      field_max_y: -3.0
+      field_center: {x: 3.7, y: -6.0}
+      entrance_side: "front_side_at_min_y"
+      inside_direction_from_start: "+y"
+
+  field:
+    length_y: 6.0
+    width_x: 4.0
+    boundary:
+      type: "rectangle"
+      min_x: 1.7
+      max_x: 5.7
+      min_y: -9.0
+      max_y: -3.0
+    wall:
+      inner_color: "orange_yellow"
+      min_height: 0.8
+
+  start_area:
+    id: "start"
+    type: "rectangle"
+    center:
+      x: 3.7
+      y: -9.45
+      yaw: 1.57079632679
+    size:
+      length_y: 1.0
+      width_x: 1.0
+    corners:
+      - {x: 3.2, y: -9.95}
+      - {x: 4.2, y: -9.95}
+      - {x: 4.2, y: -8.95}
+      - {x: 3.2, y: -8.95}
+    note: "Center and corners are taken from scene_task.xml. Recommended yaw faces into the field along +y."
+
+  storage_slots:
+    count: 8
+    slot_size:
+      length_y: 0.25
+      width_x: 0.25
+    nominal_spacing:
+      x: 0.6
+      y: 0.6
+    actual_spacing_in_scene_task_xml:
+      x: 0.85
+      y: 0.85
+    numbering_note: "Slot ids match scene_task.xml storage_zone_XX names: ids 0-3 are the row farther from the entrance, left-to-right; ids 4-7 are the row nearer the entrance, left-to-right. Rule text states nominal 0.6 m spacing; scene_task.xml currently uses 0.85 m center spacing."
+    slots:
+      - id: 0
+        scene_name: "storage_zone_00"
+        center: {x: 2.425, y: -6.65}
+        yaw: 0.0
+        size: {length_y: 0.25, width_x: 0.25}
+      - id: 1
+        scene_name: "storage_zone_01"
+        center: {x: 3.275, y: -6.65}
+        yaw: 0.0
+        size: {length_y: 0.25, width_x: 0.25}
+      - id: 2
+        scene_name: "storage_zone_02"
+        center: {x: 4.125, y: -6.65}
+        yaw: 0.0
+        size: {length_y: 0.25, width_x: 0.25}
+      - id: 3
+        scene_name: "storage_zone_03"
+        center: {x: 4.975, y: -6.65}
+        yaw: 0.0
+        size: {length_y: 0.25, width_x: 0.25}
+      - id: 4
+        scene_name: "storage_zone_04"
+        center: {x: 2.425, y: -7.50}
+        yaw: 0.0
+        size: {length_y: 0.25, width_x: 0.25}
+      - id: 5
+        scene_name: "storage_zone_05"
+        center: {x: 3.275, y: -7.50}
+        yaw: 0.0
+        size: {length_y: 0.25, width_x: 0.25}
+      - id: 6
+        scene_name: "storage_zone_06"
+        center: {x: 4.125, y: -7.50}
+        yaw: 0.0
+        size: {length_y: 0.25, width_x: 0.25}
+      - id: 7
+        scene_name: "storage_zone_07"
+        center: {x: 4.975, y: -7.50}
+        yaw: 0.0
+        size: {length_y: 0.25, width_x: 0.25}
+
+  return_zones:
+    count: 4
+    zone_size:
+      length_y: 0.4
+      width_x: 0.4
+    nominal_spacing_between_zones: 0.4
+    min_distance_to_wall: 0.6
+    actual_spacing_between_zone_edges_in_scene_task_xml: 0.4
+    zones:
+      - id: 0
+        scene_name: "return_zone_food_0"
+        name: "food"
+        chinese_name: "食品"
+        color: "green"
+        rgb: [117, 189, 66]
+        center: {x: 4.90, y: -4.15}
+        yaw: 0.0
+        size: {length_y: 0.4, width_x: 0.4}
+      - id: 1
+        scene_name: "return_zone_tool_1"
+        name: "tool"
+        chinese_name: "工具"
+        color: "gray"
+        rgb: [128, 128, 128]
+        center: {x: 4.10, y: -4.15}
+        yaw: 0.0
+        size: {length_y: 0.4, width_x: 0.4}
+      - id: 2
+        scene_name: "return_zone_instrument_2"
+        name: "instrument"
+        chinese_name: "仪器"
+        color: "blue"
+        rgb: [46, 84, 161]
+        center: {x: 3.30, y: -4.15}
+        yaw: 0.0
+        size: {length_y: 0.4, width_x: 0.4}
+      - id: 3
+        scene_name: "return_zone_medicine_3"
+        name: "medicine"
+        chinese_name: "药品"
+        color: "red"
+        rgb: [200, 29, 49]
+        center: {x: 2.50, y: -4.15}
+        yaw: 0.0
+        size: {length_y: 0.4, width_x: 0.4}
+
+  speed_bump:
+    id: "speed_bump"
+    type: "strip"
+    color: "orange_yellow"
+    rgb: [223, 117, 0]
+    center:
+      x: 3.7
+      y: -5.5
+      yaw: 0.0
+    size:
+      length_y: 0.12
+      width_x: 4.0
+      max_height: 0.05
+    rule_note: "The speed bump center is 2.5 m from the far-side wall at y=-3.0, therefore y=-5.5 in this frame. Width is modeled as spanning the field width in scene_task.xml."
+
+  question_display_area:
+    id: "question_display"
+    type: "display_panel"
+    center:
+      x: 3.7
+      y: -2.94
+      z: 1.5
+      yaw: 1.57079632679
+    size:
+      width: 1.6
+      height: 0.9
+    min_center_height: 1.5
+    note: "x/y/z are taken from scene_task.xml. The rule only constrains minimum size and minimum center height; final perception calibration should verify panel pose."
+
+  walls:
+    - id: "left_wall"
+      type: "line_segment"
+      start: {x: 1.7, y: -9.0}
+      end: {x: 1.7, y: -3.0}
+    - id: "right_wall"
+      type: "line_segment"
+      start: {x: 5.7, y: -9.0}
+      end: {x: 5.7, y: -3.0}
+    - id: "front_wall_left"
+      type: "line_segment"
+      start: {x: 1.7, y: -9.0}
+      end: {x: 2.95, y: -9.0}
+    - id: "front_wall_right"
+      type: "line_segment"
+      start: {x: 4.45, y: -9.0}
+      end: {x: 5.7, y: -9.0}
+    - id: "entrance_opening"
+      type: "gap"
+      start: {x: 2.95, y: -9.0}
+      end: {x: 4.45, y: -9.0}
+      width: 1.5
+    - id: "back_wall"
+      type: "line_segment"
+      start: {x: 1.7, y: -3.0}
+      end: {x: 5.7, y: -3.0}
+
+  optional_adjacent_field:
+    present_in_rule_document: true
+    included_in_this_yaml: false
+    note: "The rule document shows two adjacent task fields as an optional venue layout. This YAML describes only the single task field represented by scene_task.xml."
+
+  colors:
+    field_ground:
+      name: "yellow"
+      rgb: [255, 255, 0]
+    wall_inner_and_speed_bump:
+      name: "orange_yellow"
+      rgb: [223, 117, 0]
+    adjacent_field_separator:
+      name: "blue"
+      rgb: [31, 65, 159]
+    return_zone_food:
+      name: "green"
+      rgb: [117, 189, 66]
+    return_zone_tool:
+      name: "gray"
+      rgb: [128, 128, 128]
+    return_zone_instrument:
+      name: "blue"
+      rgb: [46, 84, 161]
+    return_zone_medicine:
+      name: "red"
+      rgb: [200, 29, 49]
+
+  metadata:
+    source_document: "2026 ROBOCON bionic legged robot challenge rule V1.0"
+    source_scene: "/home/linkchen/black_mujoco/src/navigation/config/maps/blackW/scene_task.xml"
+    source_rule_pdf: "/home/linkchen/black_mujoco/src/navigation/config/maps/blackW/2026年第二十四届全国大学生机器人大赛ROBOCON仿生足式机器人挑战赛比赛规则-V1.0 (2).pdf"
+    generated_from: "rule_text_and_scene_task_xml"
+    units_normalized_to_meter: true
+    needs_manual_review: true
+    notes:
+      - "Coordinates intentionally use the existing scene_task.xml MuJoCo world frame per user request; they are not converted to a bottom-left field frame."
+      - "Field nominal dimensions, zone sizes, slot sizes, speed bump maximum height, display size/height, and RGB colors come from the rule document."
+      - "Fixed centers for start_area, storage_slots, return_zones, speed_bump, and question_display_area come from scene_task.xml."
+      - "Physical venue construction can differ from nominal rule values; calibrate actual positions before competition use."
+
+  extraction_status:
+    source_document: "ROBOCON bionic legged robot challenge rule V1.0"
+    geometry_from_rule_text:
+      - "field length and width"
+      - "wall minimum height"
+      - "return zone size"
+      - "return zone spacing"
+      - "return zone minimum distance to wall"
+      - "storage slot size"
+      - "storage slot nominal spacing"
+      - "speed bump maximum height"
+      - "question display minimum size"
+      - "question display minimum center height"
+      - "category colors and RGB values"
+    geometry_from_scene_task_xml:
+      - "field placement in MuJoCo world frame"
+      - "start area center and exact corners"
+      - "8 storage slot centers"
+      - "4 return zone centers"
+      - "speed bump center, modeled length, modeled width, and yaw"
+      - "question display x/y/z/yaw"
+      - "front entrance opening"
+    geometry_requires_map_measurement_or_calibration:
+      - "actual physical field boundary after venue setup"
+      - "actual storage slot centers if the referee layout differs from scene_task.xml"
+      - "actual speed bump shape and traversable profile"
+      - "actual question display pose for perception"
+    note: "This file records fixed map geometry only. It does not encode robot planning, task order, or object assignment strategy."

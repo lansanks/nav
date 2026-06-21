@@ -513,6 +513,7 @@ struct TopViewMap::Impl
       drawGeom(canvas, geom);
     }
     drawSavedPoints(canvas);
+    drawOptimizedPlan(canvas, ui_state);
 
     if (state != nullptr && state->valid) {
       drawRobot(canvas, *state);
@@ -914,6 +915,100 @@ struct TopViewMap::Impl
         cv::Scalar(20, 30, 35),
         1,
         cv::LINE_AA);
+    }
+  }
+
+  void drawDashedArrow(
+    cv::Mat & canvas,
+    cv::Point start,
+    cv::Point end,
+    cv::Scalar color,
+    int thickness) const
+  {
+    const double dx = static_cast<double>(end.x - start.x);
+    const double dy = static_cast<double>(end.y - start.y);
+    const double length = std::hypot(dx, dy);
+    if (length < 2.0) {
+      return;
+    }
+
+    constexpr double dash = 14.0;
+    constexpr double gap = 9.0;
+    const double ux = dx / length;
+    const double uy = dy / length;
+    for (double offset = 0.0; offset < length; offset += dash + gap) {
+      const double segment_end = std::min(length, offset + dash);
+      const cv::Point p0(
+        start.x + static_cast<int>(std::lround(ux * offset)),
+        start.y + static_cast<int>(std::lround(uy * offset)));
+      const cv::Point p1(
+        start.x + static_cast<int>(std::lround(ux * segment_end)),
+        start.y + static_cast<int>(std::lround(uy * segment_end)));
+      cv::line(canvas, p0, p1, color, thickness, cv::LINE_AA);
+    }
+
+    const double arrow_start_distance = std::max(0.0, length - 24.0);
+    const cv::Point arrow_start(
+      start.x + static_cast<int>(std::lround(ux * arrow_start_distance)),
+      start.y + static_cast<int>(std::lround(uy * arrow_start_distance)));
+    cv::arrowedLine(canvas, arrow_start, end, color, thickness, cv::LINE_AA, 0, 0.32);
+  }
+
+  void drawPlanOrderBadge(cv::Mat & canvas, cv::Point center, int order) const
+  {
+    const std::string label = std::to_string(order);
+    const int radius = 13;
+    const cv::Point badge_center(center.x, center.y - 18);
+    cv::circle(canvas, badge_center, radius + 2, cv::Scalar(20, 70, 35), cv::FILLED, cv::LINE_AA);
+    cv::circle(canvas, badge_center, radius, cv::Scalar(245, 255, 245), cv::FILLED, cv::LINE_AA);
+
+    int baseline = 0;
+    const auto text_size = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.48, 1, &baseline);
+    const cv::Point text_origin(
+      badge_center.x - text_size.width / 2,
+      badge_center.y + text_size.height / 2);
+    cv::putText(
+      canvas,
+      label,
+      text_origin,
+      cv::FONT_HERSHEY_SIMPLEX,
+      0.48,
+      cv::Scalar(20, 70, 35),
+      1,
+      cv::LINE_AA);
+  }
+
+  void drawOptimizedPlan(cv::Mat & canvas, const MapUiState & ui_state) const
+  {
+    if (ui_state.mission_plan_display_mode == navigation::ui::MapPlanDisplayMode::Hidden) {
+      return;
+    }
+    if (ui_state.mission_plan_points.size() < 2) {
+      return;
+    }
+
+    const bool draw_arrows =
+      ui_state.mission_plan_display_mode == navigation::ui::MapPlanDisplayMode::Full;
+    int delivery_order = 1;
+    for (std::size_t i = 1; i < ui_state.mission_plan_points.size(); ++i) {
+      const auto & from = ui_state.mission_plan_points[i - 1];
+      const auto & to = ui_state.mission_plan_points[i];
+      const auto to_pixel = worldToPixel({to.x, to.y});
+      const cv::Scalar color = to.loaded_segment_to_here ?
+        cv::Scalar(42, 120, 28) :
+        cv::Scalar(230, 120, 40);
+      if (draw_arrows) {
+        drawDashedArrow(
+          canvas,
+          worldToPixel({from.x, from.y}),
+          to_pixel,
+          color,
+          2);
+      }
+      if (!to.loaded_segment_to_here) {
+        drawPlanOrderBadge(canvas, to_pixel, delivery_order);
+        ++delivery_order;
+      }
     }
   }
 

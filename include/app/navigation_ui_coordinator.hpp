@@ -42,8 +42,17 @@ private:
   void cancelTextInput();
   void confirmTextInput();
   bool handleTextInputKey(int key);
+  bool handleSettingsKey(int key);
   bool handleParamsKey(int key);
   bool handleDropdownKey(int key);
+  void openSettings();
+  void closeSettings();
+  void selectSettingsField(int field_index);
+  void beginSettingsEdit();
+  void applySettingsEdit();
+  void applyMissionSettings();
+  std::vector<std::string> settingsFieldValues() const;
+  std::vector<std::string> settingsFieldNames() const;
   bool saveParamsFile(const std::string & path);
   bool loadParamsFile(const std::string & path);
   void saveParamsAs(const std::string & path_or_name);
