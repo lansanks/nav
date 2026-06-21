@@ -335,7 +335,6 @@ std::vector<CandidatePoint> serviceCandidate(
   points.push_back({lanePoint(center, side_direction, red_lane, kMissionNearDistance), true});
   if (include_exit_lane) {
     points.push_back({lanePoint(center, side_direction, exit_lane, kMissionNearDistance), false});
-    points.push_back({lanePoint(center, side_direction, exit_lane, kMissionFarDistance), false});
   }
   return points;
 }
