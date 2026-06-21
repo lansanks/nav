@@ -1,9 +1,14 @@
 #include "app/navigation_map_node.hpp"
 
 #include <chrono>
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <sstream>
 #include <memory>
 #include <string>
@@ -61,6 +66,245 @@ bool parseBool(const std::unordered_map<std::string, std::string> & fields, cons
   return iter != fields.end() && (iter->second == "1" || iter->second == "true");
 }
 
+std::string trimCopy(const std::string & text)
+{
+  const auto first = text.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) {
+    return {};
+  }
+  const auto last = text.find_last_not_of(" \t\r\n");
+  return text.substr(first, last - first + 1);
+}
+
+std::string unquoteScalar(std::string value)
+{
+  value = trimCopy(value);
+  if (value.size() < 2 || value.front() != '"' || value.back() != '"') {
+    return value;
+  }
+
+  std::string output;
+  output.reserve(value.size() - 2);
+  bool escaping = false;
+  for (std::size_t i = 1; i + 1 < value.size(); ++i) {
+    const char ch = value[i];
+    if (escaping) {
+      output.push_back(ch);
+      escaping = false;
+    } else if (ch == '\\') {
+      escaping = true;
+    } else {
+      output.push_back(ch);
+    }
+  }
+  return output;
+}
+
+std::string quoteScalar(const std::string & value)
+{
+  std::string output = "\"";
+  for (const char ch : value) {
+    if (ch == '\\' || ch == '"') {
+      output.push_back('\\');
+    }
+    output.push_back(ch);
+  }
+  output.push_back('"');
+  return output;
+}
+
+std::filesystem::path defaultUiStateFilePath(const std::string & points_file)
+{
+  const auto points_path = std::filesystem::path(points_file);
+  const auto points_dir = points_path.parent_path();
+  const auto config_dir = points_dir.empty() ? std::filesystem::path("config") : points_dir.parent_path();
+  return config_dir / "ui_state.yaml";
+}
+
+std::unordered_map<std::string, std::string> loadScalarFile(const std::string & path)
+{
+  std::unordered_map<std::string, std::string> fields;
+  std::ifstream input(path);
+  if (!input.is_open()) {
+    return fields;
+  }
+
+  std::string line;
+  while (std::getline(input, line)) {
+    auto text = trimCopy(line);
+    if (text.empty() || text[0] == '#') {
+      continue;
+    }
+    const auto comment = text.find(" #");
+    if (comment != std::string::npos) {
+      text = trimCopy(text.substr(0, comment));
+    }
+    const auto sep = text.find(':');
+    if (sep == std::string::npos) {
+      continue;
+    }
+    const auto key = trimCopy(text.substr(0, sep));
+    const auto value = unquoteScalar(text.substr(sep + 1));
+    if (!key.empty()) {
+      fields[key] = value;
+    }
+  }
+  return fields;
+}
+
+bool parseBoolScalar(const std::string & text, bool & value)
+{
+  auto normalized = trimCopy(text);
+  std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  if (normalized == "1" || normalized == "true" || normalized == "yes" || normalized == "on") {
+    value = true;
+    return true;
+  }
+  if (normalized == "0" || normalized == "false" || normalized == "no" || normalized == "off") {
+    value = false;
+    return true;
+  }
+  return false;
+}
+
+bool parseDoubleScalar(const std::string & text, double & value)
+{
+  try {
+    std::size_t consumed = 0;
+    const auto parsed = std::stod(trimCopy(text), &consumed);
+    if (consumed != trimCopy(text).size()) {
+      return false;
+    }
+    value = parsed;
+    return true;
+  } catch (const std::exception &) {
+    return false;
+  }
+}
+
+navigation::ui::MapPlanDisplayMode parsePlanDisplayMode(
+  const std::string & text,
+  navigation::ui::MapPlanDisplayMode fallback)
+{
+  auto normalized = trimCopy(text);
+  std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  if (normalized == "full") {
+    return navigation::ui::MapPlanDisplayMode::Full;
+  }
+  if (normalized == "order_only" || normalized == "orderonly" || normalized == "order") {
+    return navigation::ui::MapPlanDisplayMode::OrderOnly;
+  }
+  if (normalized == "hidden" || normalized == "off") {
+    return navigation::ui::MapPlanDisplayMode::Hidden;
+  }
+  return fallback;
+}
+
+std::string planDisplayModeText(navigation::ui::MapPlanDisplayMode mode)
+{
+  using navigation::ui::MapPlanDisplayMode;
+  if (mode == MapPlanDisplayMode::OrderOnly) {
+    return "order_only";
+  }
+  if (mode == MapPlanDisplayMode::Hidden) {
+    return "hidden";
+  }
+  return "full";
+}
+
+void applyStringField(
+  const std::unordered_map<std::string, std::string> & fields,
+  const std::string & key,
+  std::string & value)
+{
+  const auto iter = fields.find(key);
+  if (iter != fields.end()) {
+    value = iter->second;
+  }
+}
+
+void applyBoolField(
+  const std::unordered_map<std::string, std::string> & fields,
+  const std::string & key,
+  bool & value)
+{
+  const auto iter = fields.find(key);
+  if (iter == fields.end()) {
+    return;
+  }
+  bool parsed = false;
+  if (parseBoolScalar(iter->second, parsed)) {
+    value = parsed;
+  }
+}
+
+std::string serializePersistentUiState(const NavigationNodeContext & context)
+{
+  std::ostringstream output;
+  output << "# Auto-generated by navigation UI. Runtime navigation active state is intentionally not saved.\n";
+  output << "version: 1\n";
+  output << "points_file: " << quoteScalar(context.points_file) << "\n";
+  output << "current_map_file: " << quoteScalar(context.current_map_file) << "\n";
+  output << "selected_controller_name: " << quoteScalar(context.selected_controller_name) << "\n";
+  output << "race_logic: " << quoteScalar(context.race_logic) << "\n";
+  output << "panel_collapsed: " << (context.panel_collapsed ? "true" : "false") << "\n";
+  output << "light_theme: " << (context.light_theme ? "true" : "false") << "\n";
+  output << "fullscreen: " << (context.fullscreen ? "true" : "false") << "\n";
+  output << "mission_plan_display_mode: " <<
+    quoteScalar(planDisplayModeText(context.mission_plan_display_mode)) << "\n";
+  output << "radar_data_file: " << quoteScalar(context.radar_data_file) << "\n";
+  output << "radar_points_file: " << quoteScalar(context.radar_points_file) << "\n";
+  output << "mission_slot_categories: " << quoteScalar(context.mission_slot_categories_text) << "\n";
+  output << "mission_high_score_category: " << quoteScalar(context.mission_high_score_category_text) << "\n";
+  output << "mission_high_score_priority: " << quoteScalar(context.mission_high_score_priority_text) << "\n";
+  output << "mission_cost_budget: " << quoteScalar(context.mission_cost_budget_text) << "\n";
+  output << "mission_alpha: " << quoteScalar(context.mission_alpha_text) << "\n";
+  output << "mission_beta: " << quoteScalar(context.mission_beta_text) << "\n";
+  output << "mission_eta: " << quoteScalar(context.mission_eta_text) << "\n";
+  output << "mission_g_pick_place: " << quoteScalar(context.mission_g_pick_place_text) << "\n";
+  output << "mission_storage_near_distance: " << quoteScalar(context.mission_storage_near_distance_text) << "\n";
+  output << "mission_storage_far_distance: " << quoteScalar(context.mission_storage_far_distance_text) << "\n";
+  output << "mission_return_near_distance: " << quoteScalar(context.mission_return_near_distance_text) << "\n";
+  output << "mission_return_far_distance: " << quoteScalar(context.mission_return_far_distance_text) << "\n";
+  output << std::fixed << std::setprecision(6);
+  for (const auto & field : context.param_fields) {
+    if (field.value != nullptr) {
+      output << "controller_" << field.name << ": " << *field.value << "\n";
+    }
+  }
+  return output.str();
+}
+
+bool writeTextFile(const std::string & path, const std::string & text, std::string * error_message)
+{
+  const std::filesystem::path file_path(path);
+  const auto parent = file_path.parent_path();
+  if (!parent.empty()) {
+    std::error_code error;
+    std::filesystem::create_directories(parent, error);
+    if (error) {
+      if (error_message != nullptr) {
+        *error_message = "failed to create directory '" + parent.string() + "': " + error.message();
+      }
+      return false;
+    }
+  }
+
+  std::ofstream output(path, std::ios::trunc);
+  if (!output.is_open()) {
+    if (error_message != nullptr) {
+      *error_message = "failed to open UI state file for writing: " + path;
+    }
+    return false;
+  }
+  output << text;
+  return true;
+}
+
 }  // namespace
 
 NavigationMapNode::NavigationMapNode()
@@ -78,6 +322,7 @@ NavigationMapNode::NavigationMapNode()
   const auto config = navigation::params::declareRuntimeConfig(*this);
   context_.robot_name = config.robot_name;
   context_.points_file = config.points_file;
+  context_.ui_state_file = defaultUiStateFilePath(config.points_file).string();
   context_.show_window = config.show_window;
   context_.cmd_vel_topic = config.cmd_vel_topic;
   context_.map_width_px = config.map_width_px;
@@ -92,22 +337,41 @@ NavigationMapNode::NavigationMapNode()
   context_.arm_mission_service = config.arm_mission_service;
   context_.navigation_arm_event_service = config.navigation_arm_event_service;
   context_.mission_arm_retry_period = config.mission_arm_retry_period;
+  context_.current_map_file = navigation::maps::resolveScenePath(context_.robot_name, config.scene);
+  loadPersistentUiState();
   const auto node_role = declare_parameter<std::string>("node_role", "standalone");
   context_.remote_control = node_role == "remote_ui";
   const auto state_topic = declare_parameter<std::string>("navigation_state_topic", "/navigation/state");
   const auto status_topic = declare_parameter<std::string>("navigation_status_topic", "/navigation/status");
 
-  const auto scene_path = navigation::maps::resolveScenePath(context_.robot_name, config.scene);
-  context_.current_map_file = scene_path;
   context_.map = std::make_unique<navigation::maps::TopViewMap>(
     config.map_width_px,
     config.map_height_px,
     config.map_padding_px);
-  context_.map->load(context_.current_map_file);
+  try {
+    context_.map->load(context_.current_map_file);
+  } catch (const std::exception & error) {
+    const auto fallback_scene = navigation::maps::resolveScenePath(context_.robot_name, config.scene);
+    RCLCPP_WARN(
+      get_logger(),
+      "Failed to load persisted map '%s': %s. Falling back to '%s'.",
+      context_.current_map_file.c_str(),
+      error.what(),
+      fallback_scene.c_str());
+    context_.current_map_file = fallback_scene;
+    context_.map->load(context_.current_map_file);
+  }
   context_.map->setPoints(navigation::maps::loadPointsFile(context_.points_file));
   context_.controller_names = navigation::controllerNames();
   if (!context_.controller_names.empty()) {
-    context_.selected_controller_name = context_.controller_names.front();
+    if (context_.selected_controller_name.empty() ||
+      std::find(
+        context_.controller_names.begin(),
+        context_.controller_names.end(),
+        context_.selected_controller_name) == context_.controller_names.end())
+    {
+      context_.selected_controller_name = context_.controller_names.front();
+    }
     context_.navigation_status = "Stopped";
   } else {
     context_.navigation_status = "No controllers";
@@ -225,6 +489,86 @@ NavigationMapNode::NavigationMapNode()
   } else {
     RCLCPP_INFO(get_logger(), "Navigation command topic: %s", context_.cmd_vel_topic.c_str());
   }
+  persisted_ui_state_snapshot_ = serializePersistentUiState(context_);
+}
+
+NavigationMapNode::~NavigationMapNode()
+{
+  savePersistentUiStateIfChanged(true);
+}
+
+void NavigationMapNode::loadPersistentUiState()
+{
+  const auto fields = loadScalarFile(context_.ui_state_file);
+  if (fields.empty()) {
+    return;
+  }
+
+  applyStringField(fields, "points_file", context_.points_file);
+  applyStringField(fields, "current_map_file", context_.current_map_file);
+  applyStringField(fields, "selected_controller_name", context_.selected_controller_name);
+  applyStringField(fields, "radar_data_file", context_.radar_data_file);
+  applyStringField(fields, "radar_points_file", context_.radar_points_file);
+  context_.radar_save_file_confirmed = !context_.radar_data_file.empty();
+
+  std::string race_logic = context_.race_logic;
+  applyStringField(fields, "race_logic", race_logic);
+  context_.race_logic = race_logic == "mission" ? "mission" : "obstacle";
+
+  applyBoolField(fields, "panel_collapsed", context_.panel_collapsed);
+  applyBoolField(fields, "light_theme", context_.light_theme);
+  applyBoolField(fields, "fullscreen", context_.fullscreen);
+  context_.fullscreen_dirty = context_.fullscreen;
+
+  const auto plan_mode = fields.find("mission_plan_display_mode");
+  if (plan_mode != fields.end()) {
+    context_.mission_plan_display_mode =
+      parsePlanDisplayMode(plan_mode->second, context_.mission_plan_display_mode);
+  }
+
+  applyStringField(fields, "mission_slot_categories", context_.mission_slot_categories_text);
+  applyStringField(fields, "mission_high_score_category", context_.mission_high_score_category_text);
+  applyStringField(fields, "mission_high_score_priority", context_.mission_high_score_priority_text);
+  applyStringField(fields, "mission_cost_budget", context_.mission_cost_budget_text);
+  applyStringField(fields, "mission_alpha", context_.mission_alpha_text);
+  applyStringField(fields, "mission_beta", context_.mission_beta_text);
+  applyStringField(fields, "mission_eta", context_.mission_eta_text);
+  applyStringField(fields, "mission_g_pick_place", context_.mission_g_pick_place_text);
+  applyStringField(fields, "mission_storage_near_distance", context_.mission_storage_near_distance_text);
+  applyStringField(fields, "mission_storage_far_distance", context_.mission_storage_far_distance_text);
+  applyStringField(fields, "mission_return_near_distance", context_.mission_return_near_distance_text);
+  applyStringField(fields, "mission_return_far_distance", context_.mission_return_far_distance_text);
+
+  for (const auto & field : context_.param_fields) {
+    if (field.value == nullptr) {
+      continue;
+    }
+    const auto iter = fields.find("controller_" + field.name);
+    if (iter == fields.end()) {
+      continue;
+    }
+    double parsed = 0.0;
+    if (parseDoubleScalar(iter->second, parsed) && (!field.positive || parsed > 0.0)) {
+      *field.value = parsed;
+    }
+  }
+
+  RCLCPP_INFO(get_logger(), "Loaded persisted UI state: %s", context_.ui_state_file.c_str());
+}
+
+void NavigationMapNode::savePersistentUiStateIfChanged(bool force)
+{
+  const auto snapshot = serializePersistentUiState(context_);
+  if (!force && snapshot == persisted_ui_state_snapshot_) {
+    return;
+  }
+
+  std::string error_message;
+  if (!writeTextFile(context_.ui_state_file, snapshot, &error_message)) {
+    RCLCPP_WARN(get_logger(), "Failed to save UI state: %s", error_message.c_str());
+    return;
+  }
+  persisted_ui_state_snapshot_ = snapshot;
 }
 
 void NavigationMapNode::onMouse(int event, int x, int y, int flags, void * userdata)
@@ -339,6 +683,11 @@ void NavigationMapNode::onTimer()
       context_.status_message.clear();
     }
 
+    if (context_.core_connected && !startup_stop_sent_) {
+      startup_stop_sent_ = true;
+      runtime_.stopNavigation("Navigation stopped at startup");
+    }
+
     // Operation timeout: if a service request has been pending too long, show timeout
     if (context_.core_connected &&
         context_.pending_op_start != std::chrono::steady_clock::time_point{}) {
@@ -371,15 +720,18 @@ void NavigationMapNode::onTimer()
   cv::imshow(context_.window_name, frame);
   const int key = cv::waitKeyEx(1);
   if (ui_coordinator_.handleActiveInputKey(key)) {
+    savePersistentUiStateIfChanged();
     return;
   }
 
   const int ascii = navigation::keyboards::keyAscii(key);
   if (navigation::keyboards::isEscKey(key) || ascii == 'q' || ascii == 'Q') {
+    savePersistentUiStateIfChanged(true);
     rclcpp::shutdown();
   } else if (ascii == 'c' || ascii == 'C') {
     points_workflow_.clearPoints();
   }
+  savePersistentUiStateIfChanged();
 }
 
 void NavigationMapNode::applyFullscreenIfNeeded(int frame_width, int frame_height)

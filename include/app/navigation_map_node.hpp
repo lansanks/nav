@@ -21,11 +21,14 @@ class NavigationMapNode final : public rclcpp::Node
 {
 public:
   NavigationMapNode();
+  ~NavigationMapNode() override;
 
 private:
   static void onMouse(int event, int x, int y, int flags, void * userdata);
 
   void onTimer();
+  void loadPersistentUiState();
+  void savePersistentUiStateIfChanged(bool force = false);
   void applyFullscreenIfNeeded(int frame_width, int frame_height);
   void publishVelocity(const geometry_msgs::msg::Twist & command);
   void recordCommandVelocity(const geometry_msgs::msg::Twist & command);
@@ -49,6 +52,8 @@ private:
   rclcpp::CallbackGroup::SharedPtr arm_event_callback_group_;
   rclcpp::Service<navigation::srv::StringCommand>::SharedPtr arm_event_service_;
   rclcpp::TimerBase::SharedPtr timer_;
+  std::string persisted_ui_state_snapshot_;
+  bool startup_stop_sent_{false};
   int displayed_frame_width_{0};
   int displayed_frame_height_{0};
 };
