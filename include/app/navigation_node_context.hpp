@@ -91,11 +91,16 @@ struct NavigationNodeContext
   std::string settings_edit_text;
   std::string mission_slot_categories_text;
   std::string mission_high_score_category_text{"-1"};
+  std::string mission_high_score_priority_text{"0"};
   std::string mission_cost_budget_text{"999.0"};
   std::string mission_alpha_text{"1.0"};
   std::string mission_beta_text{"0.3"};
   std::string mission_eta_text{"0.4"};
   std::string mission_g_pick_place_text{"0.0"};
+  std::string mission_storage_near_distance_text{"0.40"};
+  std::string mission_storage_far_distance_text{"0.50"};
+  std::string mission_return_near_distance_text{"0.40"};
+  std::string mission_return_far_distance_text{"0.50"};
   std::string mission_plan_summary;
   std::vector<navigation::ui::MapPlanPoint> mission_plan_points;
 

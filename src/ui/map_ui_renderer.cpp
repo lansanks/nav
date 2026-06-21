@@ -437,7 +437,7 @@ cv::Rect MapUiRenderer::settingsPopupRect(const MapUiState & ui_state) const
 {
   const int canvas_width = canvasWidth(ui_state);
   const int popup_width = 680;
-  const int popup_height = 540;
+  const int popup_height = 700;
   const int popup_x = (canvas_width - popup_width) / 2;
   const int popup_y = std::max(18, (height_ - popup_height) / 2);
   return cv::Rect(popup_x, popup_y, popup_width, popup_height);

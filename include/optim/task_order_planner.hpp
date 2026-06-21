@@ -56,6 +56,7 @@ struct PlanningRequest
 {
   std::vector<int> slot_category;
   std::optional<int> high_score_category;
+  bool high_score_priority{false};
   double cost_budget{0.0};
   Point2 current_position{3.7, -9.45};
   double current_yaw{1.57079632679};

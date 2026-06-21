@@ -383,6 +383,44 @@ void validateNonNegative(double value, const char * name)
   }
 }
 
+bool prerequisiteSatisfied(
+  const std::vector<int> & prerequisite_indices,
+  int mask,
+  int index)
+{
+  const int prerequisite = prerequisite_indices[static_cast<std::size_t>(index)];
+  return prerequisite < 0 || (mask & (1 << prerequisite)) != 0;
+}
+
+bool hasAvailableHighScoreSlot(
+  int mask,
+  const std::vector<int> & prerequisite_indices,
+  const std::vector<bool> & high_score_slots)
+{
+  for (int index = 0; index < static_cast<int>(high_score_slots.size()); ++index) {
+    if ((mask & (1 << index)) != 0 || !high_score_slots[static_cast<std::size_t>(index)]) {
+      continue;
+    }
+    if (prerequisiteSatisfied(prerequisite_indices, mask, index)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool highScorePriorityBlocksCandidate(
+  int mask,
+  int candidate,
+  const std::vector<int> & prerequisite_indices,
+  const std::vector<bool> & high_score_slots,
+  bool high_score_priority)
+{
+  if (!high_score_priority || high_score_slots[static_cast<std::size_t>(candidate)]) {
+    return false;
+  }
+  return hasAvailableHighScoreSlot(mask, prerequisite_indices, high_score_slots);
+}
+
 }  // namespace
 
 PlanningResult planTaskOrder(const PlanningRequest & request)
@@ -456,6 +494,13 @@ PlanningResult planTaskOrder(const PlanningRequest & request)
 
   const int n = static_cast<int>(active_slots.size());
   const auto prerequisite_indices = buildActivePrerequisites(active_slots, geometry);
+  const bool high_score_priority =
+    request.high_score_priority && request.high_score_category.has_value();
+  std::vector<bool> high_score_slots;
+  high_score_slots.reserve(active_slots.size());
+  for (const int category : categories) {
+    high_score_slots.push_back(request.high_score_category && category == *request.high_score_category);
+  }
   std::vector<LegCost> start_costs;
   start_costs.reserve(active_slots.size());
   for (int i = 0; i < n; ++i) {
@@ -492,7 +537,12 @@ PlanningResult planTaskOrder(const PlanningRequest & request)
   const double inf = std::numeric_limits<double>::infinity();
   std::vector<std::vector<double>> dp(total_masks, std::vector<double>(n, inf));
   std::vector<std::vector<int>> parent(total_masks, std::vector<int>(n, -1));
+  const bool initial_high_score_only = high_score_priority &&
+    std::any_of(high_score_slots.begin(), high_score_slots.end(), [](bool value) {return value;});
   for (int i = 0; i < n; ++i) {
+    if (initial_high_score_only && !high_score_slots[static_cast<std::size_t>(i)]) {
+      continue;
+    }
     dp[1 << i][i] = start_costs[i].total;
   }
 
@@ -508,6 +558,15 @@ PlanningResult planTaskOrder(const PlanningRequest & request)
         }
         const int prerequisite = prerequisite_indices[static_cast<std::size_t>(next)];
         if (prerequisite >= 0 && (mask & (1 << prerequisite)) == 0) {
+          continue;
+        }
+        if (highScorePriorityBlocksCandidate(
+            mask,
+            next,
+            prerequisite_indices,
+            high_score_slots,
+            high_score_priority))
+        {
           continue;
         }
         const int new_mask = mask | (1 << next);

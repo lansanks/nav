@@ -61,6 +61,27 @@ bool parseDoubleField(const std::string & text, const std::string & label, doubl
   return true;
 }
 
+bool parseIntField(const std::string & text, const std::string & label, int & value, std::string & error)
+{
+  const auto trimmed = trimCopy(text);
+  if (trimmed.empty()) {
+    error = label + " is empty";
+    return false;
+  }
+  try {
+    std::size_t consumed = 0;
+    value = std::stoi(trimmed, &consumed);
+    if (consumed != trimmed.size()) {
+      error = label + " has trailing text";
+      return false;
+    }
+  } catch (const std::exception &) {
+    error = label + " is invalid";
+    return false;
+  }
+  return true;
+}
+
 bool parseSlotCategories(const std::string & text, std::vector<int> & categories, std::string & error)
 {
   categories.clear();
@@ -145,8 +166,6 @@ std::string planDisplayStatus(navigation::ui::MapPlanDisplayMode mode)
 
 using OptimPoint = navigation::optim::Point2;
 
-constexpr double kMissionNearDistance = 0.40;
-constexpr double kMissionFarDistance = 0.50;
 constexpr double kMissionLaneOffset = 0.05;
 constexpr double kMissionRowTolerance = 0.12;
 constexpr double kMissionEps = 1.0e-9;
@@ -327,14 +346,16 @@ std::vector<CandidatePoint> serviceCandidate(
   OptimPoint center,
   OptimPoint side_direction,
   LaneSide red_lane,
-  bool include_exit_lane)
+  bool include_exit_lane,
+  double near_distance,
+  double far_distance)
 {
   const LaneSide exit_lane = opposite(red_lane);
   std::vector<CandidatePoint> points;
-  points.push_back({lanePoint(center, side_direction, red_lane, kMissionFarDistance), false});
-  points.push_back({lanePoint(center, side_direction, red_lane, kMissionNearDistance), true});
+  points.push_back({lanePoint(center, side_direction, red_lane, far_distance), false});
+  points.push_back({lanePoint(center, side_direction, red_lane, near_distance), true});
   if (include_exit_lane) {
-    points.push_back({lanePoint(center, side_direction, exit_lane, kMissionNearDistance), false});
+    points.push_back({lanePoint(center, side_direction, exit_lane, near_distance), false});
   }
   return points;
 }
@@ -343,7 +364,9 @@ std::vector<CandidatePoint> chooseServiceCandidate(
   OptimPoint center,
   OptimPoint side_direction,
   OptimPoint previous,
-  const std::optional<OptimPoint> & next)
+  const std::optional<OptimPoint> & next,
+  double near_distance,
+  double far_distance)
 {
   const bool include_exit_lane = next.has_value();
   std::vector<CandidatePoint> best;
@@ -351,7 +374,13 @@ std::vector<CandidatePoint> chooseServiceCandidate(
   double best_entry_cost = std::numeric_limits<double>::infinity();
   double best_total_cost = std::numeric_limits<double>::infinity();
   for (const LaneSide lane : {LaneSide::Left, LaneSide::Right}) {
-    auto candidate = serviceCandidate(center, side_direction, lane, include_exit_lane);
+    auto candidate = serviceCandidate(
+      center,
+      side_direction,
+      lane,
+      include_exit_lane,
+      near_distance,
+      far_distance);
     const int crossings = candidateCrossingCount(previous, candidate, next);
     const double entry_cost = candidateEntryCost(previous, candidate);
     const double total_cost = candidateCost(previous, candidate, next);
@@ -465,24 +494,34 @@ std::optional<std::array<OptimPoint, 2>> firstFarRowCrossingBuffers(
 std::vector<CandidatePoint> firstStartSidePickupCandidate(
   const navigation::optim::PlanningStep & step,
   OptimPoint start_position,
-  LaneSide red_lane)
+  LaneSide red_lane,
+  double near_distance,
+  double far_distance)
 {
-  const auto side_direction = normalizeOr(subtract(start_position, step.box_position), {0.0, -1.0});
+  const double start_side_y = start_position.y < step.box_position.y ? -1.0 : 1.0;
+  const OptimPoint side_direction{0.0, start_side_y};
   return {
-    {lanePoint(step.box_position, side_direction, red_lane, kMissionFarDistance), false},
-    {lanePoint(step.box_position, side_direction, red_lane, kMissionNearDistance), true},
+    {lanePoint(step.box_position, side_direction, red_lane, far_distance), false},
+    {lanePoint(step.box_position, side_direction, red_lane, near_distance), true},
   };
 }
 
 std::vector<CandidatePoint> chooseFirstStartSidePickup(
   const navigation::optim::PlanningStep & step,
   OptimPoint start_position,
-  const std::optional<OptimPoint> & next)
+  const std::optional<OptimPoint> & next,
+  double near_distance,
+  double far_distance)
 {
   std::vector<CandidatePoint> best;
   double best_cost = std::numeric_limits<double>::infinity();
   for (const LaneSide lane : {LaneSide::Left, LaneSide::Right}) {
-    auto candidate = firstStartSidePickupCandidate(step, start_position, lane);
+    auto candidate = firstStartSidePickupCandidate(
+      step,
+      start_position,
+      lane,
+      near_distance,
+      far_distance);
     const double cost = candidateCost(start_position, candidate, next);
     if (cost < best_cost) {
       best_cost = cost;
@@ -493,7 +532,11 @@ std::vector<CandidatePoint> chooseFirstStartSidePickup(
 }
 
 std::vector<navigation::maps::MapPoint> buildMissionNavigationRoute(
-  const navigation::optim::PlanningResult & result)
+  const navigation::optim::PlanningResult & result,
+  double storage_near_distance,
+  double storage_far_distance,
+  double return_near_distance,
+  double return_far_distance)
 {
   std::vector<navigation::maps::MapPoint> route;
   if (result.steps.empty()) {
@@ -528,7 +571,12 @@ std::vector<navigation::maps::MapPoint> buildMissionNavigationRoute(
       appendCandidate(
         route,
         next_id,
-        chooseFirstStartSidePickup(step, result.start_position, next_after_pickup));
+        chooseFirstStartSidePickup(
+          step,
+          result.start_position,
+          next_after_pickup,
+          storage_near_distance,
+          storage_far_distance));
       cursor = {route.back().x, route.back().y};
       if (crossing) {
         appendMapPoint(route, next_id, (*crossing)[0], false);
@@ -539,7 +587,13 @@ std::vector<navigation::maps::MapPoint> buildMissionNavigationRoute(
       appendCandidate(
         route,
         next_id,
-        chooseServiceCandidate(step.box_position, storage_to_return, cursor, step.return_zone_position));
+        chooseServiceCandidate(
+          step.box_position,
+          storage_to_return,
+          cursor,
+          step.return_zone_position,
+          storage_near_distance,
+          storage_far_distance));
       cursor = {route.back().x, route.back().y};
     }
 
@@ -550,7 +604,13 @@ std::vector<navigation::maps::MapPoint> buildMissionNavigationRoute(
     appendCandidate(
       route,
       next_id,
-      chooseServiceCandidate(step.return_zone_position, return_to_storage, cursor, next_box));
+      chooseServiceCandidate(
+        step.return_zone_position,
+        return_to_storage,
+        cursor,
+        next_box,
+        return_near_distance,
+        return_far_distance));
     cursor = {route.back().x, route.back().y};
   }
 
@@ -1100,11 +1160,16 @@ std::vector<std::string> NavigationUiCoordinator::settingsFieldNames() const
   return {
     "Slot categories",
     "High score category",
+    "High score priority",
     "Cost budget",
     "Alpha",
     "Beta",
     "Eta",
     "Pick/place g",
+    "Storage near",
+    "Storage far",
+    "Return near",
+    "Return far",
   };
 }
 
@@ -1113,11 +1178,16 @@ std::vector<std::string> NavigationUiCoordinator::settingsFieldValues() const
   return {
     context_.mission_slot_categories_text,
     context_.mission_high_score_category_text,
+    context_.mission_high_score_priority_text,
     context_.mission_cost_budget_text,
     context_.mission_alpha_text,
     context_.mission_beta_text,
     context_.mission_eta_text,
     context_.mission_g_pick_place_text,
+    context_.mission_storage_near_distance_text,
+    context_.mission_storage_far_distance_text,
+    context_.mission_return_near_distance_text,
+    context_.mission_return_far_distance_text,
   };
 }
 
@@ -1131,7 +1201,6 @@ void NavigationUiCoordinator::openSettings()
   context_.settings_editing = false;
   context_.settings_edit_text.clear();
   context_.settings_selected_index = 0;
-  context_.mission_slot_categories_text.clear();
   context_.status_message = "Task settings";
 }
 
@@ -1179,19 +1248,34 @@ void NavigationUiCoordinator::applySettingsEdit()
       context_.mission_high_score_category_text = value;
       break;
     case 2:
-      context_.mission_cost_budget_text = value;
+      context_.mission_high_score_priority_text = value;
       break;
     case 3:
-      context_.mission_alpha_text = value;
+      context_.mission_cost_budget_text = value;
       break;
     case 4:
-      context_.mission_beta_text = value;
+      context_.mission_alpha_text = value;
       break;
     case 5:
-      context_.mission_eta_text = value;
+      context_.mission_beta_text = value;
       break;
     case 6:
+      context_.mission_eta_text = value;
+      break;
+    case 7:
       context_.mission_g_pick_place_text = value;
+      break;
+    case 8:
+      context_.mission_storage_near_distance_text = value;
+      break;
+    case 9:
+      context_.mission_storage_far_distance_text = value;
+      break;
+    case 10:
+      context_.mission_return_near_distance_text = value;
+      break;
+    case 11:
+      context_.mission_return_far_distance_text = value;
       break;
     default:
       break;
@@ -1220,18 +1304,66 @@ void NavigationUiCoordinator::applyMissionSettings()
     return;
   }
 
+  int high_score_priority = 0;
+  if (!parseIntField(context_.mission_high_score_priority_text, "High score priority", high_score_priority, error)) {
+    context_.status_message = error;
+    return;
+  }
+  if (high_score_priority != 0 && high_score_priority != 1) {
+    context_.status_message = "High score priority must be 0 or 1";
+    return;
+  }
+
   double cost_budget = 0.0;
   double alpha = 0.0;
   double beta = 0.0;
   double eta = 0.0;
   double g_pick_place = 0.0;
+  double storage_near_distance = 0.0;
+  double storage_far_distance = 0.0;
+  double return_near_distance = 0.0;
+  double return_far_distance = 0.0;
   if (!parseDoubleField(context_.mission_cost_budget_text, "Cost budget", cost_budget, error) ||
     !parseDoubleField(context_.mission_alpha_text, "Alpha", alpha, error) ||
     !parseDoubleField(context_.mission_beta_text, "Beta", beta, error) ||
     !parseDoubleField(context_.mission_eta_text, "Eta", eta, error) ||
-    !parseDoubleField(context_.mission_g_pick_place_text, "Pick/place g", g_pick_place, error))
+    !parseDoubleField(context_.mission_g_pick_place_text, "Pick/place g", g_pick_place, error) ||
+    !parseDoubleField(
+      context_.mission_storage_near_distance_text,
+      "Storage near",
+      storage_near_distance,
+      error) ||
+    !parseDoubleField(
+      context_.mission_storage_far_distance_text,
+      "Storage far",
+      storage_far_distance,
+      error) ||
+    !parseDoubleField(
+      context_.mission_return_near_distance_text,
+      "Return near",
+      return_near_distance,
+      error) ||
+    !parseDoubleField(
+      context_.mission_return_far_distance_text,
+      "Return far",
+      return_far_distance,
+      error))
   {
     context_.status_message = error;
+    return;
+  }
+  if (storage_near_distance <= 0.0 || storage_far_distance <= 0.0 ||
+    return_near_distance <= 0.0 || return_far_distance <= 0.0)
+  {
+    context_.status_message = "Near/Far distances must be > 0";
+    return;
+  }
+  if (storage_far_distance < storage_near_distance) {
+    context_.status_message = "Storage far must be >= storage near";
+    return;
+  }
+  if (return_far_distance < return_near_distance) {
+    context_.status_message = "Return far must be >= return near";
     return;
   }
 
@@ -1239,6 +1371,7 @@ void NavigationUiCoordinator::applyMissionSettings()
     navigation::optim::PlanningRequest request;
     request.slot_category = slot_categories;
     request.high_score_category = high_score_category;
+    request.high_score_priority = high_score_priority == 1;
     request.cost_budget = cost_budget;
     request.alpha = alpha;
     request.beta = beta;
@@ -1246,7 +1379,12 @@ void NavigationUiCoordinator::applyMissionSettings()
     request.g_pick_place = g_pick_place;
 
     const auto result = navigation::optim::planTaskOrder(request);
-    const auto generated_points = buildMissionNavigationRoute(result);
+    const auto generated_points = buildMissionNavigationRoute(
+      result,
+      storage_near_distance,
+      storage_far_distance,
+      return_near_distance,
+      return_far_distance);
     context_.mission_plan_points.clear();
     if (!result.order.empty()) {
       context_.mission_plan_points.push_back({result.start_position.x, result.start_position.y, false});

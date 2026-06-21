@@ -153,6 +153,7 @@ def plan_task_order(
     beta: float = 0.3,
     eta: float = 0.4,
     g_pick_place: float = 0.0,
+    high_score_priority: bool = False,
 ) -> PlanningResult:
     """Plan the globally optimal mission delivery order.
 
@@ -172,6 +173,9 @@ def plan_task_order(
         beta: Unit turn-angle cost.
         eta: Extra unit-distance cost while carrying a box.
         g_pick_place: Fixed grab/adjust/place cost for each selected box.
+        high_score_priority: When true, choose currently available high-score
+            boxes before lower-score boxes. Row prerequisites still take
+            precedence.
 
     Returns:
         PlanningResult with the selected slot order, score, cost, and per-step
@@ -236,6 +240,7 @@ def plan_task_order(
         rewards,
         float(cost_budget),
         prerequisite_indices,
+        bool(high_score_priority),
     )
 
     if best_last is None:
@@ -278,13 +283,18 @@ def _solve_subset_dp(
     rewards: list[int],
     cost_budget: float,
     prerequisite_indices: list[int | None],
+    high_score_priority: bool = False,
 ) -> tuple[int, int | None, int, float, list[list[int | None]]]:
     n = len(start_costs)
     total_masks = 1 << n
     dp = [[math.inf for _ in range(n)] for _ in range(total_masks)]
     parent: list[list[int | None]] = [[None for _ in range(n)] for _ in range(total_masks)]
 
+    high_score_slots = [reward > 100 for reward in rewards]
+    priority_enabled = bool(high_score_priority) and any(high_score_slots)
     for index, leg_cost in enumerate(start_costs):
+        if priority_enabled and not high_score_slots[index]:
+            continue
         dp[1 << index][index] = leg_cost.total
 
     for mask in range(total_masks):
@@ -299,6 +309,14 @@ def _solve_subset_dp(
                     continue
                 prerequisite = prerequisite_indices[nxt]
                 if prerequisite is not None and not (mask & (1 << prerequisite)):
+                    continue
+                if _high_score_priority_blocks_candidate(
+                    mask,
+                    nxt,
+                    prerequisite_indices,
+                    high_score_slots,
+                    priority_enabled,
+                ):
                     continue
                 leg_cost = transition_costs[last][nxt]
                 if leg_cost is None:
@@ -359,6 +377,42 @@ def _build_active_prerequisites(
         else:
             prerequisites.append(active_index_by_slot[near_slot])
     return prerequisites
+
+
+def _prerequisite_satisfied(
+    prerequisite_indices: list[int | None],
+    mask: int,
+    index: int,
+) -> bool:
+    prerequisite = prerequisite_indices[index]
+    return prerequisite is None or bool(mask & (1 << prerequisite))
+
+
+def _has_available_high_score_slot(
+    mask: int,
+    prerequisite_indices: list[int | None],
+    high_score_slots: list[bool],
+) -> bool:
+    for index, is_high_score in enumerate(high_score_slots):
+        if mask & (1 << index):
+            continue
+        if not is_high_score:
+            continue
+        if _prerequisite_satisfied(prerequisite_indices, mask, index):
+            return True
+    return False
+
+
+def _high_score_priority_blocks_candidate(
+    mask: int,
+    candidate: int,
+    prerequisite_indices: list[int | None],
+    high_score_slots: list[bool],
+    high_score_priority: bool,
+) -> bool:
+    if not high_score_priority or high_score_slots[candidate]:
+        return False
+    return _has_available_high_score_slot(mask, prerequisite_indices, high_score_slots)
 
 
 def _derive_near_before_far_slots(geometry: MapGeometry) -> dict[int, int]:
