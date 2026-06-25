@@ -879,7 +879,9 @@ struct TopViewMap::Impl
     for (std::size_t i = 1; i < points.size(); ++i) {
       const auto p0 = worldToPixel({points[i - 1].x, points[i - 1].y});
       const auto p1 = worldToPixel({points[i].x, points[i].y});
-      const bool fast_segment = points[i - 1].fast && points[i].fast;
+      const bool fast_segment =
+        points[i - 1].fast && points[i].fast &&
+        points[i - 1].task_type == kTaskTypeNone && points[i].task_type == kTaskTypeNone;
       cv::line(
         canvas,
         p0,
@@ -891,7 +893,12 @@ struct TopViewMap::Impl
 
     for (const auto & point : points) {
       const auto center = worldToPixel({point.x, point.y});
-      const auto point_color = point.fast ? cv::Scalar(42, 58, 235) : cv::Scalar(40, 220, 220);
+      cv::Scalar point_color = point.fast ? cv::Scalar(42, 58, 235) : cv::Scalar(40, 220, 220);
+      if (point.task_type == kTaskTypePickup) {
+        point_color = cv::Scalar(42, 58, 235);
+      } else if (point.task_type == kTaskTypePlace) {
+        point_color = cv::Scalar(58, 150, 235);
+      }
       cv::circle(canvas, center, 8, cv::Scalar(20, 30, 35), cv::FILLED, cv::LINE_AA);
       cv::circle(canvas, center, 6, point_color, cv::FILLED, cv::LINE_AA);
       cv::circle(canvas, center, 8, cv::Scalar(245, 245, 245), 1, cv::LINE_AA);
@@ -1168,6 +1175,9 @@ bool TopViewMap::setPointFast(std::size_t index, bool fast)
   }
 
   impl_->points[index].fast = fast;
+  if (!fast) {
+    impl_->points[index].task_type = kTaskTypeNone;
+  }
   return true;
 }
 
@@ -1178,6 +1188,9 @@ bool TopViewMap::togglePointFast(std::size_t index)
   }
 
   impl_->points[index].fast = !impl_->points[index].fast;
+  if (!impl_->points[index].fast) {
+    impl_->points[index].task_type = kTaskTypeNone;
+  }
   return true;
 }
 

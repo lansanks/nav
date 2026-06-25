@@ -28,6 +28,8 @@ struct RuntimeConfig
   std::string race_logic{"obstacle"};
   double mission_task_radius{0.40};
   std::string mission_resume_event{"completed"};
+  std::string mission_pickup_resume_event{"completed"};
+  std::string mission_place_resume_event{"completed"};
   std::string arm_mission_service{"/arm/mission_event"};
   std::string navigation_arm_event_service{"/navigation/arm_event"};
   double mission_arm_retry_period{1.0};

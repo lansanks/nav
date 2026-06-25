@@ -2,6 +2,7 @@
 #define NAVIGATION_APP_NAVIGATION_NODE_CONTEXT_HPP_
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <functional>
 #include <string>
@@ -18,9 +19,9 @@
 #include "navigation/srv/start_navigation.hpp"
 #include "navigation/srv/stop_navigation.hpp"
 #include "navigation/srv/string_command.hpp"
+#include "navigation/srv/mission_command.hpp"
 #include "params/navigation_params.hpp"
 #include "std_msgs/msg/string.hpp"
-#include "std_srvs/srv/trigger.hpp"
 #include "ui/navigation_ui_state.hpp"
 
 namespace navigation::app
@@ -83,6 +84,8 @@ struct NavigationNodeContext
   std::string race_logic{"obstacle"};
   double mission_task_radius{0.40};
   std::string mission_resume_event{"completed"};
+  std::string mission_pickup_resume_event{"completed"};
+  std::string mission_place_resume_event{"completed"};
   std::string arm_mission_service{"/arm/mission_event"};
   std::string navigation_arm_event_service{"/navigation/arm_event"};
   double mission_arm_retry_period{1.0};
@@ -109,9 +112,11 @@ struct NavigationNodeContext
   {
     std::size_t point_index{0};
     int point_id{0};
+    std::uint8_t task_type{navigation::maps::kTaskTypeNone};
     bool triggered{false};
     bool ack{false};
     bool grabbed{false};
+    bool placed{false};
     bool completed{false};
   };
 
@@ -126,7 +131,7 @@ struct NavigationNodeContext
   rclcpp::Client<navigation::srv::SetControllerConfig>::SharedPtr set_config_client;
   rclcpp::Client<navigation::srv::StartNavigation>::SharedPtr start_client;
   rclcpp::Client<navigation::srv::StopNavigation>::SharedPtr stop_client;
-  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr arm_mission_client;
+  rclcpp::Client<navigation::srv::MissionCommand>::SharedPtr arm_mission_client;
 
   // Heartbeat monitoring (remote_ui mode)
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr heartbeat_subscription;

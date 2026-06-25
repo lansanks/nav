@@ -86,12 +86,14 @@ std::string defaultNewPointsName()
 bool validateFastMarkers(const std::vector<MapPoint> & points, std::string * error_message)
 {
   for (std::size_t i = 0; i < points.size();) {
-    if (!points[i].fast) {
+    if (!points[i].fast || points[i].task_type != kTaskTypeNone) {
       ++i;
       continue;
     }
 
-    if (i + 1 < points.size() && points[i + 1].fast) {
+    if (i + 1 < points.size() && points[i + 1].fast &&
+      points[i + 1].task_type == kTaskTypeNone)
+    {
       i += 2;
       continue;
     }
@@ -108,12 +110,14 @@ int pendingFastMarkerIndex(const std::vector<MapPoint> & points)
 {
   int pending_index = -1;
   for (std::size_t i = 0; i < points.size();) {
-    if (!points[i].fast) {
+    if (!points[i].fast || points[i].task_type != kTaskTypeNone) {
       ++i;
       continue;
     }
 
-    if (i + 1 < points.size() && points[i + 1].fast) {
+    if (i + 1 < points.size() && points[i + 1].fast &&
+      points[i + 1].task_type == kTaskTypeNone)
+    {
       i += 2;
       continue;
     }

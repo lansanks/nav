@@ -5,6 +5,7 @@
 #include <cmath>
 #include <exception>
 #include <cctype>
+#include <cstdint>
 #include <filesystem>
 #include <iomanip>
 #include <limits>
@@ -175,7 +176,7 @@ enum class LaneSide { Left, Right };
 struct CandidatePoint
 {
   OptimPoint point;
-  bool fast{false};
+  std::uint8_t task_type{navigation::maps::kTaskTypeNone};
 };
 
 double distance(OptimPoint a, OptimPoint b)
@@ -259,13 +260,14 @@ void appendMapPoint(
   std::vector<navigation::maps::MapPoint> & route,
   int & next_id,
   OptimPoint point,
-  bool fast)
+  std::uint8_t task_type)
 {
   navigation::maps::MapPoint map_point;
   map_point.id = next_id++;
   map_point.x = point.x;
   map_point.y = point.y;
-  map_point.fast = fast;
+  map_point.fast = task_type != navigation::maps::kTaskTypeNone;
+  map_point.task_type = task_type;
   route.push_back(map_point);
 }
 
@@ -347,15 +349,20 @@ std::vector<CandidatePoint> serviceCandidate(
   OptimPoint side_direction,
   LaneSide red_lane,
   bool include_exit_lane,
+  std::uint8_t task_type,
   double near_distance,
   double far_distance)
 {
   const LaneSide exit_lane = opposite(red_lane);
   std::vector<CandidatePoint> points;
-  points.push_back({lanePoint(center, side_direction, red_lane, far_distance), false});
-  points.push_back({lanePoint(center, side_direction, red_lane, near_distance), true});
+  points.push_back({
+      lanePoint(center, side_direction, red_lane, far_distance),
+      navigation::maps::kTaskTypeNone});
+  points.push_back({lanePoint(center, side_direction, red_lane, near_distance), task_type});
   if (include_exit_lane) {
-    points.push_back({lanePoint(center, side_direction, exit_lane, near_distance), false});
+    points.push_back({
+        lanePoint(center, side_direction, exit_lane, near_distance),
+        navigation::maps::kTaskTypeNone});
   }
   return points;
 }
@@ -365,6 +372,7 @@ std::vector<CandidatePoint> chooseServiceCandidate(
   OptimPoint side_direction,
   OptimPoint previous,
   const std::optional<OptimPoint> & next,
+  std::uint8_t task_type,
   double near_distance,
   double far_distance)
 {
@@ -379,6 +387,7 @@ std::vector<CandidatePoint> chooseServiceCandidate(
       side_direction,
       lane,
       include_exit_lane,
+      task_type,
       near_distance,
       far_distance);
     const int crossings = candidateCrossingCount(previous, candidate, next);
@@ -404,7 +413,7 @@ void appendCandidate(
   const std::vector<CandidatePoint> & candidate)
 {
   for (const auto & point : candidate) {
-    appendMapPoint(route, next_id, point.point, point.fast);
+    appendMapPoint(route, next_id, point.point, point.task_type);
   }
 }
 
@@ -501,8 +510,8 @@ std::vector<CandidatePoint> firstStartSidePickupCandidate(
   const double start_side_y = start_position.y < step.box_position.y ? -1.0 : 1.0;
   const OptimPoint side_direction{0.0, start_side_y};
   return {
-    {lanePoint(step.box_position, side_direction, red_lane, far_distance), false},
-    {lanePoint(step.box_position, side_direction, red_lane, near_distance), true},
+    {lanePoint(step.box_position, side_direction, red_lane, far_distance), navigation::maps::kTaskTypeNone},
+    {lanePoint(step.box_position, side_direction, red_lane, near_distance), navigation::maps::kTaskTypePickup},
   };
 }
 
@@ -579,8 +588,8 @@ std::vector<navigation::maps::MapPoint> buildMissionNavigationRoute(
           storage_far_distance));
       cursor = {route.back().x, route.back().y};
       if (crossing) {
-        appendMapPoint(route, next_id, (*crossing)[0], false);
-        appendMapPoint(route, next_id, (*crossing)[1], false);
+        appendMapPoint(route, next_id, (*crossing)[0], navigation::maps::kTaskTypeNone);
+        appendMapPoint(route, next_id, (*crossing)[1], navigation::maps::kTaskTypeNone);
         cursor = (*crossing)[1];
       }
     } else {
@@ -592,6 +601,7 @@ std::vector<navigation::maps::MapPoint> buildMissionNavigationRoute(
           storage_to_return,
           cursor,
           step.return_zone_position,
+          navigation::maps::kTaskTypePickup,
           storage_near_distance,
           storage_far_distance));
       cursor = {route.back().x, route.back().y};
@@ -609,6 +619,7 @@ std::vector<navigation::maps::MapPoint> buildMissionNavigationRoute(
         return_to_storage,
         cursor,
         next_box,
+        navigation::maps::kTaskTypePlace,
         return_near_distance,
         return_far_distance));
     cursor = {route.back().x, route.back().y};

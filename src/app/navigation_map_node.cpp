@@ -334,6 +334,8 @@ NavigationMapNode::NavigationMapNode()
   context_.race_logic = config.race_logic;
   context_.mission_task_radius = config.mission_task_radius;
   context_.mission_resume_event = config.mission_resume_event;
+  context_.mission_pickup_resume_event = config.mission_pickup_resume_event;
+  context_.mission_place_resume_event = config.mission_place_resume_event;
   context_.arm_mission_service = config.arm_mission_service;
   context_.navigation_arm_event_service = config.navigation_arm_event_service;
   context_.mission_arm_retry_period = config.mission_arm_retry_period;
@@ -452,7 +454,7 @@ NavigationMapNode::NavigationMapNode()
     cmd_vel_publisher_ =
       create_publisher<geometry_msgs::msg::Twist>(context_.cmd_vel_topic, rclcpp::QoS(10));
     context_.arm_mission_client =
-      create_client<std_srvs::srv::Trigger>(context_.arm_mission_service);
+      create_client<navigation::srv::MissionCommand>(context_.arm_mission_service);
     arm_event_callback_group_ =
       create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     arm_event_service_ = create_service<navigation::srv::StringCommand>(

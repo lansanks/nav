@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -43,6 +44,31 @@ bool parseBool(std::string value)
     return static_cast<char>(std::tolower(ch));
   });
   return value == "true" || value == "1" || value == "yes" || value == "on";
+}
+
+std::uint8_t parseTaskType(std::string value)
+{
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  if (value == "pickup" || value == "1") {
+    return kTaskTypePickup;
+  }
+  if (value == "place" || value == "placed" || value == "2") {
+    return kTaskTypePlace;
+  }
+  return kTaskTypeNone;
+}
+
+const char * taskTypeText(std::uint8_t task_type)
+{
+  if (task_type == kTaskTypePickup) {
+    return "pickup";
+  }
+  if (task_type == kTaskTypePlace) {
+    return "place";
+  }
+  return "none";
 }
 
 }  // namespace
@@ -182,6 +208,8 @@ std::vector<MapPoint> loadPointsFile(const std::string & path)
         current.y = std::stod(value);
       } else if (key == "fast") {
         current.fast = parseBool(value);
+      } else if (key == "task_type") {
+        current.task_type = parseTaskType(value);
       }
     } catch (const std::exception &) {
       continue;
@@ -221,6 +249,7 @@ bool savePointsFile(const std::string & path_text, const std::vector<MapPoint> &
     output << "    x: " << point.x << "\n";
     output << "    y: " << point.y << "\n";
     output << "    fast: " << (point.fast ? "true" : "false") << "\n";
+    output << "    task_type: " << taskTypeText(point.task_type) << "\n";
   }
   return true;
 }

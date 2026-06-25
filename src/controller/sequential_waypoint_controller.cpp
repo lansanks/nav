@@ -174,7 +174,9 @@ private:
     if (target_index == 0 || target_index >= waypoints_.size()) {
       return false;
     }
-    return waypoints_[target_index - 1].fast && waypoints_[target_index].fast;
+    return waypoints_[target_index - 1].fast && waypoints_[target_index].fast &&
+      waypoints_[target_index - 1].task_type == maps::kTaskTypeNone &&
+      waypoints_[target_index].task_type == maps::kTaskTypeNone;
   }
 
   void updateMessage()

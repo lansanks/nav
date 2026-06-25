@@ -56,6 +56,14 @@ def generate_launch_description():
     race_logic_arg = DeclareLaunchArgument("race_logic", default_value="obstacle")
     mission_task_radius_arg = DeclareLaunchArgument("mission_task_radius", default_value="0.40")
     mission_resume_event_arg = DeclareLaunchArgument("mission_resume_event", default_value="completed")
+    mission_pickup_resume_event_arg = DeclareLaunchArgument(
+        "mission_pickup_resume_event",
+        default_value="completed",
+    )
+    mission_place_resume_event_arg = DeclareLaunchArgument(
+        "mission_place_resume_event",
+        default_value="completed",
+    )
     arm_mission_service_arg = DeclareLaunchArgument("arm_mission_service", default_value="/arm/mission_event")
     navigation_arm_event_service_arg = DeclareLaunchArgument(
         "navigation_arm_event_service",
@@ -111,6 +119,14 @@ def generate_launch_description():
                     LaunchConfiguration("mission_resume_event"),
                     value_type=str,
                 ),
+                "mission_pickup_resume_event": ParameterValue(
+                    LaunchConfiguration("mission_pickup_resume_event"),
+                    value_type=str,
+                ),
+                "mission_place_resume_event": ParameterValue(
+                    LaunchConfiguration("mission_place_resume_event"),
+                    value_type=str,
+                ),
                 "arm_mission_service": ParameterValue(
                     LaunchConfiguration("arm_mission_service"),
                     value_type=str,
@@ -157,6 +173,8 @@ def generate_launch_description():
             race_logic_arg,
             mission_task_radius_arg,
             mission_resume_event_arg,
+            mission_pickup_resume_event_arg,
+            mission_place_resume_event_arg,
             arm_mission_service_arg,
             navigation_arm_event_service_arg,
             mission_arm_retry_period_arg,

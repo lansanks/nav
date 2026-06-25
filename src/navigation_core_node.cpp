@@ -110,6 +110,8 @@ public:
     context_.race_logic = config.race_logic;
     context_.mission_task_radius = config.mission_task_radius;
     context_.mission_resume_event = config.mission_resume_event;
+    context_.mission_pickup_resume_event = config.mission_pickup_resume_event;
+    context_.mission_place_resume_event = config.mission_place_resume_event;
     context_.arm_mission_service = config.arm_mission_service;
     context_.navigation_arm_event_service = config.navigation_arm_event_service;
     context_.mission_arm_retry_period = config.mission_arm_retry_period;
@@ -188,7 +190,7 @@ public:
       arm_event_callback_group_);
 
     context_.arm_mission_client =
-      create_client<std_srvs::srv::Trigger>(context_.arm_mission_service);
+      create_client<navigation::srv::MissionCommand>(context_.arm_mission_service);
 
     status_publisher_ = create_publisher<std_msgs::msg::String>(status_topic, rclcpp::QoS(10));
     state_publisher_ = create_publisher<nav_msgs::msg::Odometry>(state_topic, rclcpp::SensorDataQoS());
@@ -302,6 +304,7 @@ private:
       point.x = mp.x;
       point.y = mp.y;
       point.fast = mp.fast;
+      point.task_type = mp.task_type;
       points.push_back(point);
     }
 
@@ -359,6 +362,7 @@ private:
       point.x = mp.x;
       point.y = mp.y;
       point.fast = mp.fast;
+      point.task_type = mp.task_type;
       points.push_back(point);
     }
     context_.map->setPoints(points);

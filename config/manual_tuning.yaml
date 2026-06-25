@@ -6,6 +6,8 @@
     # Mission race behavior.
     mission_task_radius: 0.40
     mission_resume_event: completed
+    mission_pickup_resume_event: completed
+    mission_place_resume_event: completed
     mission_arm_retry_period: 1.0
     arm_mission_service: /arm/mission_event
     navigation_arm_event_service: /navigation/arm_event

@@ -1,4 +1,8 @@
+uint8 TASK_NONE=0
+uint8 TASK_PICKUP=1
+uint8 TASK_PLACE=2
 int32 id
 float64 x
 float64 y
 bool fast
+uint8 task_type

@@ -28,6 +28,14 @@ def generate_launch_description():
     race_logic_arg = DeclareLaunchArgument("race_logic", default_value="obstacle")
     mission_task_radius_arg = DeclareLaunchArgument("mission_task_radius", default_value="0.40")
     mission_resume_event_arg = DeclareLaunchArgument("mission_resume_event", default_value="completed")
+    mission_pickup_resume_event_arg = DeclareLaunchArgument(
+        "mission_pickup_resume_event",
+        default_value="completed",
+    )
+    mission_place_resume_event_arg = DeclareLaunchArgument(
+        "mission_place_resume_event",
+        default_value="completed",
+    )
     arm_mission_service_arg = DeclareLaunchArgument("arm_mission_service", default_value="/arm/mission_event")
     navigation_arm_event_service_arg = DeclareLaunchArgument(
         "navigation_arm_event_service",
@@ -57,6 +65,8 @@ def generate_launch_description():
     race_logic = LaunchConfiguration("race_logic")
     mission_task_radius = LaunchConfiguration("mission_task_radius")
     mission_resume_event = LaunchConfiguration("mission_resume_event")
+    mission_pickup_resume_event = LaunchConfiguration("mission_pickup_resume_event")
+    mission_place_resume_event = LaunchConfiguration("mission_place_resume_event")
     arm_mission_service = LaunchConfiguration("arm_mission_service")
     navigation_arm_event_service = LaunchConfiguration("navigation_arm_event_service")
     mission_arm_retry_period = LaunchConfiguration("mission_arm_retry_period")
@@ -124,6 +134,14 @@ def generate_launch_description():
                 "race_logic": ParameterValue(race_logic, value_type=str),
                 "mission_task_radius": ParameterValue(mission_task_radius, value_type=float),
                 "mission_resume_event": ParameterValue(mission_resume_event, value_type=str),
+                "mission_pickup_resume_event": ParameterValue(
+                    mission_pickup_resume_event,
+                    value_type=str,
+                ),
+                "mission_place_resume_event": ParameterValue(
+                    mission_place_resume_event,
+                    value_type=str,
+                ),
                 "arm_mission_service": ParameterValue(arm_mission_service, value_type=str),
                 "navigation_arm_event_service": ParameterValue(navigation_arm_event_service, value_type=str),
                 "mission_arm_retry_period": ParameterValue(mission_arm_retry_period, value_type=float),
@@ -155,6 +173,8 @@ def generate_launch_description():
             race_logic_arg,
             mission_task_radius_arg,
             mission_resume_event_arg,
+            mission_pickup_resume_event_arg,
+            mission_place_resume_event_arg,
             arm_mission_service_arg,
             navigation_arm_event_service_arg,
             mission_arm_retry_period_arg,

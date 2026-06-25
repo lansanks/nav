@@ -6,9 +6,9 @@ from __future__ import annotations
 import functools
 
 import rclpy
+from navigation.srv import MissionCommand
 from navigation.srv import StringCommand
 from rclpy.node import Node
-from std_srvs.srv import Trigger
 
 
 class MockArmNode(Node):
@@ -27,9 +27,9 @@ class MockArmNode(Node):
 
         self.event_client = self.create_client(StringCommand, self.navigation_arm_event_service)
         self.arrived_service = self.create_service(
-            Trigger,
+            MissionCommand,
             self.arm_mission_service,
-            self.handle_arrived,
+            self.handle_mission_command,
         )
         self.pending_timers = set()
         self.pending_futures = set()
@@ -40,20 +40,30 @@ class MockArmNode(Node):
             f"nav_event={self.navigation_arm_event_service}"
         )
 
-    def handle_arrived(
+    def handle_mission_command(
         self,
-        request: Trigger.Request,
-        response: Trigger.Response,
-    ) -> Trigger.Response:
-        _ = request
+        request: MissionCommand.Request,
+        response: MissionCommand.Response,
+    ) -> MissionCommand.Response:
         self.sequence_index += 1
         sequence = self.sequence_index
-        self.get_logger().info(f"[{sequence}] 已收到nav到达触发请求")
+        action = request.action.strip().lower()
+        self.get_logger().info(
+            f"[{sequence}] 已收到nav任务: action={action} "
+            f"task_index={request.task_index} point_id={request.point_id} "
+            f"x={request.x:.3f} y={request.y:.3f}"
+        )
+
+        if action not in {"pickup", "place"}:
+            response.success = False
+            response.message = f"unsupported action: {request.action}"
+            self.get_logger().warn(f"[{sequence}] 拒绝未知任务: {request.action}")
+            return response
 
         response.success = True
         response.message = "received"
         self.get_logger().info(f"[{sequence}] 已经回复nav: success=true message=received")
-        self.schedule_event("grabbed", self.grabbed_delay_s, sequence)
+        self.schedule_event("grabbed" if action == "pickup" else "placed", self.grabbed_delay_s, sequence)
         self.schedule_event("completed", self.grabbed_delay_s + self.completed_delay_s, sequence)
         return response
 
@@ -81,6 +91,8 @@ class MockArmNode(Node):
 
         if event == "grabbed":
             self.get_logger().info(f"[{sequence}] 已经抓取")
+        elif event == "placed":
+            self.get_logger().info(f"[{sequence}] 已经放置")
         elif event == "completed":
             self.get_logger().info(f"[{sequence}] 已经完成")
 
@@ -91,6 +103,8 @@ class MockArmNode(Node):
         future.add_done_callback(functools.partial(self.handle_event_response, event, sequence))
         if event == "grabbed":
             self.get_logger().info(f"[{sequence}] 已发送已抓取给nav: grabbed")
+        elif event == "placed":
+            self.get_logger().info(f"[{sequence}] 已发送已放置给nav: placed")
         elif event == "completed":
             self.get_logger().info(f"[{sequence}] 已发送已经完成给nav: completed")
 
@@ -102,7 +116,7 @@ class MockArmNode(Node):
             self.get_logger().error(f"Failed to send {event} for sequence {sequence}: {exc}")
             return
 
-        label = "已抓取" if event == "grabbed" else "已经完成"
+        label = "已抓取" if event == "grabbed" else "已放置" if event == "placed" else "已经完成"
         if response.success:
             self.get_logger().info(f"[{sequence}] {label}已收到nav回信: {response.message}")
             return

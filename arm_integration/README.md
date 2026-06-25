@@ -2,7 +2,23 @@
 
 This folder documents the mission-race interface between `navigation` and the mechanical arm node.
 
-## Shared Service Type
+## Shared Service Types
+
+Navigation-to-arm mission commands use:
+
+```srv
+uint32 task_index
+int32 point_id
+string action
+float64 x
+float64 y
+---
+bool success
+string message
+```
+
+The arm node should use the exact ROS type `navigation/srv/MissionCommand` for `/arm/mission_event`.
+`action` is either `pickup` or `place`.
 
 Arm-to-navigation event callbacks use the service definition copied in this folder:
 
@@ -22,8 +38,8 @@ Navigation core calls the arm node:
 
 - Service name parameter: `arm_mission_service`
 - Default service name: `/arm/mission_event`
-- Service type: `std_srvs/srv/Trigger`
-- Request from navigation: empty Trigger request, meaning the robot has arrived at a mission point
+- Service type: `navigation/srv/MissionCommand`
+- Request from navigation: `action=pickup` for lower storage-row task points, `action=place` for upper return-zone task points
 - Expected response when received: `success: true`
 
 The arm node calls navigation core:
@@ -31,19 +47,20 @@ The arm node calls navigation core:
 - Service name parameter: `navigation_arm_event_service`
 - Default service name: `/navigation/arm_event`
 - Service type: `navigation/srv/StringCommand`
-- Valid requests from arm: `message: "grabbed"` or `message: "completed"`
+- Valid requests from arm: `message: "grabbed"`, `message: "placed"`, or `message: "completed"`
 - Navigation response when received: `success: true`, `message: "received"`
 
 ## Mission Sequence
 
 1. UI switches race logic to `mission`.
-2. Red points on the map become independent arm task points.
-3. When the robot enters a red point's `mission_task_radius` area, navigation publishes zero velocity and pauses.
-4. Navigation calls `/arm/mission_event` as a Trigger request.
+2. The mission planner generates alternating pickup and place task points.
+3. When the robot enters a task point's `mission_task_radius` area, navigation publishes zero velocity and pauses.
+4. Navigation calls `/arm/mission_event` with `action=pickup` or `action=place`.
 5. The arm node returns `success=true` after receiving the command.
-6. The arm node later calls `/navigation/arm_event` with `grabbed`.
-7. The arm node calls `/navigation/arm_event` with `completed` after returning home.
-8. Navigation resumes according to `mission_resume_event`.
+6. For pickup tasks, the arm node later calls `/navigation/arm_event` with `grabbed`.
+7. For place tasks, the arm node later calls `/navigation/arm_event` with `placed`.
+8. The arm node calls `/navigation/arm_event` with `completed` after returning home.
+9. Navigation resumes according to the configured pickup/place resume event.
 
 ## Tunable Parameters
 
@@ -53,15 +70,17 @@ Important mission parameters:
 
 - `race_logic`: `obstacle` or `mission`
 - `mission_task_radius`: default `0.40` meters
-- `mission_resume_event`: `ack`, `grabbed`, or `completed`
+- `mission_pickup_resume_event`: `ack`, `grabbed`, or `completed`
+- `mission_place_resume_event`: `ack`, `placed`, or `completed`
 - `mission_arm_retry_period`: retry period for sending the arrival trigger when the arm service is unavailable or rejects the request
 - `arm_mission_service`: service provided by the arm node
 - `navigation_arm_event_service`: service provided by navigation
 
-`mission_resume_event` behavior:
+Resume event behavior:
 
 - `ack`: resume after `/arm/mission_event` returns `success=true`
-- `grabbed`: resume after the arm sends `grabbed`
+- `grabbed`: resume pickup after the arm sends `grabbed`
+- `placed`: resume place after the arm sends `placed`
 - `completed`: resume after the arm sends `completed`
 
 ## Command Examples
@@ -72,12 +91,13 @@ Mock the arm-side service:
 ros2 run navigation mock_arm_node
 ```
 
-The mock node provides `/arm/mission_event`, immediately replies ack to the Trigger request, sends `grabbed` after 1 second, then sends `completed` after another 1 second.
+The mock node provides `/arm/mission_event`, immediately replies ack to the mission command, sends `grabbed` for pickup or `placed` for place after 1 second, then sends `completed` after another 1 second.
 
 Send arm events back to navigation manually:
 
 ```bash
 ros2 service call /navigation/arm_event navigation/srv/StringCommand "{message: grabbed}"
+ros2 service call /navigation/arm_event navigation/srv/StringCommand "{message: placed}"
 ros2 service call /navigation/arm_event navigation/srv/StringCommand "{message: completed}"
 ```
 
@@ -87,4 +107,4 @@ Run a node with the manual tuning file:
 ros2 run navigation navigation_core --ros-args --params-file navigation/config/manual_tuning.yaml
 ```
 
-When using launch files, pass the same parameter values through launch arguments or load an equivalent params file on the machine that runs `navigation_core`. Keep service names and `mission_resume_event` consistent on both machines.
+When using launch files, pass the same parameter values through launch arguments or load an equivalent params file on the machine that runs `navigation_core`. Keep service names and pickup/place resume settings consistent on both machines.

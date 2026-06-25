@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -56,6 +57,42 @@ void fillStartConfigRequest(
 std::string normalizeRaceLogic(const std::string & race_logic)
 {
   return race_logic == "mission" ? "mission" : "obstacle";
+}
+
+std::uint8_t taskTypeForMissionPoint(const navigation::maps::MapPoint & point, std::size_t task_index)
+{
+  if (point.task_type == navigation::maps::kTaskTypePickup ||
+    point.task_type == navigation::maps::kTaskTypePlace)
+  {
+    return point.task_type;
+  }
+
+  if (point.fast) {
+    return task_index % 2 == 0 ? navigation::maps::kTaskTypePickup : navigation::maps::kTaskTypePlace;
+  }
+
+  return navigation::maps::kTaskTypeNone;
+}
+
+const char * taskActionText(std::uint8_t task_type)
+{
+  if (task_type == navigation::maps::kTaskTypePlace) {
+    return "place";
+  }
+  return "pickup";
+}
+
+bool isEventValidForTask(
+  const NavigationNodeContext::MissionTaskState & task,
+  const std::string & event)
+{
+  if (event == "ack" || event == "completed") {
+    return true;
+  }
+  if (task.task_type == navigation::maps::kTaskTypePlace) {
+    return event == "placed";
+  }
+  return event == "grabbed";
 }
 
 template<typename ClientT>
@@ -238,6 +275,7 @@ void NavigationRuntime::sendSetWaypointsRequest(
     mp.x = point.x;
     mp.y = point.y;
     mp.fast = point.fast;
+    mp.task_type = point.task_type;
     request->points.push_back(mp);
   }
   request->race_logic = normalizeRaceLogic(context_.race_logic);
@@ -314,6 +352,7 @@ void NavigationRuntime::sendStartRequest(
     mp.x = point.x;
     mp.y = point.y;
     mp.fast = point.fast;
+    mp.task_type = point.task_type;
     request->points.push_back(mp);
   }
   request->race_logic = normalizeRaceLogic(context_.race_logic);
@@ -442,14 +481,18 @@ void NavigationRuntime::resetMissionTasks()
   }
 
   const auto & points = context_.map->points();
+  std::size_t task_index = 0;
   for (std::size_t i = 0; i < points.size(); ++i) {
-    if (!points[i].fast) {
+    const auto task_type = taskTypeForMissionPoint(points[i], task_index);
+    if (task_type == navigation::maps::kTaskTypeNone) {
       continue;
     }
     NavigationNodeContext::MissionTaskState task;
     task.point_index = i;
     task.point_id = points[i].id;
+    task.task_type = task_type;
     context_.mission_tasks.push_back(task);
+    ++task_index;
   }
 }
 
@@ -466,9 +509,14 @@ bool NavigationRuntime::shouldValidateFastMarkers() const
   return context_.race_logic != "mission";
 }
 
-bool NavigationRuntime::shouldResumeForEvent(const std::string & event) const
+bool NavigationRuntime::shouldResumeForEvent(
+  const NavigationNodeContext::MissionTaskState & task,
+  const std::string & event) const
 {
-  return context_.mission_resume_event == event;
+  if (task.task_type == navigation::maps::kTaskTypePlace) {
+    return context_.mission_place_resume_event == event;
+  }
+  return context_.mission_pickup_resume_event == event;
 }
 
 bool NavigationRuntime::maybePauseForMissionTask(const navigation::RobotNavigationState & state)
@@ -494,11 +542,13 @@ bool NavigationRuntime::maybePauseForMissionTask(const navigation::RobotNavigati
     context_.mission_paused = true;
     context_.mission_current_task = i;
     context_.mission_last_arrived_send = std::chrono::steady_clock::time_point{};
-    context_.navigation_status = "Mission task paused at point " + std::to_string(task.point_id);
-    context_.status_message = "Mission task arrived";
+    context_.navigation_status = std::string("Mission ") + taskActionText(task.task_type) +
+      " paused at point " + std::to_string(task.point_id);
+    context_.status_message = std::string("Mission ") + taskActionText(task.task_type) + " arrived";
     RCLCPP_INFO(
       logger_,
-      "Mission task point %d reached within %.3fm. Navigation paused.",
+      "Mission %s point %d reached within %.3fm. Navigation paused.",
+      taskActionText(task.task_type),
       task.point_id,
       context_.mission_task_radius);
     return true;
@@ -534,17 +584,24 @@ void NavigationRuntime::sendArrivedToArmIfDue()
     return;
   }
 
-  auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+  const auto & point = context_.map->points()[task.point_index];
+  auto request = std::make_shared<navigation::srv::MissionCommand::Request>();
+  request->task_index = static_cast<std::uint32_t>(context_.mission_current_task);
+  request->point_id = task.point_id;
+  request->action = taskActionText(task.task_type);
+  request->x = point.x;
+  request->y = point.y;
   RCLCPP_INFO(
     logger_,
-    "Sending mission arrived trigger to arm service '%s' for point %d.",
+    "Sending mission %s command to arm service '%s' for point %d.",
+    request->action.c_str(),
     context_.arm_mission_service.c_str(),
     task.point_id);
   context_.mission_arrived_request_pending = true;
   context_.mission_last_arrived_send = now;
   context_.arm_mission_client->async_send_request(
     request,
-    [this](rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture future) {
+    [this](rclcpp::Client<navigation::srv::MissionCommand>::SharedFuture future) {
       context_.mission_arrived_request_pending = false;
       if (!context_.mission_paused || context_.mission_current_task >= context_.mission_tasks.size()) {
         return;
@@ -560,8 +617,12 @@ void NavigationRuntime::sendArrivedToArmIfDue()
       auto & current_task = context_.mission_tasks[context_.mission_current_task];
       current_task.ack = true;
       context_.status_message = "Arm ack received";
-      RCLCPP_INFO(logger_, "Arm acknowledged mission arrived for point %d.", current_task.point_id);
-      if (shouldResumeForEvent("ack")) {
+      RCLCPP_INFO(
+        logger_,
+        "Arm acknowledged mission %s for point %d.",
+        taskActionText(current_task.task_type),
+        current_task.point_id);
+      if (shouldResumeForEvent(current_task, "ack")) {
         resumeMissionNavigation("Mission resumed after arm ack");
       }
     });
@@ -585,7 +646,7 @@ bool NavigationRuntime::handleArmEvent(const std::string & event, std::string * 
     return true;
   }
 
-  if (event != "grabbed" && event != "completed") {
+  if (event != "grabbed" && event != "placed" && event != "completed") {
     if (response_message != nullptr) {
       *response_message = "unknown event";
     }
@@ -600,7 +661,10 @@ bool NavigationRuntime::handleArmEvent(const std::string & event, std::string * 
       if (!candidate.triggered) {
         continue;
       }
-      if ((event == "grabbed" && !candidate.grabbed) ||
+      if ((event == "grabbed" && candidate.task_type == navigation::maps::kTaskTypePickup &&
+        !candidate.grabbed) ||
+        (event == "placed" && candidate.task_type == navigation::maps::kTaskTypePlace &&
+        !candidate.placed) ||
         (event == "completed" && !candidate.completed))
       {
         event_task_index = i;
@@ -619,8 +683,16 @@ bool NavigationRuntime::handleArmEvent(const std::string & event, std::string * 
   }
 
   auto & task = context_.mission_tasks[event_task_index];
+  if (!isEventValidForTask(task, event)) {
+    if (response_message != nullptr) {
+      *response_message = std::string("unexpected event for ") + taskActionText(task.task_type) + " task";
+    }
+    return false;
+  }
   if (event == "grabbed") {
     task.grabbed = true;
+  } else if (event == "placed") {
+    task.placed = true;
   } else {
     task.completed = true;
   }
@@ -631,7 +703,7 @@ bool NavigationRuntime::handleArmEvent(const std::string & event, std::string * 
   context_.status_message = "Arm event: " + event;
   RCLCPP_INFO(logger_, "Arm event '%s' received for mission point %d.", event.c_str(), task.point_id);
   if (context_.mission_paused && event_task_index == context_.mission_current_task &&
-    shouldResumeForEvent(event))
+    shouldResumeForEvent(task, event))
   {
     resumeMissionNavigation("Mission resumed after arm " + event);
   }

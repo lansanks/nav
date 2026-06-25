@@ -98,7 +98,9 @@ class NavigationCoreLauncher(tk.Tk):
         self.pcd_var = tk.StringVar(value="")
         self.calibration_var = tk.StringVar(value=self._default_calibration_file())
         self.race_logic_var = tk.StringVar(value="mission")
-        self.mission_resume_event_var = tk.StringVar(value="completed")
+        self.waypoint_tolerance_var = tk.StringVar(value="0.20")
+        self.mission_pickup_resume_event_var = tk.StringVar(value="completed")
+        self.mission_place_resume_event_var = tk.StringVar(value="completed")
         self.mission_task_radius_var = tk.StringVar(value="0.40")
         self.mission_arm_retry_period_var = tk.StringVar(value="1.0")
         self._load_state()
@@ -195,26 +197,42 @@ class NavigationCoreLauncher(tk.Tk):
             variable=self.race_logic_var,
             value="mission",
         ).grid(row=0, column=1, sticky="w", padx=6, pady=4)
-        ttk.Label(race_frame, text="恢复:").grid(row=0, column=2, sticky="e", padx=(6, 2), pady=4)
+        ttk.Label(race_frame, text="抓取恢复:").grid(row=0, column=2, sticky="e", padx=(6, 2), pady=4)
         ttk.Combobox(
             race_frame,
-            textvariable=self.mission_resume_event_var,
+            textvariable=self.mission_pickup_resume_event_var,
             values=("ack", "grabbed", "completed"),
             state="readonly",
             width=10,
         ).grid(row=0, column=3, sticky="w", padx=(2, 6), pady=4)
-        ttk.Label(race_frame, text="半径:").grid(row=0, column=4, sticky="e", padx=(6, 2), pady=4)
+        ttk.Label(race_frame, text="放置恢复:").grid(row=0, column=4, sticky="e", padx=(6, 2), pady=4)
+        ttk.Combobox(
+            race_frame,
+            textvariable=self.mission_place_resume_event_var,
+            values=("ack", "placed", "completed"),
+            state="readonly",
+            width=10,
+        ).grid(row=0, column=5, sticky="w", padx=(2, 6), pady=4)
+        ttk.Label(race_frame, text="半径:").grid(row=1, column=0, sticky="e", padx=(6, 2), pady=4)
         ttk.Entry(race_frame, textvariable=self.mission_task_radius_var, width=8).grid(
-            row=0,
-            column=5,
+            row=1,
+            column=1,
             sticky="w",
             padx=(2, 6),
             pady=4,
         )
-        ttk.Label(race_frame, text="重试:").grid(row=0, column=6, sticky="e", padx=(6, 2), pady=4)
+        ttk.Label(race_frame, text="重试:").grid(row=1, column=2, sticky="e", padx=(6, 2), pady=4)
         ttk.Entry(race_frame, textvariable=self.mission_arm_retry_period_var, width=8).grid(
-            row=0,
-            column=7,
+            row=1,
+            column=3,
+            sticky="w",
+            padx=(2, 6),
+            pady=4,
+        )
+        ttk.Label(race_frame, text="到点距离(m):").grid(row=1, column=4, sticky="e", padx=(6, 2), pady=4)
+        ttk.Entry(race_frame, textvariable=self.waypoint_tolerance_var, width=8).grid(
+            row=1,
+            column=5,
             sticky="w",
             padx=(2, 6),
             pady=4,
@@ -308,10 +326,17 @@ class NavigationCoreLauncher(tk.Tk):
         if race_logic in {"obstacle", "mission"}:
             self.race_logic_var.set(race_logic)
 
-        resume_event = str(data.get("mission_resume_event", self.mission_resume_event_var.get()))
-        if resume_event in {"ack", "grabbed", "completed"}:
-            self.mission_resume_event_var.set(resume_event)
+        resume_event = str(data.get("mission_resume_event", "completed"))
+        pickup_resume_event = str(data.get("mission_pickup_resume_event", resume_event))
+        place_resume_event = str(data.get("mission_place_resume_event", "placed" if resume_event == "grabbed" else resume_event))
+        if pickup_resume_event in {"ack", "grabbed", "completed"}:
+            self.mission_pickup_resume_event_var.set(pickup_resume_event)
+        if place_resume_event in {"ack", "placed", "completed"}:
+            self.mission_place_resume_event_var.set(place_resume_event)
 
+        self.waypoint_tolerance_var.set(
+            str(data.get("waypoint_tolerance", self.waypoint_tolerance_var.get()))
+        )
         self.mission_task_radius_var.set(
             str(data.get("mission_task_radius", self.mission_task_radius_var.get()))
         )
@@ -325,7 +350,9 @@ class NavigationCoreLauncher(tk.Tk):
             "pcd_file": self.pcd_var.get(),
             "calibration_file": self.calibration_var.get(),
             "race_logic": self.race_logic_var.get(),
-            "mission_resume_event": self.mission_resume_event_var.get(),
+            "waypoint_tolerance": self.waypoint_tolerance_var.get(),
+            "mission_pickup_resume_event": self.mission_pickup_resume_event_var.get(),
+            "mission_place_resume_event": self.mission_place_resume_event_var.get(),
             "mission_task_radius": self.mission_task_radius_var.get(),
             "mission_arm_retry_period": self.mission_arm_retry_period_var.get(),
         }
@@ -495,6 +522,7 @@ class NavigationCoreLauncher(tk.Tk):
 
         mission_task_radius = self._selected_positive_float(self.mission_task_radius_var, "0.40")
         mission_arm_retry_period = self._selected_positive_float(self.mission_arm_retry_period_var, "1.0")
+        waypoint_tolerance = self._selected_positive_float(self.waypoint_tolerance_var, "0.20")
         launch_args = [
             "ros2",
             "launch",
@@ -511,8 +539,11 @@ class NavigationCoreLauncher(tk.Tk):
             "ui_size:=10",
             "map_padding_px:=20.0",
             "panel_collapsed:=true",
+            f"waypoint_tolerance:={waypoint_tolerance}",
             f"race_logic:={self.race_logic_var.get()}",
-            f"mission_resume_event:={self.mission_resume_event_var.get()}",
+            f"mission_resume_event:={self.mission_pickup_resume_event_var.get()}",
+            f"mission_pickup_resume_event:={self.mission_pickup_resume_event_var.get()}",
+            f"mission_place_resume_event:={self.mission_place_resume_event_var.get()}",
             f"mission_task_radius:={mission_task_radius}",
             f"mission_arm_retry_period:={mission_arm_retry_period}",
             "arm_mission_service:=/arm/mission_event",

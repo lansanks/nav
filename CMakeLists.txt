@@ -31,6 +31,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/StartNavigation.srv"
   "srv/StopNavigation.srv"
   "srv/StringCommand.srv"
+  "srv/MissionCommand.srv"
   DEPENDENCIES
   std_msgs
 )

@@ -2,6 +2,7 @@
 #define NAVIGATION_MAPS_TOP_VIEW_MAP_HPP_
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -13,6 +14,10 @@
 namespace navigation::maps
 {
 
+constexpr std::uint8_t kTaskTypeNone = 0;
+constexpr std::uint8_t kTaskTypePickup = 1;
+constexpr std::uint8_t kTaskTypePlace = 2;
+
 std::string resolveScenePath(const std::string & robot_name, const std::string & scene);
 std::vector<std::string> listSceneFiles(const std::string & robot_name);
 
@@ -22,6 +27,7 @@ struct MapPoint
   double x{0.0};
   double y{0.0};
   bool fast{false};
+  std::uint8_t task_type{kTaskTypeNone};
 };
 
 using MapUiAction = navigation::ui::MapUiAction;

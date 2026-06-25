@@ -57,6 +57,18 @@ std::string normalizedChoiceOrDefault(
   return std::find(allowed.begin(), allowed.end(), value) == allowed.end() ? fallback : value;
 }
 
+std::string normalizedResumeEventOrDefault(
+  rclcpp::Node & node,
+  const std::string & parameter_name,
+  const std::vector<std::string> & allowed,
+  const std::string & fallback)
+{
+  return normalizedChoiceOrDefault(
+    node.declare_parameter<std::string>(parameter_name, fallback),
+    allowed,
+    fallback);
+}
+
 int clampUiSize(int value)
 {
   return std::clamp(value, 5, 15);
@@ -138,6 +150,16 @@ RuntimeConfig declareRuntimeConfig(rclcpp::Node & node)
     node.declare_parameter<std::string>("mission_resume_event", config.mission_resume_event),
     {"ack", "grabbed", "completed"},
     "completed");
+  config.mission_pickup_resume_event = normalizedResumeEventOrDefault(
+    node,
+    "mission_pickup_resume_event",
+    {"ack", "grabbed", "completed"},
+    config.mission_resume_event);
+  config.mission_place_resume_event = normalizedResumeEventOrDefault(
+    node,
+    "mission_place_resume_event",
+    {"ack", "placed", "completed"},
+    config.mission_resume_event == "grabbed" ? "placed" : config.mission_resume_event);
   config.arm_mission_service =
     node.declare_parameter<std::string>("arm_mission_service", config.arm_mission_service);
   config.navigation_arm_event_service =

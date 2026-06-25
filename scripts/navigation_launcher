@@ -87,7 +87,8 @@ class NavigationLauncher(tk.Tk):
         self.ui_size_var = tk.StringVar(value="10")
         self.config_var = tk.StringVar(value="unilidar.yaml")
         self.race_logic_var = tk.StringVar(value="mission")
-        self.mission_resume_event_var = tk.StringVar(value="completed")
+        self.mission_pickup_resume_event_var = tk.StringVar(value="completed")
+        self.mission_place_resume_event_var = tk.StringVar(value="completed")
         self.mission_task_radius_var = tk.StringVar(value="0.40")
         self.mission_arm_retry_period_var = tk.StringVar(value="1.0")
         self.arm_mission_service_var = tk.StringVar(value="/arm/mission_event")
@@ -233,29 +234,37 @@ class NavigationLauncher(tk.Tk):
             variable=self.race_logic_var,
             value="mission",
         ).grid(row=0, column=1, sticky="w", padx=6, pady=4)
-        ttk.Label(race_frame, text="恢复:").grid(row=0, column=2, sticky="e", padx=(6, 2), pady=4)
+        ttk.Label(race_frame, text="抓取恢复:").grid(row=0, column=2, sticky="e", padx=(6, 2), pady=4)
         ttk.Combobox(
             race_frame,
-            textvariable=self.mission_resume_event_var,
+            textvariable=self.mission_pickup_resume_event_var,
             values=("ack", "grabbed", "completed"),
             state="readonly",
             width=10,
         ).grid(row=0, column=3, sticky="w", padx=(2, 6), pady=4)
-        ttk.Label(race_frame, text="半径:").grid(row=0, column=4, sticky="e", padx=(6, 2), pady=4)
+        ttk.Label(race_frame, text="放置恢复:").grid(row=0, column=4, sticky="e", padx=(6, 2), pady=4)
+        ttk.Combobox(
+            race_frame,
+            textvariable=self.mission_place_resume_event_var,
+            values=("ack", "placed", "completed"),
+            state="readonly",
+            width=10,
+        ).grid(row=0, column=5, sticky="w", padx=(2, 6), pady=4)
+        ttk.Label(race_frame, text="半径:").grid(row=0, column=6, sticky="e", padx=(6, 2), pady=4)
         ttk.Entry(race_frame, textvariable=self.mission_task_radius_var, width=8).grid(
-            row=0,
-            column=5,
-            sticky="w",
-            padx=(2, 6),
-            pady=4,
-        )
-        ttk.Label(race_frame, text="重试:").grid(row=0, column=6, sticky="e", padx=(6, 2), pady=4)
-        ttk.Entry(race_frame, textvariable=self.mission_arm_retry_period_var, width=8).grid(
             row=0,
             column=7,
             sticky="w",
             padx=(2, 6),
             pady=4,
+        )
+        ttk.Label(race_frame, text="重试:").grid(row=2, column=0, sticky="e", padx=(6, 2), pady=(0, 4))
+        ttk.Entry(race_frame, textvariable=self.mission_arm_retry_period_var, width=8).grid(
+            row=2,
+            column=1,
+            sticky="w",
+            padx=(2, 6),
+            pady=(0, 4),
         )
         ttk.Label(race_frame, text="arm srv:").grid(row=1, column=0, sticky="e", padx=(6, 2), pady=(0, 4))
         ttk.Entry(race_frame, textvariable=self.arm_mission_service_var, width=22).grid(
@@ -430,7 +439,9 @@ class NavigationLauncher(tk.Tk):
         ]
         race_args = [
             f"race_logic:={self.race_logic_var.get()}",
-            f"mission_resume_event:={self.mission_resume_event_var.get()}",
+            f"mission_resume_event:={self.mission_pickup_resume_event_var.get()}",
+            f"mission_pickup_resume_event:={self.mission_pickup_resume_event_var.get()}",
+            f"mission_place_resume_event:={self.mission_place_resume_event_var.get()}",
             f"mission_task_radius:={mission_task_radius}",
             f"mission_arm_retry_period:={mission_arm_retry_period}",
             f"arm_mission_service:={self.arm_mission_service_var.get()}",

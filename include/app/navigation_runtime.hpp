@@ -38,7 +38,9 @@ private:
   void resetMissionTasks();
   void clearMissionPause();
   bool shouldValidateFastMarkers() const;
-  bool shouldResumeForEvent(const std::string & event) const;
+  bool shouldResumeForEvent(
+    const NavigationNodeContext::MissionTaskState & task,
+    const std::string & event) const;
   bool maybePauseForMissionTask(const navigation::RobotNavigationState & state);
   void sendArrivedToArmIfDue();
   void resumeMissionNavigation(const std::string & reason);
