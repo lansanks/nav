@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -18,6 +19,7 @@
 #include <vector>
 
 #include "ament_index_cpp/get_package_share_directory.hpp"
+#include "opencv2/imgcodecs.hpp"
 #include "opencv2/imgproc.hpp"
 #include "tinyxml2.h"
 #include "ui/map_ui_renderer.hpp"
@@ -28,6 +30,7 @@ namespace
 {
 
 constexpr double kPi = 3.14159265358979323846;
+constexpr double kImageMapPixelsPerMeter = 100.0;
 
 struct Vec2
 {
@@ -319,6 +322,15 @@ std::string sceneFileFromAlias(const std::string & scene)
   return scene;
 }
 
+bool isImageMapFile(const std::filesystem::path & path)
+{
+  auto extension = path.extension().string();
+  std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  return extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".bmp";
+}
+
 std::filesystem::path navigationMapsDir()
 {
   return std::filesystem::path(ament_index_cpp::get_package_share_directory("navigation")) /
@@ -413,11 +425,16 @@ std::vector<std::string> listSceneFiles(const std::string & robot_name)
   std::error_code error;
 
   auto add_scene_file = [&](const std::filesystem::path & path) {
-    if (path.extension() != ".xml") {
+    const bool is_xml = path.extension() == ".xml";
+    const bool is_image = isImageMapFile(path);
+    if (!is_xml && !is_image) {
       return;
     }
 
     const auto filename = path.filename().string();
+    if (is_image && filename.find("preview") != std::string::npos) {
+      return;
+    }
     if (filename.find("scene") == std::string::npos && filename.find("sence") == std::string::npos) {
       return;
     }
@@ -479,6 +496,12 @@ struct TopViewMap::Impl
   {
     scene_path = path;
     scene_dir = std::filesystem::path(path).parent_path();
+    if (isImageMapFile(path)) {
+      loadImageMap(path);
+      return;
+    }
+
+    image_background.release();
     tinyxml2::XMLDocument document;
     const auto result = document.LoadFile(path.c_str());
     if (result != tinyxml2::XML_SUCCESS) {
@@ -504,13 +527,36 @@ struct TopViewMap::Impl
     computeScale();
   }
 
+  void loadImageMap(const std::string & path)
+  {
+    image_background = cv::imread(path, cv::IMREAD_COLOR);
+    if (image_background.empty()) {
+      throw std::runtime_error("failed to load map image: " + path);
+    }
+
+    hfields.clear();
+    materials.clear();
+    meshes.clear();
+    geoms.clear();
+    bounds = Bounds{};
+    bounds.include({0.0, 0.0});
+    bounds.include({
+      static_cast<double>(image_background.cols) / kImageMapPixelsPerMeter,
+      static_cast<double>(image_background.rows) / kImageMapPixelsPerMeter,
+    });
+    computeScale();
+  }
+
   cv::Mat draw(const navigation::RobotNavigationState * state, const MapUiState & ui_state) const
   {
     cv::Mat canvas(height, ui_renderer.canvasWidth(ui_state), CV_8UC3, mapBackground(ui_state.light_theme));
-    drawGrid(canvas, ui_state.light_theme);
-
-    for (const auto & geom : geoms) {
-      drawGeom(canvas, geom);
+    if (!image_background.empty()) {
+      drawImageBackground(canvas);
+    } else {
+      drawGrid(canvas, ui_state.light_theme);
+      for (const auto & geom : geoms) {
+        drawGeom(canvas, geom);
+      }
     }
     drawSavedPoints(canvas);
     drawOptimizedPlan(canvas, ui_state);
@@ -829,6 +875,81 @@ struct TopViewMap::Impl
     return true;
   }
 
+  void drawImageBackground(cv::Mat & canvas) const
+  {
+    if (image_background.empty() || !bounds.valid || scale <= 1e-9) {
+      return;
+    }
+
+    const double map_width = std::max(1e-3, bounds.max_x - bounds.min_x);
+    const double map_height = std::max(1e-3, bounds.max_y - bounds.min_y);
+    const double dst_left = view_left;
+    const double dst_top = view_top;
+    const double dst_width = map_width * scale;
+    const double dst_height = map_height * scale;
+    if (dst_width <= 1.0 || dst_height <= 1.0) {
+      return;
+    }
+
+    const int clip_left = std::max(0, static_cast<int>(std::floor(dst_left)));
+    const int clip_top = std::max(0, static_cast<int>(std::floor(dst_top)));
+    const int clip_right = std::min(width, static_cast<int>(std::ceil(dst_left + dst_width)));
+    const int clip_bottom = std::min(height, static_cast<int>(std::ceil(dst_top + dst_height)));
+    if (clip_left >= clip_right || clip_top >= clip_bottom) {
+      return;
+    }
+
+    const auto source_x0 = std::clamp(
+      (static_cast<double>(clip_left) - dst_left) / dst_width * image_background.cols,
+      0.0,
+      static_cast<double>(image_background.cols));
+    const auto source_y0 = std::clamp(
+      (static_cast<double>(clip_top) - dst_top) / dst_height * image_background.rows,
+      0.0,
+      static_cast<double>(image_background.rows));
+    const auto source_x1 = std::clamp(
+      (static_cast<double>(clip_right) - dst_left) / dst_width * image_background.cols,
+      0.0,
+      static_cast<double>(image_background.cols));
+    const auto source_y1 = std::clamp(
+      (static_cast<double>(clip_bottom) - dst_top) / dst_height * image_background.rows,
+      0.0,
+      static_cast<double>(image_background.rows));
+
+    const int src_x = std::clamp(
+      static_cast<int>(std::floor(source_x0)),
+      0,
+      std::max(0, image_background.cols - 1));
+    const int src_y = std::clamp(
+      static_cast<int>(std::floor(source_y0)),
+      0,
+      std::max(0, image_background.rows - 1));
+    const int src_right = std::clamp(
+      static_cast<int>(std::ceil(source_x1)),
+      src_x + 1,
+      image_background.cols);
+    const int src_bottom = std::clamp(
+      static_cast<int>(std::ceil(source_y1)),
+      src_y + 1,
+      image_background.rows);
+
+    const cv::Rect src_rect(src_x, src_y, src_right - src_x, src_bottom - src_y);
+    const cv::Rect dst_rect(clip_left, clip_top, clip_right - clip_left, clip_bottom - clip_top);
+    cv::Mat resized;
+    const int interpolation =
+      dst_rect.width < src_rect.width || dst_rect.height < src_rect.height ? cv::INTER_AREA : cv::INTER_LINEAR;
+    cv::resize(image_background(src_rect), resized, dst_rect.size(), 0.0, 0.0, interpolation);
+    resized.copyTo(canvas(dst_rect));
+
+    const cv::Point border_top_left(
+      static_cast<int>(std::lround(dst_left)),
+      static_cast<int>(std::lround(dst_top)));
+    const cv::Point border_bottom_right(
+      static_cast<int>(std::lround(dst_left + dst_width)),
+      static_cast<int>(std::lround(dst_top + dst_height)));
+    cv::rectangle(canvas, border_top_left, border_bottom_right, cv::Scalar(25, 25, 25), 2, cv::LINE_AA);
+  }
+
   void drawGrid(cv::Mat & canvas, bool light_theme) const
   {
     const int start_x = static_cast<int>(std::floor(bounds.min_x));
@@ -1096,6 +1217,7 @@ struct TopViewMap::Impl
   Bounds bounds;
   std::vector<MapGeom> geoms;
   std::vector<MapPoint> points;
+  cv::Mat image_background;
   std::map<std::string, std::pair<double, double>> hfields;
   std::map<std::string, MeshAsset> meshes;
   std::map<std::string, cv::Scalar> materials;

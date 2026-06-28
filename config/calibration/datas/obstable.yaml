@@ -1,0 +1,111 @@
+points:
+  - id: 1
+    x: -0.458115
+    y: -0.350420
+    fast: false
+    task_type: none
+  - id: 2
+    x: -0.449341
+    y: 0.591466
+    fast: false
+    task_type: none
+  - id: 3
+    x: 0.471977
+    y: -0.385148
+    fast: false
+    task_type: none
+  - id: 4
+    x: 0.464664
+    y: 0.532960
+    fast: false
+    task_type: none
+  - id: 5
+    x: -0.487954
+    y: -1.226580
+    fast: false
+    task_type: none
+  - id: 6
+    x: -0.436899
+    y: -2.898979
+    fast: false
+    task_type: none
+  - id: 7
+    x: 0.459424
+    y: -3.840148
+    fast: false
+    task_type: none
+  - id: 8
+    x: -3.445182
+    y: -3.877144
+    fast: false
+    task_type: none
+  - id: 9
+    x: -4.340132
+    y: -1.958468
+    fast: false
+    task_type: none
+  - id: 10
+    x: -3.467831
+    y: -0.373756
+    fast: false
+    task_type: none
+  - id: 11
+    x: -3.428528
+    y: 0.522745
+    fast: false
+    task_type: none
+  - id: 12
+    x: -4.373168
+    y: 3.538443
+    fast: false
+    task_type: none
+  - id: 13
+    x: -2.463725
+    y: 3.522925
+    fast: false
+    task_type: none
+  - id: 14
+    x: -3.881337
+    y: 5.453568
+    fast: false
+    task_type: none
+  - id: 15
+    x: -4.421860
+    y: 7.058682
+    fast: false
+    task_type: none
+  - id: 16
+    x: -3.474270
+    y: 7.981266
+    fast: false
+    task_type: none
+  - id: 17
+    x: -4.408814
+    y: 8.947492
+    fast: false
+    task_type: none
+  - id: 18
+    x: -2.481191
+    y: 8.953499
+    fast: false
+    task_type: none
+  - id: 19
+    x: -1.092312
+    y: 8.571538
+    fast: false
+    task_type: none
+  - id: 20
+    x: -0.104934
+    y: 8.549214
+    fast: false
+    task_type: none
+  - id: 21
+    x: -0.142613
+    y: 6.572166
+    fast: false
+    task_type: none
+  - id: 22
+    x: -0.010723
+    y: 3.632587
+    fast: false
+    task_type: none
