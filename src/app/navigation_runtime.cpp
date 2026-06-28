@@ -647,13 +647,22 @@ bool NavigationRuntime::triggerNavigationEvent(
   std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
     return static_cast<char>(std::tolower(ch));
   });
-  if (normalized != "bridge") {
+
+  std::string command;
+  std::string event_name;
+  if (normalized == "bridge") {
+    command = "2";
+    event_name = "Bridge";
+  } else if (normalized == "low") {
+    command = "3";
+    event_name = "Low-bar";
+  } else {
     context_.status_message = "Navigation event ignored: " + point.event_label;
     return false;
   }
 
   if (publish_event_command_ != nullptr) {
-    publish_event_command_("2");
+    publish_event_command_(command);
   }
 
   const auto wait_seconds = std::max(0.0, context_.navigation_event_wait_seconds);
@@ -661,12 +670,14 @@ bool NavigationRuntime::triggerNavigationEvent(
   context_.navigation_event_wait_until =
     std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
       std::chrono::duration<double>(wait_seconds));
-  context_.navigation_status = "Bridge event triggered at point " + std::to_string(point.id);
-  context_.status_message = "Bridge mode command sent";
+  context_.navigation_status = event_name + " event triggered at point " + std::to_string(point.id);
+  context_.status_message = event_name + " mode command sent";
   RCLCPP_INFO(
     logger_,
-    "Navigation event 'bridge' reached at point %d. Published rl debug key '2' and waiting %.3fs.",
+    "Navigation event '%s' reached at point %d. Published rl debug key '%s' and waiting %.3fs.",
+    normalized.c_str(),
     point.id,
+    command.c_str(),
     wait_seconds);
   return true;
 }
