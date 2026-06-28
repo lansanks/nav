@@ -29,6 +29,7 @@ struct RadarCalibrationTransform
   double tx{0.0};
   double ty{0.0};
   double yaw_offset{0.0};
+  double yaw_measurement_offset{0.0};
 };
 
 std::string trim(std::string text)
@@ -187,6 +188,8 @@ bool loadRadarCalibration(
     } else if (key == "yaw_offset") {
       calibration.yaw_offset = value;
       has_yaw_offset = true;
+    } else if (key == "yaw_measurement_offset") {
+      calibration.yaw_measurement_offset = value;
     }
   }
 
@@ -264,7 +267,9 @@ public:
           msg->pose.pose.orientation.x,
           msg->pose.pose.orientation.y,
           msg->pose.pose.orientation.z);
-        next.yaw = normalizeYaw(raw_yaw + (calibration.enabled ? calibration.yaw_offset : 0.0));
+        next.yaw = normalizeYaw(
+          raw_yaw +
+          (calibration.enabled ? calibration.yaw_measurement_offset + calibration.yaw_offset : 0.0));
 
         const double raw_linear_x = msg->twist.twist.linear.x;
         const double raw_linear_y = msg->twist.twist.linear.y;

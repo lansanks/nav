@@ -17,6 +17,8 @@ namespace navigation::calibration
 namespace
 {
 
+constexpr double kDefaultYawMeasurementOffset = -1.570796327;
+
 void setError(std::string * error_message, const std::string & message)
 {
   if (error_message != nullptr) {
@@ -227,6 +229,7 @@ bool saveCalibrationParams(
   output << "  x: " << result.tx << "\n";
   output << "  y: " << result.ty << "\n";
   output << "yaw_offset: " << result.yaw_offset << "\n";
+  output << "yaw_measurement_offset: " << kDefaultYawMeasurementOffset << "\n";
   output << "mean_error: " << result.mean_error << "\n";
   output << "max_error: " << result.max_error << "\n";
   output << "unstable: " << (result.unstable ? "true" : "false") << "\n";
