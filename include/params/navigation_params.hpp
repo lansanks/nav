@@ -33,6 +33,8 @@ struct RuntimeConfig
   std::string arm_mission_service{"/arm/mission_event"};
   std::string navigation_arm_event_service{"/navigation/arm_event"};
   double mission_arm_retry_period{1.0};
+  double navigation_event_wait_seconds{1.0};
+  std::string rl_debug_key_topic{"/rl_sim/debug_key"};
   ControllerConfig controller_config;
 };
 

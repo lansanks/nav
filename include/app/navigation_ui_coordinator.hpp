@@ -33,6 +33,7 @@ public:
     navigation::keyboards::TextInputMode mode,
     const std::string & label,
     const std::string & default_text);
+  void beginEventLabelInput(std::size_t point_index);
   bool handleActiveInputKey(int key);
   navigation::ui::MapUiState buildUiState();
 

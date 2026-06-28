@@ -2,6 +2,7 @@
 #define NAVIGATION_APP_NAVIGATION_MAP_NODE_HPP_
 
 #include <memory>
+#include <string>
 
 #include "app/navigation_mouse_controller.hpp"
 #include "app/navigation_node_context.hpp"
@@ -31,6 +32,7 @@ private:
   void savePersistentUiStateIfChanged(bool force = false);
   void applyFullscreenIfNeeded(int frame_width, int frame_height);
   void publishVelocity(const geometry_msgs::msg::Twist & command);
+  void publishRlDebugKey(const std::string & command);
   void recordCommandVelocity(const geometry_msgs::msg::Twist & command);
   void handleRemoteState(const nav_msgs::msg::Odometry::SharedPtr msg);
   void handleRemoteStatus(const std_msgs::msg::String::SharedPtr msg);
@@ -45,6 +47,7 @@ private:
   NavigationMouseController mouse_controller_;
   std::unique_ptr<navigation::ui::WindowScrollController> scroll_controller_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr rl_debug_key_publisher_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr remote_state_subscription_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr remote_status_subscription_;

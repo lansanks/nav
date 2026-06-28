@@ -931,8 +931,24 @@ void NavigationUiCoordinator::beginTextInput(
   context_.status_message = "Typing input";
 }
 
+void NavigationUiCoordinator::beginEventLabelInput(std::size_t point_index)
+{
+  if (point_index >= context_.map->points().size()) {
+    return;
+  }
+
+  context_.event_label_edit_index = point_index;
+  context_.event_label_edit_active = true;
+  const auto & point = context_.map->points()[point_index];
+  beginTextInput(
+    navigation::keyboards::TextInputMode::EventLabel,
+    "Event label for point " + std::to_string(point.id),
+    point.event_label);
+}
+
 void NavigationUiCoordinator::cancelTextInput()
 {
+  context_.event_label_edit_active = false;
   resetTextInput();
   context_.status_message = "Input cancelled";
 }
@@ -942,6 +958,14 @@ void NavigationUiCoordinator::confirmTextInput()
   const auto value = context_.input_text;
   const auto mode = context_.input_mode;
   resetTextInput();
+
+  if (mode == navigation::keyboards::TextInputMode::EventLabel) {
+    if (context_.event_label_edit_active) {
+      points_workflow_.setEventLabel(context_.event_label_edit_index, value);
+    }
+    context_.event_label_edit_active = false;
+    return;
+  }
 
   if (value.empty()) {
     context_.status_message = "Input is empty";
@@ -957,6 +981,7 @@ void NavigationUiCoordinator::confirmTextInput()
   } else if (mode == navigation::keyboards::TextInputMode::SaveRadarPointAs) {
     saveRadarPointAs(value);
   }
+  context_.event_label_edit_active = false;
 }
 
 bool NavigationUiCoordinator::handleTextInputKey(int key)

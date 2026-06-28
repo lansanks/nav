@@ -134,6 +134,7 @@ void NavigationPointsWorkflow::addClickedPoint(int pixel_x, int pixel_y)
 
     point.fast = false;
     point.task_type = navigation::maps::kTaskTypeNone;
+    point.event_label.clear();
     context_.route_patch_points.push_back(point);
     context_.status_message = "Patch point added. Enter confirm, Esc restore";
     return;
@@ -174,6 +175,26 @@ void NavigationPointsWorkflow::addClickedPoint(int pixel_x, int pixel_y)
       point.x,
       point.y,
       point.fast ? "true" : "false");
+  }
+}
+
+void NavigationPointsWorkflow::setEventLabel(std::size_t index, const std::string & event_label)
+{
+  if (index >= context_.map->points().size()) {
+    return;
+  }
+
+  runtime_.stopNavigationForRouteChange();
+  context_.map->setPointEventLabel(index, event_label);
+  runtime_.syncControllerWaypoints();
+  if (savePoints()) {
+    const auto point_id = context_.map->points()[index].id;
+    context_.status_message = event_label.empty() ? "Event marker cleared" : "Event marker set: " + event_label;
+    RCLCPP_INFO(
+      logger_,
+      "Point %d event_label set to '%s'.",
+      point_id,
+      event_label.c_str());
   }
 }
 
@@ -299,6 +320,7 @@ void NavigationPointsWorkflow::confirmRoutePatch()
   for (auto & point : context_.route_patch_points) {
     point.fast = false;
     point.task_type = navigation::maps::kTaskTypeNone;
+    point.event_label.clear();
   }
   points.insert(
     points.begin() + static_cast<std::ptrdiff_t>(insert_index),

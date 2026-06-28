@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iomanip>
 #include <ios>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -69,6 +70,43 @@ const char * taskTypeText(std::uint8_t task_type)
     return "place";
   }
   return "none";
+}
+
+std::string unquoteScalar(std::string value)
+{
+  value = trim(value);
+  if (value.size() < 2 || value.front() != '"' || value.back() != '"') {
+    return value;
+  }
+
+  std::string output;
+  output.reserve(value.size() - 2);
+  bool escaping = false;
+  for (std::size_t i = 1; i + 1 < value.size(); ++i) {
+    const char ch = value[i];
+    if (escaping) {
+      output.push_back(ch);
+      escaping = false;
+    } else if (ch == '\\') {
+      escaping = true;
+    } else {
+      output.push_back(ch);
+    }
+  }
+  return output;
+}
+
+std::string quoteScalar(const std::string & value)
+{
+  std::string output = "\"";
+  for (const char ch : value) {
+    if (ch == '\\' || ch == '"') {
+      output.push_back('\\');
+    }
+    output.push_back(ch);
+  }
+  output.push_back('"');
+  return output;
 }
 
 }  // namespace
@@ -210,6 +248,8 @@ std::vector<MapPoint> loadPointsFile(const std::string & path)
         current.fast = parseBool(value);
       } else if (key == "task_type") {
         current.task_type = parseTaskType(value);
+      } else if (key == "event_label") {
+        current.event_label = unquoteScalar(value);
       }
     } catch (const std::exception &) {
       continue;
@@ -250,6 +290,7 @@ bool savePointsFile(const std::string & path_text, const std::vector<MapPoint> &
     output << "    y: " << point.y << "\n";
     output << "    fast: " << (point.fast ? "true" : "false") << "\n";
     output << "    task_type: " << taskTypeText(point.task_type) << "\n";
+    output << "    event_label: " << quoteScalar(point.event_label) << "\n";
   }
   return true;
 }

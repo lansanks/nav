@@ -314,6 +314,9 @@ NavigationMapNode::NavigationMapNode()
     get_logger(),
     [this](const geometry_msgs::msg::Twist & command) {
       publishVelocity(command);
+    },
+    [this](const std::string & command) {
+      publishRlDebugKey(command);
     }),
   points_workflow_(context_, runtime_, get_logger()),
   ui_coordinator_(context_, runtime_, points_workflow_, *this, get_logger()),
@@ -339,6 +342,8 @@ NavigationMapNode::NavigationMapNode()
   context_.arm_mission_service = config.arm_mission_service;
   context_.navigation_arm_event_service = config.navigation_arm_event_service;
   context_.mission_arm_retry_period = config.mission_arm_retry_period;
+  context_.navigation_event_wait_seconds = config.navigation_event_wait_seconds;
+  context_.rl_debug_key_topic = config.rl_debug_key_topic;
   context_.current_map_file = navigation::maps::resolveScenePath(context_.robot_name, config.scene);
   loadPersistentUiState();
   const auto node_role = declare_parameter<std::string>("node_role", "standalone");
@@ -455,6 +460,8 @@ NavigationMapNode::NavigationMapNode()
   } else {
     cmd_vel_publisher_ =
       create_publisher<geometry_msgs::msg::Twist>(context_.cmd_vel_topic, rclcpp::QoS(10));
+    rl_debug_key_publisher_ =
+      create_publisher<std_msgs::msg::String>(context_.rl_debug_key_topic, rclcpp::QoS(10));
     context_.arm_mission_client =
       create_client<navigation::srv::MissionCommand>(context_.arm_mission_service);
     arm_event_callback_group_ =
@@ -492,6 +499,7 @@ NavigationMapNode::NavigationMapNode()
       context_.cmd_vel_topic.c_str());
   } else {
     RCLCPP_INFO(get_logger(), "Navigation command topic: %s", context_.cmd_vel_topic.c_str());
+    RCLCPP_INFO(get_logger(), "RL debug key topic: %s", context_.rl_debug_key_topic.c_str());
   }
   persisted_ui_state_snapshot_ = serializePersistentUiState(context_);
 }
@@ -596,6 +604,17 @@ void NavigationMapNode::publishVelocity(const geometry_msgs::msg::Twist & comman
   if (cmd_vel_publisher_ != nullptr) {
     cmd_vel_publisher_->publish(command);
   }
+}
+
+void NavigationMapNode::publishRlDebugKey(const std::string & command)
+{
+  if (context_.remote_control || rl_debug_key_publisher_ == nullptr) {
+    return;
+  }
+
+  std_msgs::msg::String msg;
+  msg.data = command;
+  rl_debug_key_publisher_->publish(msg);
 }
 
 void NavigationMapNode::recordCommandVelocity(const geometry_msgs::msg::Twist & command)

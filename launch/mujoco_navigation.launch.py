@@ -42,6 +42,11 @@ def generate_launch_description():
         default_value="/navigation/arm_event",
     )
     mission_arm_retry_period_arg = DeclareLaunchArgument("mission_arm_retry_period", default_value="1.0")
+    navigation_event_wait_seconds_arg = DeclareLaunchArgument(
+        "navigation_event_wait_seconds",
+        default_value="1.0",
+    )
+    rl_debug_key_topic_arg = DeclareLaunchArgument("rl_debug_key_topic", default_value="/rl_sim/debug_key")
 
     rname = LaunchConfiguration("rname")
     scene = LaunchConfiguration("scene")
@@ -70,6 +75,8 @@ def generate_launch_description():
     arm_mission_service = LaunchConfiguration("arm_mission_service")
     navigation_arm_event_service = LaunchConfiguration("navigation_arm_event_service")
     mission_arm_retry_period = LaunchConfiguration("mission_arm_retry_period")
+    navigation_event_wait_seconds = LaunchConfiguration("navigation_event_wait_seconds")
+    rl_debug_key_topic = LaunchConfiguration("rl_debug_key_topic")
 
     param_node = Node(
         package="demo_nodes_cpp",
@@ -145,6 +152,11 @@ def generate_launch_description():
                 "arm_mission_service": ParameterValue(arm_mission_service, value_type=str),
                 "navigation_arm_event_service": ParameterValue(navigation_arm_event_service, value_type=str),
                 "mission_arm_retry_period": ParameterValue(mission_arm_retry_period, value_type=float),
+                "navigation_event_wait_seconds": ParameterValue(
+                    navigation_event_wait_seconds,
+                    value_type=float,
+                ),
+                "rl_debug_key_topic": ParameterValue(rl_debug_key_topic, value_type=str),
             }
         ],
     )
@@ -178,6 +190,8 @@ def generate_launch_description():
             arm_mission_service_arg,
             navigation_arm_event_service_arg,
             mission_arm_retry_period_arg,
+            navigation_event_wait_seconds_arg,
+            rl_debug_key_topic_arg,
             param_node,
             mujoco_node,
             midware_node,

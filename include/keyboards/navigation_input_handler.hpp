@@ -16,6 +16,7 @@ enum class TextInputMode
   SavePointsAs,
   SaveParamsAs,
   SaveRadarPointAs,
+  EventLabel,
 };
 
 bool handleTextInputKey(

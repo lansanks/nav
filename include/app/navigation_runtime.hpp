@@ -17,11 +17,13 @@ class NavigationRuntime
 {
 public:
   using PublishVelocity = std::function<void(const geometry_msgs::msg::Twist &)>;
+  using PublishEventCommand = std::function<void(const std::string &)>;
 
   NavigationRuntime(
     NavigationNodeContext & context,
     rclcpp::Logger logger,
-    PublishVelocity publish_velocity);
+    PublishVelocity publish_velocity,
+    PublishEventCommand publish_event_command = {});
 
   void applyControllerConfig();
   bool isNavigationActive() const;
@@ -38,6 +40,10 @@ private:
   std::vector<navigation::maps::MapPoint> controllerWaypointsForCurrentRace() const;
   void resetMissionTasks();
   void clearMissionPause();
+  void resetNavigationEventState();
+  bool handleArrivedNavigationEvents(std::size_t begin_index, std::size_t end_index);
+  bool maybeHoldForNavigationEvent();
+  bool triggerNavigationEvent(std::size_t point_index, const navigation::maps::MapPoint & point);
   bool shouldValidateFastMarkers() const;
   bool shouldResumeForEvent(
     const NavigationNodeContext::MissionTaskState & task,
@@ -57,6 +63,7 @@ private:
   NavigationNodeContext & context_;
   rclcpp::Logger logger_;
   PublishVelocity publish_velocity_;
+  PublishEventCommand publish_event_command_;
 };
 
 }  // namespace navigation::app

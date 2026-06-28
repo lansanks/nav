@@ -25,6 +25,7 @@ public:
   void createNewPointsFile(const std::string & path_or_name);
   void addClickedPoint(int pixel_x, int pixel_y);
   void toggleFastMarker(std::size_t index);
+  void setEventLabel(std::size_t index, const std::string & event_label);
   void removeNearestPoint(int pixel_x, int pixel_y);
   void confirmRoutePatch();
   void cancelRoutePatch();

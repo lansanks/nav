@@ -1049,6 +1049,27 @@ struct TopViewMap::Impl
         cv::Scalar(20, 30, 35),
         1,
         cv::LINE_AA);
+      if (!point.event_label.empty()) {
+        const auto event_text = "@" + point.event_label;
+        cv::putText(
+          canvas,
+          event_text,
+          cv::Point(center.x + 10, center.y + 14),
+          cv::FONT_HERSHEY_SIMPLEX,
+          0.43,
+          cv::Scalar(245, 245, 245),
+          2,
+          cv::LINE_AA);
+        cv::putText(
+          canvas,
+          event_text,
+          cv::Point(center.x + 10, center.y + 14),
+          cv::FONT_HERSHEY_SIMPLEX,
+          0.43,
+          cv::Scalar(30, 85, 210),
+          1,
+          cv::LINE_AA);
+      }
     }
   }
 
@@ -1368,6 +1389,16 @@ bool TopViewMap::setPointFast(std::size_t index, bool fast)
   if (!fast) {
     impl_->points[index].task_type = kTaskTypeNone;
   }
+  return true;
+}
+
+bool TopViewMap::setPointEventLabel(std::size_t index, const std::string & event_label)
+{
+  if (index >= impl_->points.size()) {
+    return false;
+  }
+
+  impl_->points[index].event_label = event_label;
   return true;
 }
 

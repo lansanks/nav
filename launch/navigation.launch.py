@@ -70,6 +70,11 @@ def generate_launch_description():
         default_value="/navigation/arm_event",
     )
     mission_arm_retry_period_arg = DeclareLaunchArgument("mission_arm_retry_period", default_value="1.0")
+    navigation_event_wait_seconds_arg = DeclareLaunchArgument(
+        "navigation_event_wait_seconds",
+        default_value="1.0",
+    )
+    rl_debug_key_topic_arg = DeclareLaunchArgument("rl_debug_key_topic", default_value="/rl_sim/debug_key")
 
     navigation_node = Node(
         package="navigation",
@@ -139,6 +144,14 @@ def generate_launch_description():
                     LaunchConfiguration("mission_arm_retry_period"),
                     value_type=float,
                 ),
+                "navigation_event_wait_seconds": ParameterValue(
+                    LaunchConfiguration("navigation_event_wait_seconds"),
+                    value_type=float,
+                ),
+                "rl_debug_key_topic": ParameterValue(
+                    LaunchConfiguration("rl_debug_key_topic"),
+                    value_type=str,
+                ),
             }
         ],
     )
@@ -178,6 +191,8 @@ def generate_launch_description():
             arm_mission_service_arg,
             navigation_arm_event_service_arg,
             mission_arm_retry_period_arg,
+            navigation_event_wait_seconds_arg,
+            rl_debug_key_topic_arg,
             navigation_node,
         ]
     )

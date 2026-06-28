@@ -36,7 +36,7 @@ void NavigationMouseController::handleMouseEvent(int event, int x, int y, int fl
   } else if (event == cv::EVENT_MBUTTONUP) {
     handleMiddleUp();
   } else if (event == cv::EVENT_LBUTTONDOWN) {
-    handleLeftClick(x, y);
+    handleLeftClick(x, y, flags);
   } else if (event == cv::EVENT_RBUTTONDOWN) {
     handleRightClick(x, y);
   }
@@ -147,7 +147,7 @@ void NavigationMouseController::handleMiddleUp()
   map_dragging_ = false;
 }
 
-void NavigationMouseController::handleLeftClick(int x, int y)
+void NavigationMouseController::handleLeftClick(int x, int y, int flags)
 {
   if (context_.input_mode != navigation::keyboards::TextInputMode::None) {
     const auto hit = context_.map->hitTestUi(x, y, ui_coordinator_.buildUiState());
@@ -187,6 +187,16 @@ void NavigationMouseController::handleLeftClick(int x, int y)
   if (context_.dropdown_mode != navigation::ui::MapDropdownMode::None) {
     ui_coordinator_.clearDropdown();
     context_.status_message = "Selection cancelled";
+    return;
+  }
+
+  if ((flags & cv::EVENT_FLAG_CTRLKEY) != 0) {
+    const int point_index = context_.map->hitTestPoint(x, y, 14);
+    if (point_index < 0) {
+      context_.status_message = "Ctrl+click near a point to set event";
+      return;
+    }
+    ui_coordinator_.beginEventLabelInput(static_cast<std::size_t>(point_index));
     return;
   }
 

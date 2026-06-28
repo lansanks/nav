@@ -1,11 +1,14 @@
 #include "app/navigation_runtime.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "controller.hpp"
@@ -122,10 +125,12 @@ bool serviceReady(
 NavigationRuntime::NavigationRuntime(
   NavigationNodeContext & context,
   rclcpp::Logger logger,
-  PublishVelocity publish_velocity)
+  PublishVelocity publish_velocity,
+  PublishEventCommand publish_event_command)
 : context_(context),
   logger_(logger),
-  publish_velocity_(std::move(publish_velocity))
+  publish_velocity_(std::move(publish_velocity)),
+  publish_event_command_(std::move(publish_event_command))
 {
 }
 
@@ -192,6 +197,7 @@ void NavigationRuntime::syncControllerWaypoints()
   }
 
   resetMissionTasks();
+  resetNavigationEventState();
   if (context_.controller == nullptr) {
     return;
   }
@@ -239,6 +245,7 @@ void NavigationRuntime::startNavigation(const std::string & controller_name)
 
   context_.selected_controller_name = controller_name;
   resetMissionTasks();
+  resetNavigationEventState();
   next_controller->setWaypoints(controllerWaypointsForCurrentRace());
 
   std::string error_message;
@@ -301,6 +308,7 @@ void NavigationRuntime::sendSetWaypointsRequest(
     mp.y = point.y;
     mp.fast = point.fast;
     mp.task_type = point.task_type;
+    mp.event_label = point.event_label;
     request->points.push_back(mp);
   }
   request->race_logic = normalizeRaceLogic(context_.race_logic);
@@ -378,6 +386,7 @@ void NavigationRuntime::sendStartRequest(
     mp.y = point.y;
     mp.fast = point.fast;
     mp.task_type = point.task_type;
+    mp.event_label = point.event_label;
     request->points.push_back(mp);
   }
   request->race_logic = normalizeRaceLogic(context_.race_logic);
@@ -491,6 +500,11 @@ void NavigationRuntime::updateNavigationController(
     return;
   }
 
+  if (maybeHoldForNavigationEvent()) {
+    publishZeroVelocity();
+    return;
+  }
+
   if (context_.race_logic == "mission") {
     if (context_.mission_paused) {
       publishZeroVelocity();
@@ -505,7 +519,13 @@ void NavigationRuntime::updateNavigationController(
     }
   }
 
+  const auto before_status = context_.controller->status();
   const auto command = context_.controller->update(state);
+  const auto after_status = context_.controller->status();
+  if (handleArrivedNavigationEvents(before_status.target_index, after_status.target_index)) {
+    publishZeroVelocity();
+    return;
+  }
   if (publish_velocity_ != nullptr) {
     publish_velocity_(command);
   }
@@ -559,6 +579,96 @@ void NavigationRuntime::clearMissionPause()
   context_.mission_arrived_request_pending = false;
   context_.mission_current_task = 0;
   context_.mission_last_arrived_send = std::chrono::steady_clock::time_point{};
+}
+
+void NavigationRuntime::resetNavigationEventState()
+{
+  const std::size_t point_count = context_.map != nullptr ? context_.map->points().size() : 0;
+  context_.navigation_event_triggered.assign(point_count, false);
+  context_.navigation_event_wait_active = false;
+  context_.navigation_event_wait_until = std::chrono::steady_clock::time_point{};
+}
+
+bool NavigationRuntime::maybeHoldForNavigationEvent()
+{
+  if (!context_.navigation_event_wait_active) {
+    return false;
+  }
+
+  const auto now = std::chrono::steady_clock::now();
+  if (now < context_.navigation_event_wait_until) {
+    return true;
+  }
+
+  context_.navigation_event_wait_active = false;
+  context_.navigation_event_wait_until = std::chrono::steady_clock::time_point{};
+  context_.status_message = "Navigation event wait complete";
+  return false;
+}
+
+bool NavigationRuntime::handleArrivedNavigationEvents(std::size_t begin_index, std::size_t end_index)
+{
+  if (context_.map == nullptr || end_index <= begin_index) {
+    return false;
+  }
+
+  const auto & points = context_.map->points();
+  const auto clamped_end = std::min(end_index, points.size());
+  for (std::size_t i = begin_index; i < clamped_end; ++i) {
+    if (triggerNavigationEvent(i, points[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool NavigationRuntime::triggerNavigationEvent(
+  std::size_t point_index,
+  const navigation::maps::MapPoint & point)
+{
+  if (point.event_label.empty()) {
+    return false;
+  }
+
+  if (context_.navigation_event_triggered.size() < context_.map->points().size()) {
+    context_.navigation_event_triggered.resize(context_.map->points().size(), false);
+  }
+  if (point_index < context_.navigation_event_triggered.size() &&
+    context_.navigation_event_triggered[point_index])
+  {
+    return false;
+  }
+
+  if (point_index < context_.navigation_event_triggered.size()) {
+    context_.navigation_event_triggered[point_index] = true;
+  }
+
+  std::string normalized = point.event_label;
+  std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  if (normalized != "bridge") {
+    context_.status_message = "Navigation event ignored: " + point.event_label;
+    return false;
+  }
+
+  if (publish_event_command_ != nullptr) {
+    publish_event_command_("2");
+  }
+
+  const auto wait_seconds = std::max(0.0, context_.navigation_event_wait_seconds);
+  context_.navigation_event_wait_active = wait_seconds > 0.0;
+  context_.navigation_event_wait_until =
+    std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+      std::chrono::duration<double>(wait_seconds));
+  context_.navigation_status = "Bridge event triggered at point " + std::to_string(point.id);
+  context_.status_message = "Bridge mode command sent";
+  RCLCPP_INFO(
+    logger_,
+    "Navigation event 'bridge' reached at point %d. Published rl debug key '2' and waiting %.3fs.",
+    point.id,
+    wait_seconds);
+  return true;
 }
 
 bool NavigationRuntime::shouldValidateFastMarkers() const

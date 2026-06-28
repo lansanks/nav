@@ -170,6 +170,12 @@ RuntimeConfig declareRuntimeConfig(rclcpp::Node & node)
     positiveOrDefault(
     node.declare_parameter<double>("mission_arm_retry_period", config.mission_arm_retry_period),
     1.0);
+  config.navigation_event_wait_seconds =
+    positiveOrDefault(
+    node.declare_parameter<double>("navigation_event_wait_seconds", config.navigation_event_wait_seconds),
+    1.0);
+  config.rl_debug_key_topic =
+    node.declare_parameter<std::string>("rl_debug_key_topic", config.rl_debug_key_topic);
   return config;
 }
 

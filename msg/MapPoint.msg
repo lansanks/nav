@@ -6,3 +6,4 @@ float64 x
 float64 y
 bool fast
 uint8 task_type
+string event_label
