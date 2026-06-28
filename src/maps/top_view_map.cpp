@@ -12,6 +12,7 @@
 #include <fstream>
 #include <map>
 #include <memory>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -558,7 +559,8 @@ struct TopViewMap::Impl
         drawGeom(canvas, geom);
       }
     }
-    drawSavedPoints(canvas);
+    drawSavedPoints(canvas, ui_state);
+    drawRoutePatch(canvas, ui_state);
     drawOptimizedPlan(canvas, ui_state);
 
     if (state != nullptr && state->valid) {
@@ -991,13 +993,17 @@ struct TopViewMap::Impl
     cv::circle(canvas, center, radius, geom.outline, 1, cv::LINE_AA);
   }
 
-  void drawSavedPoints(cv::Mat & canvas) const
+  void drawSavedPoints(cv::Mat & canvas, const MapUiState & ui_state) const
   {
     if (points.empty()) {
       return;
     }
 
     for (std::size_t i = 1; i < points.size(); ++i) {
+      if (ui_state.route_patch_active && i == ui_state.route_patch_insert_index) {
+        continue;
+      }
+
       const auto p0 = worldToPixel({points[i - 1].x, points[i - 1].y});
       const auto p1 = worldToPixel({points[i].x, points[i].y});
       const bool fast_segment =
@@ -1043,6 +1049,46 @@ struct TopViewMap::Impl
         cv::Scalar(20, 30, 35),
         1,
         cv::LINE_AA);
+    }
+  }
+
+  void drawRoutePatch(cv::Mat & canvas, const MapUiState & ui_state) const
+  {
+    if (!ui_state.route_patch_active || points.empty()) {
+      return;
+    }
+
+    std::vector<cv::Point> route_pixels;
+    const auto insert_index = std::min(ui_state.route_patch_insert_index, points.size());
+    if (insert_index > 0) {
+      route_pixels.push_back(worldToPixel({points[insert_index - 1].x, points[insert_index - 1].y}));
+    }
+    for (const auto & point : ui_state.route_patch_points) {
+      route_pixels.push_back(worldToPixel({point.x, point.y}));
+    }
+    if (!ui_state.route_patch_points.empty() && insert_index < points.size()) {
+      route_pixels.push_back(worldToPixel({points[insert_index].x, points[insert_index].y}));
+    }
+
+    const cv::Scalar patch_line(48, 160, 48);
+    for (std::size_t i = 1; i < route_pixels.size(); ++i) {
+      drawDashedArrow(canvas, route_pixels[i - 1], route_pixels[i], patch_line, 2);
+    }
+
+    if (insert_index > 0) {
+      const auto previous = worldToPixel({points[insert_index - 1].x, points[insert_index - 1].y});
+      cv::circle(canvas, previous, 12, patch_line, 2, cv::LINE_AA);
+    }
+    if (insert_index < points.size()) {
+      const auto next = worldToPixel({points[insert_index].x, points[insert_index].y});
+      cv::circle(canvas, next, 12, patch_line, 2, cv::LINE_AA);
+    }
+
+    for (const auto & point : ui_state.route_patch_points) {
+      const auto center = worldToPixel({point.x, point.y});
+      cv::circle(canvas, center, 8, cv::Scalar(20, 30, 35), cv::FILLED, cv::LINE_AA);
+      cv::circle(canvas, center, 6, patch_line, cv::FILLED, cv::LINE_AA);
+      cv::circle(canvas, center, 8, cv::Scalar(245, 245, 245), 1, cv::LINE_AA);
     }
   }
 
@@ -1270,6 +1316,28 @@ int TopViewMap::hitTestPoint(int pixel_x, int pixel_y, int radius_px) const
   return -1;
 }
 
+int TopViewMap::nearestPointIndex(int pixel_x, int pixel_y) const
+{
+  if (impl_->points.empty()) {
+    return -1;
+  }
+
+  int nearest_index = -1;
+  double nearest_distance_sq = std::numeric_limits<double>::max();
+  for (std::size_t i = 0; i < impl_->points.size(); ++i) {
+    const auto center = impl_->worldToPixel({impl_->points[i].x, impl_->points[i].y});
+    const double dx = static_cast<double>(pixel_x - center.x);
+    const double dy = static_cast<double>(pixel_y - center.y);
+    const double distance_sq = dx * dx + dy * dy;
+    if (distance_sq < nearest_distance_sq) {
+      nearest_distance_sq = distance_sq;
+      nearest_index = static_cast<int>(i);
+    }
+  }
+
+  return nearest_index;
+}
+
 bool TopViewMap::zoomAt(int pixel_x, int pixel_y, double factor)
 {
   return impl_->zoomAt(pixel_x, pixel_y, factor);
@@ -1312,6 +1380,19 @@ bool TopViewMap::togglePointFast(std::size_t index)
   impl_->points[index].fast = !impl_->points[index].fast;
   if (!impl_->points[index].fast) {
     impl_->points[index].task_type = kTaskTypeNone;
+  }
+  return true;
+}
+
+bool TopViewMap::removePoint(std::size_t index)
+{
+  if (index >= impl_->points.size()) {
+    return false;
+  }
+
+  impl_->points.erase(impl_->points.begin() + static_cast<std::ptrdiff_t>(index));
+  for (std::size_t i = 0; i < impl_->points.size(); ++i) {
+    impl_->points[i].id = static_cast<int>(i + 1);
   }
   return true;
 }

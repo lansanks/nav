@@ -107,6 +107,10 @@ struct NavigationNodeContext
   std::string mission_return_far_distance_text{"0.50"};
   std::string mission_plan_summary;
   std::vector<navigation::ui::MapPlanPoint> mission_plan_points;
+  bool route_patch_active{false};
+  std::size_t route_patch_insert_index{0};
+  std::vector<navigation::maps::MapPoint> route_patch_original_points;
+  std::vector<navigation::maps::MapPoint> route_patch_points;
 
   struct MissionTaskState
   {

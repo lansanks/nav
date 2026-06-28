@@ -42,6 +42,7 @@ private:
   void cancelTextInput();
   void confirmTextInput();
   bool handleTextInputKey(int key);
+  bool handleRoutePatchKey(int key);
   bool handleSettingsKey(int key);
   bool handleParamsKey(int key);
   bool handleDropdownKey(int key);

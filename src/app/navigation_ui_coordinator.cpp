@@ -1076,6 +1076,9 @@ bool NavigationUiCoordinator::handleActiveInputKey(int key)
   if (handleTextInputKey(key)) {
     return true;
   }
+  if (handleRoutePatchKey(key)) {
+    return true;
+  }
   if (context_.radar_popup_active && key != -1) {
     if (navigation::keyboards::isEscKey(key)) {
       if (context_.radar_result_pending) {
@@ -1097,6 +1100,33 @@ bool NavigationUiCoordinator::handleActiveInputKey(int key)
     return true;
   }
   return handleDropdownKey(key);
+}
+
+bool NavigationUiCoordinator::handleRoutePatchKey(int key)
+{
+  if (!context_.route_patch_active) {
+    return false;
+  }
+
+  if (key == -1) {
+    return true;
+  }
+
+  if (navigation::keyboards::isEscKey(key)) {
+    points_workflow_.cancelRoutePatch();
+    return true;
+  }
+  if (navigation::keyboards::isEnterKey(key)) {
+    points_workflow_.confirmRoutePatch();
+    return true;
+  }
+  if (navigation::keyboards::isBackspaceKey(key)) {
+    points_workflow_.removeLastRoutePatchPoint();
+    return true;
+  }
+
+  context_.status_message = "Route patch: left click add, Enter confirm, Esc restore";
+  return true;
 }
 
 navigation::ui::MapUiState NavigationUiCoordinator::buildUiState()
@@ -1163,6 +1193,13 @@ navigation::ui::MapUiState NavigationUiCoordinator::buildUiState()
   ui_state.settings_field_values = settingsFieldValues();
   ui_state.mission_plan_summary = context_.mission_plan_summary;
   ui_state.mission_plan_points = context_.mission_plan_points;
+  ui_state.route_patch_active = context_.route_patch_active;
+  ui_state.route_patch_insert_index = context_.route_patch_insert_index;
+  ui_state.route_patch_points.clear();
+  ui_state.route_patch_points.reserve(context_.route_patch_points.size());
+  for (const auto & point : context_.route_patch_points) {
+    ui_state.route_patch_points.push_back({point.x, point.y, false});
+  }
   return ui_state;
 }
 

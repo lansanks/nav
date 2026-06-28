@@ -28,7 +28,7 @@ private:
   void handleMouseMove(int x, int y, int flags);
   void handleMiddleUp();
   void handleLeftClick(int x, int y);
-  void handleRightClick();
+  void handleRightClick(int x, int y);
 
   NavigationNodeContext & context_;
   NavigationUiCoordinator & ui_coordinator_;

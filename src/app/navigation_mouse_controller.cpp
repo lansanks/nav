@@ -38,7 +38,7 @@ void NavigationMouseController::handleMouseEvent(int event, int x, int y, int fl
   } else if (event == cv::EVENT_LBUTTONDOWN) {
     handleLeftClick(x, y);
   } else if (event == cv::EVENT_RBUTTONDOWN) {
-    handleRightClick();
+    handleRightClick(x, y);
   }
 }
 
@@ -158,6 +158,15 @@ void NavigationMouseController::handleLeftClick(int x, int y)
   }
 
   const auto hit = context_.map->hitTestUi(x, y, ui_coordinator_.buildUiState());
+  if (context_.route_patch_active) {
+    if (hit.action != navigation::ui::MapUiAction::None) {
+      context_.status_message = "Finish route patch first";
+      return;
+    }
+    points_workflow_.addClickedPoint(x, y);
+    return;
+  }
+
   if (context_.params_session.active()) {
     if (hit.action == navigation::ui::MapUiAction::ParamOption) {
       context_.params_session.selectByIndex(hit.option_index, context_.param_fields, context_.status_message);
@@ -184,7 +193,7 @@ void NavigationMouseController::handleLeftClick(int x, int y)
   points_workflow_.addClickedPoint(x, y);
 }
 
-void NavigationMouseController::handleRightClick()
+void NavigationMouseController::handleRightClick(int x, int y)
 {
   if (context_.input_mode != navigation::keyboards::TextInputMode::None ||
     context_.params_session.active() ||
@@ -200,7 +209,7 @@ void NavigationMouseController::handleRightClick()
     return;
   }
 
-  points_workflow_.removeLastPoint();
+  points_workflow_.removeNearestPoint(x, y);
 }
 
 }  // namespace navigation::app

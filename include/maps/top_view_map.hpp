@@ -47,12 +47,14 @@ public:
   MapUiHit hitTestUi(int pixel_x, int pixel_y, const MapUiState & ui_state) const;
   bool pixelToWorld(int pixel_x, int pixel_y, MapPoint & point) const;
   int hitTestPoint(int pixel_x, int pixel_y, int radius_px = 10) const;
+  int nearestPointIndex(int pixel_x, int pixel_y) const;
   bool zoomAt(int pixel_x, int pixel_y, double factor);
   bool panBy(int delta_x, int delta_y);
   void setPoints(const std::vector<MapPoint> & points);
   void addPoint(const MapPoint & point);
   bool setPointFast(std::size_t index, bool fast);
   bool togglePointFast(std::size_t index);
+  bool removePoint(std::size_t index);
   bool removeLastPoint();
   void clearPoints();
   const std::vector<MapPoint> & points() const;

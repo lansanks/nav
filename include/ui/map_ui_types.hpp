@@ -127,6 +127,9 @@ struct MapUiState
   std::vector<std::string> settings_field_values;
   std::string mission_plan_summary;
   std::vector<MapPlanPoint> mission_plan_points;
+  bool route_patch_active{false};
+  std::size_t route_patch_insert_index{0};
+  std::vector<MapPlanPoint> route_patch_points;
 };
 
 }  // namespace navigation::ui

@@ -1,5 +1,7 @@
 #include "app/navigation_points_workflow.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <cmath>
 #include <filesystem>
 #include <string>
@@ -11,6 +13,26 @@
 
 namespace navigation::app
 {
+namespace
+{
+
+void renumberPoints(std::vector<navigation::maps::MapPoint> & points)
+{
+  for (std::size_t i = 0; i < points.size(); ++i) {
+    points[i].id = static_cast<int>(i + 1);
+  }
+}
+
+void clearRoutePatchState(NavigationNodeContext & context)
+{
+  context.route_patch_active = false;
+  context.route_patch_insert_index = 0;
+  context.route_patch_original_points.clear();
+  context.route_patch_points.clear();
+}
+
+}  // namespace
+
 
 NavigationPointsWorkflow::NavigationPointsWorkflow(
   NavigationNodeContext & context,
@@ -103,6 +125,20 @@ void NavigationPointsWorkflow::createNewPointsFile(const std::string & path_or_n
 
 void NavigationPointsWorkflow::addClickedPoint(int pixel_x, int pixel_y)
 {
+  if (context_.route_patch_active) {
+    navigation::maps::MapPoint point;
+    if (!context_.map->pixelToWorld(pixel_x, pixel_y, point)) {
+      RCLCPP_WARN(logger_, "Click is outside the map bounds.");
+      return;
+    }
+
+    point.fast = false;
+    point.task_type = navigation::maps::kTaskTypeNone;
+    context_.route_patch_points.push_back(point);
+    context_.status_message = "Patch point added. Enter confirm, Esc restore";
+    return;
+  }
+
   const int point_index = context_.map->hitTestPoint(pixel_x, pixel_y);
   if (point_index >= 0) {
     toggleFastMarker(static_cast<std::size_t>(point_index));
@@ -193,6 +229,120 @@ void NavigationPointsWorkflow::toggleFastMarker(std::size_t index)
   }
 }
 
+void NavigationPointsWorkflow::removeNearestPoint(int pixel_x, int pixel_y)
+{
+  if (context_.route_patch_active) {
+    context_.status_message = "Finish route patch first";
+    return;
+  }
+
+  const int point_index = context_.map->nearestPointIndex(pixel_x, pixel_y);
+  if (point_index < 0) {
+    return;
+  }
+
+  const auto index = static_cast<std::size_t>(point_index);
+  const auto & points = context_.map->points();
+  const bool removed_fast = points[index].fast;
+  const int removed_id = points[index].id;
+  const bool patch_middle_point = index > 0 && index + 1 < points.size();
+
+  runtime_.stopNavigationForRouteChange();
+  if (patch_middle_point) {
+    context_.route_patch_active = true;
+    context_.route_patch_insert_index = index;
+    context_.route_patch_original_points = points;
+    context_.route_patch_points.clear();
+  }
+
+  if (!context_.map->removePoint(index)) {
+    clearRoutePatchState(context_);
+    return;
+  }
+
+  if (context_.race_logic == "obstacle" && removed_fast) {
+    if (index > 0 && context_.map->points()[index - 1].fast) {
+      context_.map->setPointFast(index - 1, false);
+    }
+    if (index < context_.map->points().size() && context_.map->points()[index].fast) {
+      context_.map->setPointFast(index, false);
+    }
+  }
+
+  if (patch_middle_point) {
+    context_.status_message = "Patch route: add points, Enter confirm, Esc restore";
+    RCLCPP_INFO(
+      logger_,
+      "Removed middle navigation point %d. Waiting for route patch points.",
+      removed_id);
+    return;
+  }
+
+  runtime_.syncControllerWaypoints();
+  if (savePoints()) {
+    RCLCPP_INFO(
+      logger_,
+      "Removed nearest navigation point %d. Remaining points: %zu",
+      removed_id,
+      context_.map->points().size());
+  }
+}
+
+void NavigationPointsWorkflow::confirmRoutePatch()
+{
+  if (!context_.route_patch_active) {
+    return;
+  }
+
+  auto points = context_.map->points();
+  const auto insert_index = std::min(context_.route_patch_insert_index, points.size());
+  for (auto & point : context_.route_patch_points) {
+    point.fast = false;
+    point.task_type = navigation::maps::kTaskTypeNone;
+  }
+  points.insert(
+    points.begin() + static_cast<std::ptrdiff_t>(insert_index),
+    context_.route_patch_points.begin(),
+    context_.route_patch_points.end());
+  renumberPoints(points);
+  context_.map->setPoints(points);
+  clearRoutePatchState(context_);
+
+  runtime_.syncControllerWaypoints();
+  if (savePoints()) {
+    context_.status_message = "Route patch applied";
+    RCLCPP_INFO(logger_, "Route patch applied. Total points: %zu", context_.map->points().size());
+  }
+}
+
+void NavigationPointsWorkflow::cancelRoutePatch()
+{
+  if (!context_.route_patch_active) {
+    return;
+  }
+
+  context_.map->setPoints(context_.route_patch_original_points);
+  clearRoutePatchState(context_);
+  runtime_.syncControllerWaypoints();
+  context_.status_message = "Route patch cancelled";
+  RCLCPP_INFO(logger_, "Route patch cancelled.");
+}
+
+void NavigationPointsWorkflow::removeLastRoutePatchPoint()
+{
+  if (!context_.route_patch_active) {
+    return;
+  }
+
+  if (context_.route_patch_points.empty()) {
+    context_.status_message = "No patch points to remove";
+    return;
+  }
+
+  context_.route_patch_points.pop_back();
+  context_.status_message = "Patch point removed";
+}
+
 void NavigationPointsWorkflow::removeLastPoint()
 {
   const bool removed_fast = !context_.map->points().empty() && context_.map->points().back().fast;
@@ -214,6 +364,10 @@ void NavigationPointsWorkflow::removeLastPoint()
 
 void NavigationPointsWorkflow::clearPoints()
 {
+  if (context_.route_patch_active) {
+    cancelRoutePatch();
+  }
+
   if (context_.map->points().empty()) {
     return;
   }
