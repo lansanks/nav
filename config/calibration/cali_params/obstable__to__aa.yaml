@@ -8,6 +8,7 @@ translation:
   x: 4.418915236
   y: 1.102137962
 yaw_offset: -1.580658410
+yaw_measurement_offset: -1.570796327
 mean_error: 0.048906322
 max_error: 0.113901140
 unstable: false
