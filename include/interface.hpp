@@ -36,6 +36,13 @@ public:
   virtual void start(rclcpp::Node & node) = 0;
   virtual bool getState(RobotNavigationState & state) const = 0;
   virtual std::string sourceName() const = 0;
+  virtual bool setRadarCalibrationFile(const std::string & /* path */, std::string * message)
+  {
+    if (message != nullptr) {
+      *message = "current navigation source does not support radar calibration";
+    }
+    return false;
+  }
 };
 
 std::unique_ptr<NavigationInterface> createSimulationInterface();

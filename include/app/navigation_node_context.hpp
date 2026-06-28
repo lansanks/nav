@@ -131,6 +131,7 @@ struct NavigationNodeContext
   rclcpp::Client<navigation::srv::SetControllerConfig>::SharedPtr set_config_client;
   rclcpp::Client<navigation::srv::StartNavigation>::SharedPtr start_client;
   rclcpp::Client<navigation::srv::StopNavigation>::SharedPtr stop_client;
+  rclcpp::Client<navigation::srv::StringCommand>::SharedPtr set_radar_calibration_client;
   rclcpp::Client<navigation::srv::MissionCommand>::SharedPtr arm_mission_client;
 
   // Heartbeat monitoring (remote_ui mode)

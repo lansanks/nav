@@ -1593,6 +1593,7 @@ void NavigationUiCoordinator::acceptRadarCalibration()
   context_.radar_result_pending = false;
   context_.status_message = "Calibration saved";
   RCLCPP_INFO(logger_, "Saved radar calibration params: %s", path.c_str());
+  runtime_.applyRadarCalibrationFile(path);
 }
 
 void NavigationUiCoordinator::rejectRadarCalibration()

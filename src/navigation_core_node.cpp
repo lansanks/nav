@@ -177,6 +177,14 @@ public:
         handleStopNavigation(request, response);
       });
 
+    set_radar_calibration_service_ = create_service<navigation::srv::StringCommand>(
+      "/navigation/set_radar_calibration",
+      [this](
+        const std::shared_ptr<navigation::srv::StringCommand::Request> request,
+        std::shared_ptr<navigation::srv::StringCommand::Response> response) {
+        handleSetRadarCalibration(request, response);
+      });
+
     arm_event_callback_group_ =
       create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     arm_event_service_ = create_service<navigation::srv::StringCommand>(
@@ -213,7 +221,7 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "Navigation core ready. services: /navigation/{set_waypoints,set_config,start,stop}, "
+      "Navigation core ready. services: /navigation/{set_waypoints,set_config,start,stop,set_radar_calibration}, "
       "status: %s, state: %s, cmd_vel: %s",
       status_topic.c_str(),
       state_topic.c_str(),
@@ -444,6 +452,31 @@ private:
     publishStatus();
   }
 
+  void handleSetRadarCalibration(
+    const std::shared_ptr<navigation::srv::StringCommand::Request> request,
+    std::shared_ptr<navigation::srv::StringCommand::Response> response)
+  {
+    if (context_.interface == nullptr) {
+      response->success = false;
+      response->message = "navigation interface unavailable";
+      RCLCPP_WARN(get_logger(), "Service set_radar_calibration rejected: %s", response->message.c_str());
+      publishStatus();
+      return;
+    }
+
+    std::string message;
+    response->success = context_.interface->setRadarCalibrationFile(request->message, &message);
+    response->message = message.empty() ? "radar calibration updated" : message;
+    context_.navigation_status = response->success ? "Radar calibration updated" : "Radar calibration update failed";
+
+    if (response->success) {
+      RCLCPP_INFO(get_logger(), "Service set_radar_calibration: %s", response->message.c_str());
+    } else {
+      RCLCPP_WARN(get_logger(), "Service set_radar_calibration rejected: %s", response->message.c_str());
+    }
+    publishStatus();
+  }
+
   void handleArmEvent(
     const std::shared_ptr<navigation::srv::StringCommand::Request> request,
     std::shared_ptr<navigation::srv::StringCommand::Response> response)
@@ -461,6 +494,7 @@ private:
   rclcpp::Service<navigation::srv::SetControllerConfig>::SharedPtr set_config_service_;
   rclcpp::Service<navigation::srv::StartNavigation>::SharedPtr start_service_;
   rclcpp::Service<navigation::srv::StopNavigation>::SharedPtr stop_service_;
+  rclcpp::Service<navigation::srv::StringCommand>::SharedPtr set_radar_calibration_service_;
   rclcpp::CallbackGroup::SharedPtr arm_event_callback_group_;
   rclcpp::Service<navigation::srv::StringCommand>::SharedPtr arm_event_service_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_publisher_;

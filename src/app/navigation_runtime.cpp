@@ -14,6 +14,7 @@
 #include "navigation/srv/set_controller_config.hpp"
 #include "navigation/srv/start_navigation.hpp"
 #include "navigation/srv/stop_navigation.hpp"
+#include "navigation/srv/string_command.hpp"
 
 namespace navigation::app
 {
@@ -256,6 +257,30 @@ void NavigationRuntime::startNavigation(const std::string & controller_name)
   RCLCPP_INFO(logger_, "Navigation started with controller '%s'.", context_.selected_controller_name.c_str());
 }
 
+void NavigationRuntime::applyRadarCalibrationFile(const std::string & path)
+{
+  if (context_.remote_control) {
+    sendSetRadarCalibrationRequest(path);
+    return;
+  }
+
+  if (context_.interface == nullptr) {
+    context_.status_message = "Radar calibration interface unavailable";
+    RCLCPP_WARN(logger_, "%s", context_.status_message.c_str());
+    return;
+  }
+
+  std::string message;
+  if (!context_.interface->setRadarCalibrationFile(path, &message)) {
+    context_.status_message = "Calibration apply failed";
+    RCLCPP_WARN(logger_, "Failed to apply radar calibration: %s", message.c_str());
+    return;
+  }
+
+  context_.status_message = "Calibration applied";
+  RCLCPP_INFO(logger_, "Applied radar calibration: %s", message.c_str());
+}
+
 void NavigationRuntime::sendSetWaypointsRequest(
   const std::vector<navigation::maps::MapPoint> & points)
 {
@@ -416,6 +441,38 @@ void NavigationRuntime::sendStopRequest(const std::string & reason)
     });
 }
 
+void NavigationRuntime::sendSetRadarCalibrationRequest(const std::string & path)
+{
+  if (!serviceReady<rclcpp::Client<navigation::srv::StringCommand>>(
+      context_.set_radar_calibration_client,
+      context_,
+      logger_,
+      "SetRadarCalibration"))
+  {
+    return;
+  }
+
+  auto request = std::make_shared<navigation::srv::StringCommand::Request>();
+  request->message = path;
+
+  context_.status_message = "Sending calibration to core...";
+  context_.pending_op_start = std::chrono::steady_clock::now();
+
+  context_.set_radar_calibration_client->async_send_request(
+    request,
+    [this](rclcpp::Client<navigation::srv::StringCommand>::SharedFuture future) {
+      context_.pending_op_start = std::chrono::steady_clock::time_point{};
+      auto response = future.get();
+      if (response->success) {
+        context_.status_message = "Calibration applied to core";
+        RCLCPP_INFO(logger_, "SetRadarCalibration confirmed: %s", response->message.c_str());
+      } else {
+        context_.status_message = "Core rejected calibration: " + response->message;
+        RCLCPP_WARN(logger_, "SetRadarCalibration rejected: %s", response->message.c_str());
+      }
+    });
+}
+
 void NavigationRuntime::updateNavigationController(
   bool has_state,
   const navigation::RobotNavigationState & state)
@@ -526,34 +583,43 @@ bool NavigationRuntime::maybePauseForMissionTask(const navigation::RobotNavigati
   }
 
   const auto & points = context_.map->points();
+  std::size_t next_task_index = context_.mission_tasks.size();
   for (std::size_t i = 0; i < context_.mission_tasks.size(); ++i) {
-    auto & task = context_.mission_tasks[i];
-    if (task.triggered || task.point_index >= points.size()) {
-      continue;
+    if (!context_.mission_tasks[i].triggered) {
+      next_task_index = i;
+      break;
     }
-
-    const auto & point = points[task.point_index];
-    const double distance = std::hypot(point.x - state.x, point.y - state.y);
-    if (distance > context_.mission_task_radius) {
-      continue;
-    }
-
-    task.triggered = true;
-    context_.mission_paused = true;
-    context_.mission_current_task = i;
-    context_.mission_last_arrived_send = std::chrono::steady_clock::time_point{};
-    context_.navigation_status = std::string("Mission ") + taskActionText(task.task_type) +
-      " paused at point " + std::to_string(task.point_id);
-    context_.status_message = std::string("Mission ") + taskActionText(task.task_type) + " arrived";
-    RCLCPP_INFO(
-      logger_,
-      "Mission %s point %d reached within %.3fm. Navigation paused.",
-      taskActionText(task.task_type),
-      task.point_id,
-      context_.mission_task_radius);
-    return true;
   }
-  return false;
+
+  if (next_task_index >= context_.mission_tasks.size()) {
+    return false;
+  }
+
+  auto & task = context_.mission_tasks[next_task_index];
+  if (task.point_index >= points.size()) {
+    return false;
+  }
+
+  const auto & point = points[task.point_index];
+  const double distance = std::hypot(point.x - state.x, point.y - state.y);
+  if (distance > context_.mission_task_radius) {
+    return false;
+  }
+
+  task.triggered = true;
+  context_.mission_paused = true;
+  context_.mission_current_task = next_task_index;
+  context_.mission_last_arrived_send = std::chrono::steady_clock::time_point{};
+  context_.navigation_status = std::string("Mission ") + taskActionText(task.task_type) +
+    " paused at point " + std::to_string(task.point_id);
+  context_.status_message = std::string("Mission ") + taskActionText(task.task_type) + " arrived";
+  RCLCPP_INFO(
+    logger_,
+    "Mission %s point %d reached within %.3fm. Navigation paused.",
+    taskActionText(task.task_type),
+    task.point_id,
+    context_.mission_task_radius);
+  return true;
 }
 
 void NavigationRuntime::sendArrivedToArmIfDue()

@@ -221,11 +221,11 @@ public:
 
     if (!calibration_file.empty()) {
       std::string error_message;
-      if (loadRadarCalibration(calibration_file, calibration_, error_message)) {
+      if (setRadarCalibrationFile(calibration_file, &error_message)) {
         RCLCPP_INFO(
           node.get_logger(),
           "Radar calibration loaded from '%s'.",
-          calibration_.path.c_str());
+          calibrationPath().c_str());
       } else {
         RCLCPP_WARN(
           node.get_logger(),
@@ -250,9 +250,10 @@ public:
 
         const double raw_x = msg->pose.pose.position.x;
         const double raw_y = msg->pose.pose.position.y;
-        if (calibration_.enabled) {
-          next.x = calibration_.r00 * raw_x + calibration_.r01 * raw_y + calibration_.tx;
-          next.y = calibration_.r10 * raw_x + calibration_.r11 * raw_y + calibration_.ty;
+        const auto calibration = calibrationSnapshot();
+        if (calibration.enabled) {
+          next.x = calibration.r00 * raw_x + calibration.r01 * raw_y + calibration.tx;
+          next.y = calibration.r10 * raw_x + calibration.r11 * raw_y + calibration.ty;
         } else {
           next.x = raw_x;
           next.y = raw_y;
@@ -263,13 +264,13 @@ public:
           msg->pose.pose.orientation.x,
           msg->pose.pose.orientation.y,
           msg->pose.pose.orientation.z);
-        next.yaw = normalizeYaw(raw_yaw + (calibration_.enabled ? calibration_.yaw_offset : 0.0));
+        next.yaw = normalizeYaw(raw_yaw + (calibration.enabled ? calibration.yaw_offset : 0.0));
 
         const double raw_linear_x = msg->twist.twist.linear.x;
         const double raw_linear_y = msg->twist.twist.linear.y;
-        if (calibration_.enabled) {
-          next.linear_x = calibration_.r00 * raw_linear_x + calibration_.r01 * raw_linear_y;
-          next.linear_y = calibration_.r10 * raw_linear_x + calibration_.r11 * raw_linear_y;
+        if (calibration.enabled) {
+          next.linear_x = calibration.r00 * raw_linear_x + calibration.r01 * raw_linear_y;
+          next.linear_y = calibration.r10 * raw_linear_x + calibration.r11 * raw_linear_y;
         } else {
           next.linear_x = raw_linear_x;
           next.linear_y = raw_linear_y;
@@ -303,7 +304,50 @@ public:
     return "radar";
   }
 
+  bool setRadarCalibrationFile(const std::string & path, std::string * message) override
+  {
+    if (path.empty()) {
+      std::lock_guard<std::mutex> lock(mutex_);
+      calibration_ = RadarCalibrationTransform{};
+      if (message != nullptr) {
+        *message = "radar calibration disabled";
+      }
+      return true;
+    }
+
+    RadarCalibrationTransform next_calibration;
+    std::string error_message;
+    if (!loadRadarCalibration(path, next_calibration, error_message)) {
+      if (message != nullptr) {
+        *message = error_message;
+      }
+      return false;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      calibration_ = next_calibration;
+    }
+
+    if (message != nullptr) {
+      *message = "radar calibration loaded from '" + next_calibration.path + "'";
+    }
+    return true;
+  }
+
 private:
+  RadarCalibrationTransform calibrationSnapshot() const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return calibration_;
+  }
+
+  std::string calibrationPath() const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return calibration_.path;
+  }
+
   mutable std::mutex mutex_;
   RobotNavigationState state_;
   RadarCalibrationTransform calibration_;

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import glob
+import ipaddress
 import json
 import os
 import re
@@ -11,6 +12,7 @@ import shlex
 import signal
 import subprocess
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 import tkinter as tk
@@ -39,6 +41,9 @@ FAST_LIO_TOPIC_TIMEOUT = 12
 MAP_SAVE_TIMEOUT = 30
 FAST_LIO_ODOM_TOPIC = "/Odometry"
 SELF_CHECK_MARKER = "__NAVIGATION_CORE_SELF_CHECK__:"
+MID360_DEFAULT_PREFIX_LEN = 24
+MID360_NETWORK_COMMAND_TIMEOUT = 8
+MID360_DISCOVERY_TIMEOUT = 8
 
 
 def detect_workspace_setup() -> tuple[Path | None, Path]:
@@ -416,6 +421,7 @@ class NavigationCoreLauncher(tk.Tk):
 
         try:
             self._check_radar_workspaces()
+            self._prepare_radar_network()
             fast_lio_config = self._write_fast_lio_temp_config(
                 config_file=self.config_var.get(),
                 pcd_path=pcd_path,
@@ -445,6 +451,7 @@ class NavigationCoreLauncher(tk.Tk):
 
         try:
             self._check_radar_workspaces()
+            self._prepare_radar_network()
             FAST_LIO_DEFAULT_SAVE_DIR.mkdir(parents=True, exist_ok=True)
             fast_lio_config = self._write_fast_lio_temp_config(
                 config_file=self.config_var.get(),
@@ -675,6 +682,329 @@ class NavigationCoreLauncher(tk.Tk):
         if missing:
             raise ValueError("雷达工作空间缺少 install/setup.bash:\n" + "\n".join(f"  - {p}" for p in missing))
 
+    def _prepare_radar_network(self) -> None:
+        config_file = self.config_var.get()
+        if not config_file.startswith("mid360"):
+            return
+
+        config_paths = self._mid360_config_paths()
+        if not config_paths:
+            raise ValueError("找不到 Livox MID360_config.json，无法检查 MID360 网口配置。")
+
+        config_path = config_paths[0]
+        try:
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"读取 Livox MID360 配置失败:\n{config_path}\n{exc}") from exc
+
+        host_ip = self._mid360_host_ip(data)
+        if host_ip is None:
+            raise ValueError(f"Livox MID360 配置缺少有效 host IP:\n{config_path}")
+
+        lidar_ip = self._mid360_lidar_ip(data)
+        self.append_log(f"[network] MID360 host_ip: {host_ip}\n")
+        if lidar_ip:
+            self.append_log(f"[network] MID360 config lidar_ip: {lidar_ip}\n")
+
+        self._ensure_host_ipv4(host_ip, MID360_DEFAULT_PREFIX_LEN)
+
+        detected_lidar_ip = self._detect_mid360_lidar_ip(host_ip, MID360_DEFAULT_PREFIX_LEN, lidar_ip)
+        if detected_lidar_ip is None:
+            self.append_log("[network] 未自动发现 MID360 实际 IP，沿用当前 Livox 配置。\n")
+            return
+
+        if lidar_ip == detected_lidar_ip:
+            self.append_log(f"[network] MID360 雷达 IP 已匹配: {detected_lidar_ip}\n")
+            return
+
+        self.append_log(
+            f"[network] 检测到 MID360 实际 IP 为 {detected_lidar_ip}，同步 Livox 配置。\n"
+        )
+        self._update_mid360_lidar_ip(config_paths, detected_lidar_ip)
+
+    @staticmethod
+    def _mid360_config_paths() -> list[Path]:
+        candidates = [
+            LIVOX_WS / "install" / "livox_ros_driver2" / "share" / "livox_ros_driver2" / "config" / "MID360_config.json",
+            LIVOX_WS / "src" / "livox_ros_driver2" / "config" / "MID360_config.json",
+        ]
+        paths: list[Path] = []
+        for candidate in candidates:
+            if candidate.exists() and candidate not in paths:
+                paths.append(candidate)
+        return paths
+
+    @staticmethod
+    def _mid360_host_ip(data: object) -> str | None:
+        if not isinstance(data, dict):
+            return None
+        mid360 = data.get("MID360")
+        if not isinstance(mid360, dict):
+            return None
+        host_info = mid360.get("host_net_info")
+        if isinstance(host_info, list):
+            host_info = host_info[0] if host_info else None
+        if not isinstance(host_info, dict):
+            return None
+
+        for key in ("cmd_data_ip", "host_ip", "point_data_ip", "imu_data_ip", "push_msg_ip"):
+            value = host_info.get(key)
+            if isinstance(value, str) and NavigationCoreLauncher._valid_ipv4(value):
+                return value
+        return None
+
+    @staticmethod
+    def _mid360_lidar_ip(data: object) -> str | None:
+        if not isinstance(data, dict):
+            return None
+        lidar_configs = data.get("lidar_configs")
+        if not isinstance(lidar_configs, list) or not lidar_configs:
+            return None
+        first_config = lidar_configs[0]
+        if not isinstance(first_config, dict):
+            return None
+        value = first_config.get("ip")
+        if isinstance(value, str) and NavigationCoreLauncher._valid_ipv4(value):
+            return value
+        return None
+
+    @staticmethod
+    def _valid_ipv4(value: str) -> bool:
+        try:
+            ipaddress.IPv4Address(value)
+        except ipaddress.AddressValueError:
+            return False
+        return True
+
+    def _ensure_host_ipv4(self, host_ip: str, prefix_len: int) -> None:
+        if host_ip in self._local_ipv4_addresses():
+            self.append_log(f"[network] 本机已配置 {host_ip}/{prefix_len}。\n")
+            return
+
+        device_connection = self._active_ethernet_connection()
+        if device_connection is None:
+            raise ValueError(
+                "MID360 host IP 不在本机网卡上，且没有找到已连接的有线网卡。\n"
+                "请确认雷达网线已插好、有线网卡已连接。"
+            )
+        device, connection = device_connection
+        address = f"{host_ip}/{prefix_len}"
+        self.append_log(f"[network] 本机缺少 {address}，尝试修复 {device} ({connection})。\n")
+
+        if not self._connection_has_ipv4(connection, address):
+            self._run_checked_command(
+                ["nmcli", "connection", "modify", connection, "+ipv4.addresses", address],
+                f"给有线连接追加 {address} 失败",
+            )
+        self._run_checked_command(
+            ["nmcli", "connection", "up", connection],
+            f"重新激活有线连接 {connection} 失败",
+            timeout=15,
+        )
+
+        for _ in range(12):
+            if host_ip in self._local_ipv4_addresses():
+                self.append_log(f"[network] 已修复本机 MID360 host IP: {address}\n")
+                return
+            time.sleep(0.5)
+
+        raise ValueError(f"已尝试修复有线网卡，但本机仍未出现 {address}。")
+
+    def _local_ipv4_addresses(self) -> set[str]:
+        output = self._run_checked_command(["ip", "-o", "-4", "addr", "show"], "读取本机 IPv4 地址失败")
+        addresses: set[str] = set()
+        for line in output.splitlines():
+            parts = line.split()
+            if "inet" not in parts:
+                continue
+            inet_index = parts.index("inet")
+            if inet_index + 1 >= len(parts):
+                continue
+            addresses.add(parts[inet_index + 1].split("/", 1)[0])
+        return addresses
+
+    def _active_ethernet_connection(self) -> tuple[str, str] | None:
+        output = self._run_checked_command(
+            ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status"],
+            "读取 NetworkManager 有线连接失败",
+        )
+        fallback: tuple[str, str] | None = None
+        for line in output.splitlines():
+            parts = line.split(":", 3)
+            if len(parts) != 4:
+                continue
+            device, device_type, state, connection = parts
+            if device_type != "ethernet" or not connection:
+                continue
+            if fallback is None:
+                fallback = (device, connection)
+            if state == "connected":
+                return device, connection
+        return fallback
+
+    def _connection_has_ipv4(self, connection: str, address: str) -> bool:
+        output = self._run_checked_command(
+            ["nmcli", "-g", "ipv4.addresses", "connection", "show", connection],
+            f"读取有线连接 {connection} 的 IPv4 配置失败",
+        )
+        configured = {
+            item.strip()
+            for line in output.splitlines()
+            for item in line.split(",")
+            if item.strip()
+        }
+        return address in configured
+
+    def _detect_mid360_lidar_ip(
+        self,
+        host_ip: str,
+        prefix_len: int,
+        configured_lidar_ip: str | None,
+    ) -> str | None:
+        network = ipaddress.ip_network(f"{host_ip}/{prefix_len}", strict=False)
+        self._refresh_neighbor_cache(network)
+        candidates = self._neighbor_ipv4_candidates(network, host_ip)
+
+        if configured_lidar_ip and configured_lidar_ip in candidates:
+            return configured_lidar_ip
+        if len(candidates) == 1:
+            return next(iter(candidates))
+        if candidates:
+            self.append_log(
+                "[network] 发现多个同网段设备，暂不自动改雷达 IP: "
+                + ", ".join(sorted(candidates))
+                + "\n"
+            )
+            return None
+
+        return self._probe_mid360_lidar_ip_with_driver()
+
+    def _refresh_neighbor_cache(self, network: ipaddress.IPv4Network) -> None:
+        ping = self._run_command(
+            ["ping", "-c", "1", "-W", "1", "-b", str(network.broadcast_address)],
+            timeout=3,
+        )
+        if ping.returncode != 0:
+            self.append_log("[network] 广播探测未收到响应，继续检查邻居表。\n")
+
+    def _neighbor_ipv4_candidates(self, network: ipaddress.IPv4Network, host_ip: str) -> set[str]:
+        output = self._run_checked_command(["ip", "-o", "neigh", "show"], "读取邻居表失败")
+        candidates: set[str] = set()
+        bad_states = {"FAILED", "INCOMPLETE"}
+        for line in output.splitlines():
+            parts = line.split()
+            if not parts:
+                continue
+            ip_text = parts[0]
+            if ip_text == host_ip or not self._valid_ipv4(ip_text):
+                continue
+            try:
+                ip = ipaddress.IPv4Address(ip_text)
+            except ipaddress.AddressValueError:
+                continue
+            if ip not in network or bad_states.intersection(parts):
+                continue
+            candidates.add(ip_text)
+        return candidates
+
+    def _probe_mid360_lidar_ip_with_driver(self) -> str | None:
+        livox_setup = LIVOX_WS / "install" / "setup.bash"
+        if not livox_setup.exists():
+            return None
+
+        parts = ["set -e"]
+        ros_setup = detect_ros_setup()
+        if ros_setup is not None:
+            parts.append(f"source {shlex.quote(str(ros_setup))}")
+        parts.append(f"source {shlex.quote(str(livox_setup))}")
+        parts.append(
+            "timeout --kill-after=2s "
+            f"{MID360_DISCOVERY_TIMEOUT}s ros2 launch livox_ros_driver2 msg_MID360_launch.py"
+        )
+        command = " && ".join(parts)
+
+        self.append_log("[network] 尝试短启动 Livox 驱动探测 MID360 实际 IP...\n")
+        try:
+            result = self._run_command(
+                ["bash", "-lc", command],
+                timeout=MID360_DISCOVERY_TIMEOUT + 4,
+            )
+        except ValueError as exc:
+            self.append_log(f"[network] Livox 探测未完成: {exc}\n")
+            return None
+
+        output = result.stdout or ""
+        if "bind failed" in output:
+            raise ValueError(
+                "Livox SDK 绑定 UDP 端口失败。请确认没有其他 Livox 驱动进程正在运行。"
+            )
+
+        patterns = [
+            r"found lidar not defined in the user-defined config, ip:\s*([0-9]+(?:\.[0-9]+){3})",
+            r"successfully enable Livox Lidar imu, ip:\s*([0-9]+(?:\.[0-9]+){3})",
+            r"successfully set lidar attitude, ip:\s*([0-9]+(?:\.[0-9]+){3})",
+        ]
+        matches: list[str] = []
+        for pattern in patterns:
+            matches.extend(re.findall(pattern, output))
+        for ip_text in reversed(matches):
+            if self._valid_ipv4(ip_text):
+                self.append_log(f"[network] Livox 驱动探测到 MID360 IP: {ip_text}\n")
+                return ip_text
+        return None
+
+    def _update_mid360_lidar_ip(self, config_paths: list[Path], lidar_ip: str) -> None:
+        for path in config_paths:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ValueError(f"读取 Livox 配置失败:\n{path}\n{exc}") from exc
+
+            lidar_configs = data.get("lidar_configs") if isinstance(data, dict) else None
+            if not isinstance(lidar_configs, list) or not lidar_configs:
+                raise ValueError(f"Livox 配置缺少 lidar_configs:\n{path}")
+            if not isinstance(lidar_configs[0], dict):
+                raise ValueError(f"Livox 配置 lidar_configs[0] 格式错误:\n{path}")
+
+            lidar_configs[0]["ip"] = lidar_ip
+            path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            self.append_log(f"[network] 已更新 {path}\n")
+
+    @staticmethod
+    def _run_command(args: list[str], *, timeout: int = MID360_NETWORK_COMMAND_TIMEOUT) -> subprocess.CompletedProcess[str]:
+        env = os.environ.copy()
+        env["LC_ALL"] = "C"
+        env["LANG"] = "C"
+        try:
+            return subprocess.run(
+                args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=timeout,
+                check=False,
+                env=env,
+            )
+        except FileNotFoundError as exc:
+            raise ValueError(f"找不到命令: {args[0]}") from exc
+        except subprocess.TimeoutExpired as exc:
+            output = exc.stdout if isinstance(exc.stdout, str) else ""
+            command = " ".join(shlex.quote(arg) for arg in args)
+            raise ValueError(f"命令超时: {command}\n{output}") from exc
+
+    def _run_checked_command(
+        self,
+        args: list[str],
+        error_message: str,
+        *,
+        timeout: int = MID360_NETWORK_COMMAND_TIMEOUT,
+    ) -> str:
+        result = self._run_command(args, timeout=timeout)
+        if result.returncode != 0:
+            output = (result.stdout or "").strip()
+            raise ValueError(f"{error_message}\n$ {' '.join(shlex.quote(arg) for arg in args)}\n{output}")
+        return result.stdout or ""
+
     def _selected_pcd_path(self) -> Path | None:
         selected = self.pcd_var.get().strip()
         if not selected:
@@ -702,7 +1032,7 @@ class NavigationCoreLauncher(tk.Tk):
         if not path.exists():
             messagebox.showerror("Navigation Core Launcher", f"标定文件不存在:\n{path}", parent=self)
             return None
-        return f"package://navigation/config/calibration/cali_params/{path.name}"
+        return str(path)
 
     @staticmethod
     def _calibration_dirs() -> list[Path]:

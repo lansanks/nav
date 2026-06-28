@@ -419,6 +419,8 @@ NavigationMapNode::NavigationMapNode()
       create_client<navigation::srv::StartNavigation>("/navigation/start");
     context_.stop_client =
       create_client<navigation::srv::StopNavigation>("/navigation/stop");
+    context_.set_radar_calibration_client =
+      create_client<navigation::srv::StringCommand>("/navigation/set_radar_calibration");
 
     // Subscribe to state and status from core
     remote_state_subscription_ = create_subscription<nav_msgs::msg::Odometry>(
@@ -483,7 +485,7 @@ NavigationMapNode::NavigationMapNode()
   if (context_.remote_control) {
     RCLCPP_INFO(
       get_logger(),
-      "Remote UI mode. services on /navigation/{set_waypoints,set_config,start,stop}, "
+      "Remote UI mode. services on /navigation/{set_waypoints,set_config,start,stop,set_radar_calibration}, "
       "state: %s, status: %s, cmd_vel: %s",
       state_topic.c_str(),
       status_topic.c_str(),

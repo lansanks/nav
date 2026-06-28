@@ -30,6 +30,7 @@ public:
   void stopNavigationForRouteChange();
   void syncControllerWaypoints();
   void startNavigation(const std::string & controller_name);
+  void applyRadarCalibrationFile(const std::string & path);
   void updateNavigationController(bool has_state, const navigation::RobotNavigationState & state);
   bool handleArmEvent(const std::string & event, std::string * response_message);
 
@@ -51,6 +52,7 @@ private:
     const navigation::ControllerConfig & config,
     const std::string & controller_name);
   void sendStopRequest(const std::string & reason);
+  void sendSetRadarCalibrationRequest(const std::string & path);
 
   NavigationNodeContext & context_;
   rclcpp::Logger logger_;
