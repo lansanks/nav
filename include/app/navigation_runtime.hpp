@@ -1,6 +1,7 @@
 #ifndef NAVIGATION_APP_NAVIGATION_RUNTIME_HPP_
 #define NAVIGATION_APP_NAVIGATION_RUNTIME_HPP_
 
+#include <cstddef>
 #include <functional>
 #include <string>
 #include <vector>
@@ -33,6 +34,7 @@ public:
   void stopNavigation(const std::string & message);
   void stopNavigationForRouteChange();
   void syncControllerWaypoints();
+  void syncNavigationStartProgress(std::size_t start_index);
   void startNavigation(const std::string & controller_name);
   void applyRadarCalibrationFile(const std::string & path);
   void updateNavigationController(bool has_state, const navigation::RobotNavigationState & state);

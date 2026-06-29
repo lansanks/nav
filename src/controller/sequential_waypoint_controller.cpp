@@ -58,7 +58,9 @@ public:
     updateMessage();
   }
 
-  bool start(std::string * error_message) override
+  bool start(
+    std::string * error_message,
+    const RobotNavigationState * initial_state = nullptr) override
   {
     if (waypoints_.empty()) {
       if (error_message != nullptr) {
@@ -73,7 +75,7 @@ public:
 
     active_ = true;
     complete_ = false;
-    target_index_ = 0;
+    target_index_ = startIndexForState(initial_state);
     updateMessage();
     return true;
   }
@@ -149,6 +151,28 @@ private:
         return;
       }
     }
+  }
+
+  std::size_t startIndexForState(const RobotNavigationState * state) const
+  {
+    if (state == nullptr || !state->valid) {
+      return 0;
+    }
+
+    std::size_t best_index = 0;
+    double best_distance = config_.waypoint_tolerance;
+    bool found_nearby = false;
+    for (std::size_t i = 0; i < waypoints_.size(); ++i) {
+      const auto & point = waypoints_[i];
+      const double distance = std::hypot(point.x - state->x, point.y - state->y);
+      if (distance < best_distance) {
+        best_distance = distance;
+        best_index = i;
+        found_nearby = true;
+      }
+    }
+
+    return found_nearby ? best_index : 0;
   }
 
   double targetHeading(std::size_t index) const

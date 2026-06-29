@@ -208,6 +208,33 @@ void NavigationRuntime::syncControllerWaypoints()
   context_.navigation_status = context_.controller->status().message;
 }
 
+void NavigationRuntime::syncNavigationStartProgress(std::size_t start_index)
+{
+  if (start_index == 0 || context_.map == nullptr) {
+    return;
+  }
+
+  const auto point_count = context_.map->points().size();
+  const auto clamped_start = std::min(start_index, point_count);
+  if (context_.navigation_event_triggered.size() < point_count) {
+    context_.navigation_event_triggered.resize(point_count, false);
+  }
+  for (std::size_t i = 0; i < clamped_start; ++i) {
+    context_.navigation_event_triggered[i] = true;
+  }
+
+  for (auto & task : context_.mission_tasks) {
+    if (task.point_index >= clamped_start) {
+      continue;
+    }
+    task.triggered = true;
+    task.ack = true;
+    task.grabbed = true;
+    task.placed = true;
+    task.completed = true;
+  }
+}
+
 void NavigationRuntime::startNavigation(const std::string & controller_name)
 {
   if (context_.remote_control) {
@@ -250,8 +277,12 @@ void NavigationRuntime::startNavigation(const std::string & controller_name)
   resetNavigationEventState();
   next_controller->setWaypoints(controllerWaypointsForCurrentRace());
 
+  navigation::RobotNavigationState initial_state;
+  const bool has_initial_state =
+    context_.interface != nullptr && context_.interface->getState(initial_state);
+
   std::string error_message;
-  if (!next_controller->start(&error_message)) {
+  if (!next_controller->start(&error_message, has_initial_state ? &initial_state : nullptr)) {
     context_.controller = std::move(next_controller);
     context_.navigation_status = error_message.empty() ? "Navigation start failed" : error_message;
     context_.status_message = context_.navigation_status;
@@ -261,6 +292,7 @@ void NavigationRuntime::startNavigation(const std::string & controller_name)
   }
 
   context_.controller = std::move(next_controller);
+  syncNavigationStartProgress(context_.controller->status().target_index);
   context_.navigation_status = context_.controller->status().message;
   context_.status_message = "Navigation started";
   RCLCPP_INFO(logger_, "Navigation started with controller '%s'.", context_.selected_controller_name.c_str());

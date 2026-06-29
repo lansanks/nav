@@ -45,7 +45,9 @@ public:
   virtual std::string name() const = 0;
   virtual void configure(const ControllerConfig & config) = 0;
   virtual void setWaypoints(const std::vector<maps::MapPoint> & points) = 0;
-  virtual bool start(std::string * error_message) = 0;
+  virtual bool start(
+    std::string * error_message,
+    const RobotNavigationState * initial_state = nullptr) = 0;
   virtual void stop() = 0;
   virtual geometry_msgs::msg::Twist update(const RobotNavigationState & state) = 0;
   virtual ControllerStatus status() const = 0;

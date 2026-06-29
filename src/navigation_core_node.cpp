@@ -454,8 +454,12 @@ private:
 
     next_controller->setWaypoints(controllerPointsForRace(context_.map->points(), context_.race_logic));
 
+    navigation::RobotNavigationState initial_state;
+    const bool has_initial_state =
+      context_.interface != nullptr && context_.interface->getState(initial_state);
+
     std::string error_message;
-    if (!next_controller->start(&error_message)) {
+    if (!next_controller->start(&error_message, has_initial_state ? &initial_state : nullptr)) {
       context_.controller = std::move(next_controller);
       response->success = false;
       response->message = error_message.empty() ? "Navigation start failed" : error_message;
@@ -466,6 +470,7 @@ private:
     }
 
     context_.controller = std::move(next_controller);
+    runtime_.syncNavigationStartProgress(context_.controller->status().target_index);
     context_.navigation_status = context_.controller->status().message;
 
     response->success = true;
