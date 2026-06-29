@@ -12,6 +12,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "calibration/radar_calibration.hpp"
@@ -35,6 +36,19 @@ std::string trimCopy(const std::string & text)
   }
   const auto last = text.find_last_not_of(" \t\r\n");
   return text.substr(first, last - first + 1);
+}
+
+std::string defaultMergedPointsName()
+{
+  const std::string base = "merged_points";
+  for (int index = 1; index < 1000; ++index) {
+    const auto name = index == 1 ? base + ".yaml" : base + "_" + std::to_string(index) + ".yaml";
+    std::error_code error;
+    if (!std::filesystem::exists(navigation::maps::resolvePointsFilePath(name), error)) {
+      return name;
+    }
+  }
+  return base + ".yaml";
 }
 
 bool parseDoubleField(const std::string & text, const std::string & label, double & value, std::string & error)
@@ -648,7 +662,7 @@ NavigationUiCoordinator::NavigationUiCoordinator(
 void NavigationUiCoordinator::handleUiHit(const navigation::ui::MapUiHit & hit)
 {
   if (hit.action == navigation::ui::MapUiAction::DropdownOption) {
-    selectDropdownOption(hit.option_index);
+    handleDropdownClick(hit.option_index, false);
     return;
   }
   if (hit.action == navigation::ui::MapUiAction::SettingsField) {
@@ -826,6 +840,8 @@ void NavigationUiCoordinator::beginDropdown(navigation::ui::MapDropdownMode mode
   resetTextInput();
   context_.dropdown_mode = mode;
   context_.dropdown_paths.clear();
+  context_.dropdown_marked_indices.clear();
+  context_.dropdown_marked_order.clear();
 
   if (mode == navigation::ui::MapDropdownMode::LoadPoints) {
     context_.dropdown_paths = navigation::maps::listPointsFiles(context_.points_file);
@@ -880,7 +896,71 @@ void NavigationUiCoordinator::clearDropdown()
   context_.dropdown_mode = navigation::ui::MapDropdownMode::None;
   context_.dropdown_paths.clear();
   context_.dropdown_labels.clear();
+  context_.dropdown_marked_indices.clear();
+  context_.dropdown_marked_order.clear();
   context_.dropdown_selected_index = -1;
+}
+
+void NavigationUiCoordinator::handleDropdownClick(int option_index, bool ctrl_pressed)
+{
+  if (context_.dropdown_mode == navigation::ui::MapDropdownMode::LoadPoints && ctrl_pressed) {
+    togglePointFileMergeSelection(option_index);
+    return;
+  }
+  selectDropdownOption(option_index);
+}
+
+void NavigationUiCoordinator::togglePointFileMergeSelection(int option_index)
+{
+  if (option_index < 0 || option_index >= static_cast<int>(context_.dropdown_paths.size())) {
+    return;
+  }
+
+  context_.dropdown_selected_index = option_index;
+  const auto marked_iter = std::find(
+    context_.dropdown_marked_indices.begin(),
+    context_.dropdown_marked_indices.end(),
+    option_index);
+  if (marked_iter == context_.dropdown_marked_indices.end()) {
+    context_.dropdown_marked_indices.push_back(option_index);
+    context_.dropdown_marked_order.push_back(option_index);
+  } else {
+    context_.dropdown_marked_indices.erase(marked_iter);
+    context_.dropdown_marked_order.erase(
+      std::remove(
+        context_.dropdown_marked_order.begin(),
+        context_.dropdown_marked_order.end(),
+        option_index),
+      context_.dropdown_marked_order.end());
+  }
+
+  context_.status_message =
+    "Selected " + std::to_string(context_.dropdown_marked_order.size()) + " point files";
+}
+
+void NavigationUiCoordinator::beginMergeSelectedPointFiles()
+{
+  if (context_.dropdown_mode != navigation::ui::MapDropdownMode::LoadPoints ||
+    context_.dropdown_marked_order.size() < 2)
+  {
+    context_.status_message = "Select at least two point files";
+    return;
+  }
+
+  context_.pending_merge_point_paths.clear();
+  for (const auto option_index : context_.dropdown_marked_order) {
+    if (option_index < 0 || option_index >= static_cast<int>(context_.dropdown_paths.size())) {
+      context_.status_message = "Merge selection invalid";
+      context_.pending_merge_point_paths.clear();
+      return;
+    }
+    context_.pending_merge_point_paths.push_back(context_.dropdown_paths[static_cast<std::size_t>(option_index)]);
+  }
+
+  beginTextInput(
+    navigation::keyboards::TextInputMode::MergePointsAs,
+    "Merged point file name",
+    defaultMergedPointsName());
 }
 
 void NavigationUiCoordinator::selectDropdownOption(int option_index)
@@ -949,6 +1029,7 @@ void NavigationUiCoordinator::beginEventLabelInput(std::size_t point_index)
 void NavigationUiCoordinator::cancelTextInput()
 {
   context_.event_label_edit_active = false;
+  context_.pending_merge_point_paths.clear();
   resetTextInput();
   context_.status_message = "Input cancelled";
 }
@@ -976,6 +1057,9 @@ void NavigationUiCoordinator::confirmTextInput()
     points_workflow_.createNewPointsFile(value);
   } else if (mode == navigation::keyboards::TextInputMode::SavePointsAs) {
     points_workflow_.savePointsAs(value);
+  } else if (mode == navigation::keyboards::TextInputMode::MergePointsAs) {
+    points_workflow_.mergePointsFilesAs(context_.pending_merge_point_paths, value);
+    context_.pending_merge_point_paths.clear();
   } else if (mode == navigation::keyboards::TextInputMode::SaveParamsAs) {
     saveParamsAs(value);
   } else if (mode == navigation::keyboards::TextInputMode::SaveRadarPointAs) {
@@ -1092,6 +1176,12 @@ bool NavigationUiCoordinator::handleDropdownKey(int key)
       context_.status_message = "Selection cancelled";
     },
     [this](int option_index) {
+      if (context_.dropdown_mode == navigation::ui::MapDropdownMode::LoadPoints &&
+        context_.dropdown_marked_order.size() >= 2)
+      {
+        beginMergeSelectedPointFiles();
+        return;
+      }
       selectDropdownOption(option_index);
     });
 }
@@ -1201,6 +1291,7 @@ navigation::ui::MapUiState NavigationUiCoordinator::buildUiState()
   ui_state.dropdown_mode = context_.dropdown_mode;
   ui_state.dropdown_items = context_.dropdown_labels;
   ui_state.dropdown_selected_index = context_.dropdown_selected_index;
+  ui_state.dropdown_marked_indices = context_.dropdown_marked_indices;
   ui_state.panel_scroll_px = context_.panel_scroll_px;
   ui_state.panel_collapsed = context_.panel_collapsed;
   ui_state.fullscreen = context_.fullscreen;

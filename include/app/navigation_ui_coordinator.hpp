@@ -2,6 +2,7 @@
 #define NAVIGATION_APP_NAVIGATION_UI_COORDINATOR_HPP_
 
 #include <string>
+#include <vector>
 
 #include "app/navigation_node_context.hpp"
 #include "app/navigation_points_workflow.hpp"
@@ -29,6 +30,7 @@ public:
   void toggleDropdown(navigation::ui::MapDropdownMode mode);
   void clearDropdown();
   void selectDropdownOption(int option_index);
+  void handleDropdownClick(int option_index, bool ctrl_pressed);
   void beginTextInput(
     navigation::keyboards::TextInputMode mode,
     const std::string & label,
@@ -39,6 +41,8 @@ public:
 
 private:
   void beginDropdown(navigation::ui::MapDropdownMode mode);
+  void togglePointFileMergeSelection(int option_index);
+  void beginMergeSelectedPointFiles();
   void resetTextInput();
   void cancelTextInput();
   void confirmTextInput();

@@ -180,7 +180,11 @@ void NavigationMouseController::handleLeftClick(int x, int y, int flags)
   }
 
   if (hit.action != navigation::ui::MapUiAction::None) {
-    ui_coordinator_.handleUiHit(hit);
+    if (hit.action == navigation::ui::MapUiAction::DropdownOption) {
+      ui_coordinator_.handleDropdownClick(hit.option_index, (flags & cv::EVENT_FLAG_CTRLKEY) != 0);
+    } else {
+      ui_coordinator_.handleUiHit(hit);
+    }
     return;
   }
 

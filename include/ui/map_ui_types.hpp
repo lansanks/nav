@@ -110,6 +110,7 @@ struct MapUiState
   MapDropdownMode dropdown_mode{MapDropdownMode::None};
   std::vector<std::string> dropdown_items;
   int dropdown_selected_index{-1};
+  std::vector<int> dropdown_marked_indices;
   int panel_scroll_px{0};
   bool panel_collapsed{false};
   bool fullscreen{false};

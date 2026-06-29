@@ -45,6 +45,9 @@ struct NavigationNodeContext
   navigation::ui::MapDropdownMode dropdown_mode{navigation::ui::MapDropdownMode::None};
   std::vector<std::string> dropdown_paths;
   std::vector<std::string> dropdown_labels;
+  std::vector<int> dropdown_marked_indices;
+  std::vector<int> dropdown_marked_order;
+  std::vector<std::string> pending_merge_point_paths;
   std::vector<std::string> controller_names;
   std::vector<navigation::params::ParamField> param_fields;
   navigation::ui::OnlineParamsSession params_session;

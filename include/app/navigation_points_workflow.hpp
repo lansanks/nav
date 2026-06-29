@@ -23,6 +23,9 @@ public:
   void loadPointsFromFile(const std::string & path_or_name);
   void savePointsAs(const std::string & path_or_name);
   void createNewPointsFile(const std::string & path_or_name);
+  void mergePointsFilesAs(
+    const std::vector<std::string> & source_paths,
+    const std::string & path_or_name);
   void addClickedPoint(int pixel_x, int pixel_y);
   void toggleFastMarker(std::size_t index);
   void setEventLabel(std::size_t index, const std::string & event_label);

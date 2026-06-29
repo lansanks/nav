@@ -122,6 +122,58 @@ void NavigationPointsWorkflow::createNewPointsFile(const std::string & path_or_n
   RCLCPP_INFO(logger_, "Created empty navigation points file: %s", context_.points_file.c_str());
 }
 
+void NavigationPointsWorkflow::mergePointsFilesAs(
+  const std::vector<std::string> & source_paths,
+  const std::string & path_or_name)
+{
+  if (source_paths.size() < 2) {
+    context_.status_message = "Select at least two point files";
+    return;
+  }
+
+  std::vector<navigation::maps::MapPoint> merged_points;
+  for (const auto & source_path : source_paths) {
+    auto points = navigation::maps::loadPointsFile(source_path);
+    if (points.empty()) {
+      context_.status_message = "Merge failed: empty point file";
+      RCLCPP_WARN(logger_, "Cannot merge empty point file: %s", source_path.c_str());
+      return;
+    }
+    merged_points.insert(merged_points.end(), points.begin(), points.end());
+  }
+
+  renumberPoints(merged_points);
+  std::string marker_error;
+  if (context_.race_logic == "obstacle" &&
+    !navigation::maps::validateFastMarkers(merged_points, &marker_error))
+  {
+    context_.status_message = marker_error;
+    RCLCPP_WARN(logger_, "Merged point route rejected: %s", marker_error.c_str());
+    return;
+  }
+
+  const auto output_path = navigation::maps::resolvePointsFilePath(path_or_name);
+  std::string error;
+  if (!navigation::maps::savePointsFile(output_path, merged_points, &error)) {
+    context_.status_message = "Merge save failed";
+    RCLCPP_ERROR(logger_, "Failed to save merged point file: %s", error.c_str());
+    return;
+  }
+
+  runtime_.stopNavigationForRouteChange();
+  context_.points_file = output_path;
+  context_.map->setPoints(merged_points);
+  runtime_.syncControllerWaypoints();
+  context_.status_message =
+    "Merged points: " + std::filesystem::path(context_.points_file).filename().string();
+  RCLCPP_INFO(
+    logger_,
+    "Merged %zu point files into %s with %zu points.",
+    source_paths.size(),
+    context_.points_file.c_str(),
+    merged_points.size());
+}
+
 void NavigationPointsWorkflow::addClickedPoint(int pixel_x, int pixel_y)
 {
   if (context_.route_patch_active) {

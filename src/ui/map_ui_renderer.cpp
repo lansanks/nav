@@ -1,6 +1,7 @@
 #include "ui/map_ui_renderer.hpp"
 
 #include <algorithm>
+#include <iterator>
 
 #include "opencv2/imgproc.hpp"
 
@@ -880,12 +881,26 @@ void MapUiRenderer::drawDropdownMenu(cv::Mat & canvas, const MapUiState & ui_sta
 
   for (std::size_t i = 0; i < item_rects.size(); ++i) {
     const auto & rect = item_rects[i];
-    const bool selected = static_cast<int>(i) == ui_state.dropdown_selected_index;
-    if (selected) {
+    const int option_index = static_cast<int>(i);
+    const auto marked_iter = std::find(
+      ui_state.dropdown_marked_indices.begin(),
+      ui_state.dropdown_marked_indices.end(),
+      option_index);
+    const bool marked = marked_iter != ui_state.dropdown_marked_indices.end();
+    const bool selected = option_index == ui_state.dropdown_selected_index;
+    if (marked || selected) {
       cv::rectangle(canvas, rect, palette.selected, cv::FILLED);
     }
+    if (selected && marked) {
+      cv::rectangle(canvas, rect, palette.button_border, 1, cv::LINE_AA);
+    }
     cv::line(canvas, cv::Point(rect.x, rect.y + rect.height), cv::Point(rect.x + rect.width, rect.y + rect.height), palette.border, 1, cv::LINE_AA);
-    putPanelText(canvas, shortenMiddle(ui_state.dropdown_items[i], 31), cv::Point(rect.x + 12, rect.y + 23), 0.45, palette.text);
+    std::string label = ui_state.dropdown_items[i];
+    if (marked) {
+      const auto order = std::distance(ui_state.dropdown_marked_indices.begin(), marked_iter) + 1;
+      label = std::to_string(order) + ". " + label;
+    }
+    putPanelText(canvas, shortenMiddle(label, 31), cv::Point(rect.x + 12, rect.y + 23), 0.45, palette.text);
   }
 }
 
