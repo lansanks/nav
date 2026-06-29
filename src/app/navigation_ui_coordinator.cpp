@@ -1026,9 +1026,37 @@ void NavigationUiCoordinator::beginEventLabelInput(std::size_t point_index)
     point.event_label);
 }
 
+void NavigationUiCoordinator::beginSegmentSpeedInput(std::size_t target_index)
+{
+  if (target_index == 0 || target_index >= context_.map->points().size()) {
+    return;
+  }
+
+  context_.segment_speed_edit_target_index = target_index;
+  context_.segment_speed_edit_active = true;
+  const auto & from = context_.map->points()[target_index - 1];
+  const auto & to = context_.map->points()[target_index];
+  std::string default_text = "3";
+  if (to.segment_custom_speed) {
+    std::ostringstream stream;
+    if (to.segment_speed_level >= 1 && to.segment_speed_level <= 5) {
+      stream << static_cast<int>(to.segment_speed_level);
+    } else {
+      stream << to.segment_linear_x << "," << to.segment_max_angular_speed << ","
+             << to.segment_k_alpha << "," << to.segment_k_beta;
+    }
+    default_text = stream.str();
+  }
+  beginTextInput(
+    navigation::keyboards::TextInputMode::SegmentSpeed,
+    "Segment " + std::to_string(from.id) + "-" + std::to_string(to.id) + " speed: 1-5 or vx,w,ka,kb",
+    default_text);
+}
+
 void NavigationUiCoordinator::cancelTextInput()
 {
   context_.event_label_edit_active = false;
+  context_.segment_speed_edit_active = false;
   context_.pending_merge_point_paths.clear();
   resetTextInput();
   context_.status_message = "Input cancelled";
@@ -1045,6 +1073,14 @@ void NavigationUiCoordinator::confirmTextInput()
       points_workflow_.setEventLabel(context_.event_label_edit_index, value);
     }
     context_.event_label_edit_active = false;
+    return;
+  }
+
+  if (mode == navigation::keyboards::TextInputMode::SegmentSpeed) {
+    if (context_.segment_speed_edit_active) {
+      points_workflow_.setSegmentSpeed(context_.segment_speed_edit_target_index, value);
+    }
+    context_.segment_speed_edit_active = false;
     return;
   }
 
@@ -1066,6 +1102,7 @@ void NavigationUiCoordinator::confirmTextInput()
     saveRadarPointAs(value);
   }
   context_.event_label_edit_active = false;
+  context_.segment_speed_edit_active = false;
 }
 
 bool NavigationUiCoordinator::handleTextInputKey(int key)

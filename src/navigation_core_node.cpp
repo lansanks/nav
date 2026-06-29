@@ -351,6 +351,12 @@ private:
       point.y = mp.y;
       point.fast = mp.fast;
       point.constant_speed = mp.constant_speed;
+      point.segment_custom_speed = mp.segment_custom_speed;
+      point.segment_speed_level = mp.segment_speed_level;
+      point.segment_linear_x = mp.segment_linear_x;
+      point.segment_max_angular_speed = mp.segment_max_angular_speed;
+      point.segment_k_alpha = mp.segment_k_alpha;
+      point.segment_k_beta = mp.segment_k_beta;
       point.task_type = mp.task_type;
       point.event_label = mp.event_label;
       points.push_back(point);
@@ -412,6 +418,12 @@ private:
       point.y = mp.y;
       point.fast = mp.fast;
       point.constant_speed = mp.constant_speed;
+      point.segment_custom_speed = mp.segment_custom_speed;
+      point.segment_speed_level = mp.segment_speed_level;
+      point.segment_linear_x = mp.segment_linear_x;
+      point.segment_max_angular_speed = mp.segment_max_angular_speed;
+      point.segment_k_alpha = mp.segment_k_alpha;
+      point.segment_k_beta = mp.segment_k_beta;
       point.task_type = mp.task_type;
       point.event_label = mp.event_label;
       points.push_back(point);

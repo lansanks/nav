@@ -36,6 +36,7 @@ public:
     const std::string & label,
     const std::string & default_text);
   void beginEventLabelInput(std::size_t point_index);
+  void beginSegmentSpeedInput(std::size_t target_index);
   bool handleActiveInputKey(int key);
   navigation::ui::MapUiState buildUiState();
 

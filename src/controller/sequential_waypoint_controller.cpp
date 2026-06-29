@@ -98,20 +98,33 @@ public:
     }
 
     const auto & target = waypoints_[target_index_];
-    if (isConstantSpeedSegment(target_index_)) {
+    if (isFixedSpeedSegment(target_index_)) {
       const double dx = target.x - state.x;
       const double dy = target.y - state.y;
       const double gamma = std::atan2(dy, dx);
       const double theta_g = headingBetween(waypoints_[target_index_ - 1], target);
       const double alpha = wrapAngle(gamma - state.yaw);
       const double beta = wrapAngle(theta_g - gamma);
+      const bool custom_speed_segment = isCustomSpeedSegment(target_index_);
+      const double linear_x = custom_speed_segment ?
+        positiveOrDefault(target.segment_linear_x, config_.constant_speed_linear_x) :
+        config_.constant_speed_linear_x;
+      const double max_angular = custom_speed_segment ?
+        positiveOrDefault(target.segment_max_angular_speed, config_.max_angular_speed) :
+        config_.max_angular_speed;
+      const double k_alpha = custom_speed_segment ?
+        nonZeroOrDefault(target.segment_k_alpha, config_.k_alpha) :
+        config_.k_alpha;
+      const double k_beta = custom_speed_segment ?
+        nonZeroOrDefault(target.segment_k_beta, config_.k_beta) :
+        config_.k_beta;
 
       geometry_msgs::msg::Twist command;
-      command.linear.x = config_.constant_speed_linear_x;
+      command.linear.x = linear_x;
       command.angular.z = std::clamp(
-        config_.k_alpha * alpha + config_.k_beta * beta,
-        -config_.max_angular_speed,
-        config_.max_angular_speed);
+        k_alpha * alpha + k_beta * beta,
+        -max_angular,
+        max_angular);
       updateMessage();
       return command;
     }
@@ -226,10 +239,24 @@ private:
       isConstantSpeedMarker(waypoints_[target_index]);
   }
 
+  bool isCustomSpeedSegment(std::size_t target_index) const
+  {
+    if (target_index == 0 || target_index >= waypoints_.size()) {
+      return false;
+    }
+    return waypoints_[target_index].segment_custom_speed &&
+      waypoints_[target_index].task_type == maps::kTaskTypeNone;
+  }
+
+  bool isFixedSpeedSegment(std::size_t target_index) const
+  {
+    return isConstantSpeedSegment(target_index) || isCustomSpeedSegment(target_index);
+  }
+
   bool hasArrivedAtTarget(const RobotNavigationState & state, std::size_t target_index) const
   {
     const auto & target = waypoints_[target_index];
-    if (!isConstantSpeedSegment(target_index)) {
+    if (!isFixedSpeedSegment(target_index)) {
       const double rho = std::hypot(target.x - state.x, target.y - state.y);
       return rho < config_.waypoint_tolerance;
     }
@@ -257,6 +284,16 @@ private:
   static bool isConstantSpeedMarker(const maps::MapPoint & point)
   {
     return point.constant_speed && !point.fast && point.task_type == maps::kTaskTypeNone;
+  }
+
+  static double positiveOrDefault(double value, double fallback)
+  {
+    return value > 0.0 ? value : fallback;
+  }
+
+  static double nonZeroOrDefault(double value, double fallback)
+  {
+    return std::abs(value) > 1e-9 ? value : fallback;
   }
 
   void updateMessage()

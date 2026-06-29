@@ -1,8 +1,13 @@
 #include "app/navigation_points_workflow.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
+#include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <filesystem>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -28,6 +33,55 @@ void clearRoutePatchState(NavigationNodeContext & context)
   context.route_patch_insert_index = 0;
   context.route_patch_original_points.clear();
   context.route_patch_points.clear();
+}
+
+std::string trim(std::string text)
+{
+  const auto first = text.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) {
+    return "";
+  }
+  const auto last = text.find_last_not_of(" \t\r\n");
+  return text.substr(first, last - first + 1);
+}
+
+std::string lowerAscii(std::string text)
+{
+  std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  return text;
+}
+
+std::vector<double> parseNumbers(const std::string & text)
+{
+  std::vector<double> values;
+  const char * cursor = text.c_str();
+  char * end = nullptr;
+  while (*cursor != '\0') {
+    const double value = std::strtod(cursor, &end);
+    if (end == cursor) {
+      ++cursor;
+      continue;
+    }
+    values.push_back(value);
+    cursor = end;
+  }
+  return values;
+}
+
+bool isSingleDigitLevel(const std::string & text)
+{
+  return text.size() == 1 && text[0] >= '1' && text[0] <= '5';
+}
+
+double speedFactorForLevel(std::uint8_t level)
+{
+  constexpr std::array<double, 5> factors{0.50, 0.75, 1.00, 1.25, 1.50};
+  if (level < 1 || level > factors.size()) {
+    return factors[2];
+  }
+  return factors[static_cast<std::size_t>(level - 1)];
 }
 
 }  // namespace
@@ -238,6 +292,89 @@ void NavigationPointsWorkflow::setEventLabel(std::size_t index, const std::strin
       "Point %d event_label set to '%s'.",
       point_id,
       event_label.c_str());
+  }
+}
+
+void NavigationPointsWorkflow::setSegmentSpeed(std::size_t target_index, const std::string & input_text)
+{
+  const auto & points = context_.map->points();
+  if (target_index == 0 || target_index >= points.size()) {
+    context_.status_message = "No segment selected";
+    return;
+  }
+
+  const auto text = trim(input_text);
+  const auto lowered = lowerAscii(text);
+  if (text.empty() || lowered == "clear" || lowered == "off" || lowered == "0") {
+    runtime_.stopNavigationForRouteChange();
+    context_.map->setPointSegmentSpeed(target_index, false, 0, 0.0, 0.0, 0.0, 0.0);
+    runtime_.syncControllerWaypoints();
+    if (savePoints()) {
+      context_.status_message = "Segment speed cleared";
+    }
+    return;
+  }
+
+  std::uint8_t level = 0;
+  double linear_x = context_.controller_config.constant_speed_linear_x;
+  double max_angular_speed = context_.controller_config.max_angular_speed;
+  double k_alpha = context_.controller_config.k_alpha;
+  double k_beta = context_.controller_config.k_beta;
+
+  const auto values = parseNumbers(text);
+  const bool level_text = isSingleDigitLevel(text) || lowered.rfind("level", 0) == 0 ||
+    lowered.rfind("gear", 0) == 0;
+  if (level_text && !values.empty()) {
+    const int requested_level = static_cast<int>(std::lround(values.front()));
+    if (requested_level < 1 || requested_level > 5) {
+      context_.status_message = "Speed level must be 1..5";
+      return;
+    }
+    level = static_cast<std::uint8_t>(requested_level);
+    linear_x = context_.controller_config.constant_speed_linear_x * speedFactorForLevel(level);
+    max_angular_speed = context_.controller_config.max_angular_speed;
+    k_alpha = context_.controller_config.k_alpha;
+    k_beta = context_.controller_config.k_beta;
+  } else {
+    if (values.empty()) {
+      context_.status_message = "Use 1..5 or vx,w,k_alpha,k_beta";
+      return;
+    }
+    linear_x = values[0];
+    if (values.size() > 1) {
+      max_angular_speed = values[1];
+    }
+    if (values.size() > 2) {
+      k_alpha = values[2];
+    }
+    if (values.size() > 3) {
+      k_beta = values[3];
+    }
+  }
+
+  if (linear_x <= 0.0 || max_angular_speed <= 0.0) {
+    context_.status_message = "Speed and angular limit must be positive";
+    return;
+  }
+
+  runtime_.stopNavigationForRouteChange();
+  context_.map->setPointSegmentSpeed(
+    target_index,
+    true,
+    level,
+    linear_x,
+    max_angular_speed,
+    k_alpha,
+    k_beta);
+  runtime_.syncControllerWaypoints();
+  if (savePoints()) {
+    std::ostringstream message;
+    message << "Segment " << points[target_index - 1].id << "-" << points[target_index].id
+            << " speed vx=" << linear_x;
+    if (level > 0) {
+      message << " level=" << static_cast<int>(level);
+    }
+    context_.status_message = message.str();
   }
 }
 

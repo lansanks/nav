@@ -17,6 +17,7 @@ enum class TextInputMode
   SaveParamsAs,
   SaveRadarPointAs,
   EventLabel,
+  SegmentSpeed,
   MergePointsAs,
 };
 

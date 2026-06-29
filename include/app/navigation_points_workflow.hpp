@@ -29,6 +29,7 @@ public:
   void addClickedPoint(int pixel_x, int pixel_y);
   void toggleFastMarker(std::size_t index);
   void setEventLabel(std::size_t index, const std::string & event_label);
+  void setSegmentSpeed(std::size_t target_index, const std::string & input_text);
   void removeNearestPoint(int pixel_x, int pixel_y);
   void confirmRoutePatch();
   void cancelRoutePatch();

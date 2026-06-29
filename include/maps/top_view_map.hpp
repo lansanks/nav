@@ -28,6 +28,12 @@ struct MapPoint
   double y{0.0};
   bool fast{false};
   bool constant_speed{false};
+  bool segment_custom_speed{false};
+  std::uint8_t segment_speed_level{0};
+  double segment_linear_x{0.0};
+  double segment_max_angular_speed{0.0};
+  double segment_k_alpha{0.0};
+  double segment_k_beta{0.0};
   std::uint8_t task_type{kTaskTypeNone};
   std::string event_label;
 };
@@ -49,6 +55,7 @@ public:
   MapUiHit hitTestUi(int pixel_x, int pixel_y, const MapUiState & ui_state) const;
   bool pixelToWorld(int pixel_x, int pixel_y, MapPoint & point) const;
   int hitTestPoint(int pixel_x, int pixel_y, int radius_px = 10) const;
+  int hitTestSegmentTarget(int pixel_x, int pixel_y, int radius_px = 9) const;
   int nearestPointIndex(int pixel_x, int pixel_y) const;
   bool zoomAt(int pixel_x, int pixel_y, double factor);
   bool panBy(int delta_x, int delta_y);
@@ -56,6 +63,14 @@ public:
   void addPoint(const MapPoint & point);
   bool setPointFast(std::size_t index, bool fast);
   bool setPointConstantSpeed(std::size_t index, bool constant_speed);
+  bool setPointSegmentSpeed(
+    std::size_t index,
+    bool custom_speed,
+    std::uint8_t level,
+    double linear_x,
+    double max_angular_speed,
+    double k_alpha,
+    double k_beta);
   bool setPointEventLabel(std::size_t index, const std::string & event_label);
   bool togglePointFast(std::size_t index);
   bool removePoint(std::size_t index);

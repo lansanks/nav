@@ -344,6 +344,12 @@ void NavigationRuntime::sendSetWaypointsRequest(
     mp.y = point.y;
     mp.fast = point.fast;
     mp.constant_speed = point.constant_speed;
+    mp.segment_custom_speed = point.segment_custom_speed;
+    mp.segment_speed_level = point.segment_speed_level;
+    mp.segment_linear_x = point.segment_linear_x;
+    mp.segment_max_angular_speed = point.segment_max_angular_speed;
+    mp.segment_k_alpha = point.segment_k_alpha;
+    mp.segment_k_beta = point.segment_k_beta;
     mp.task_type = point.task_type;
     mp.event_label = point.event_label;
     request->points.push_back(mp);
@@ -423,6 +429,12 @@ void NavigationRuntime::sendStartRequest(
     mp.y = point.y;
     mp.fast = point.fast;
     mp.constant_speed = point.constant_speed;
+    mp.segment_custom_speed = point.segment_custom_speed;
+    mp.segment_speed_level = point.segment_speed_level;
+    mp.segment_linear_x = point.segment_linear_x;
+    mp.segment_max_angular_speed = point.segment_max_angular_speed;
+    mp.segment_k_alpha = point.segment_k_alpha;
+    mp.segment_k_beta = point.segment_k_beta;
     mp.task_type = point.task_type;
     mp.event_label = point.event_label;
     request->points.push_back(mp);

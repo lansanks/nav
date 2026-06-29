@@ -388,6 +388,16 @@ bool isConstantSpeedMarker(const MapPoint & point)
   return point.constant_speed && !point.fast && point.task_type == kTaskTypeNone;
 }
 
+bool isCustomSpeedSegmentTarget(const MapPoint & point)
+{
+  return point.segment_custom_speed && point.task_type == kTaskTypeNone;
+}
+
+cv::Scalar customSpeedColor()
+{
+  return cv::Scalar(190, 55, 190);
+}
+
 }  // namespace
 
 std::string resolveScenePath(const std::string & robot_name, const std::string & scene)
@@ -1013,6 +1023,7 @@ struct TopViewMap::Impl
 
       const auto p0 = worldToPixel({points[i - 1].x, points[i - 1].y});
       const auto p1 = worldToPixel({points[i].x, points[i].y});
+      const bool custom_speed_segment = isCustomSpeedSegmentTarget(points[i]);
       const bool fast_segment = isFastMarker(points[i - 1]) && isFastMarker(points[i]);
       const bool constant_speed_segment =
         isConstantSpeedMarker(points[i - 1]) && isConstantSpeedMarker(points[i]);
@@ -1020,13 +1031,15 @@ struct TopViewMap::Impl
         canvas,
         p0,
         p1,
-        constant_speed_segment ? cv::Scalar(235, 155, 35) :
-        (fast_segment ? cv::Scalar(42, 58, 235) : cv::Scalar(40, 220, 220)),
-        (fast_segment || constant_speed_segment) ? 3 : 2,
+        custom_speed_segment ? customSpeedColor() :
+        (constant_speed_segment ? cv::Scalar(235, 155, 35) :
+        (fast_segment ? cv::Scalar(42, 58, 235) : cv::Scalar(40, 220, 220))),
+        custom_speed_segment ? 4 : ((fast_segment || constant_speed_segment) ? 3 : 2),
         cv::LINE_AA);
     }
 
-    for (const auto & point : points) {
+    for (std::size_t i = 0; i < points.size(); ++i) {
+      const auto & point = points[i];
       const auto center = worldToPixel({point.x, point.y});
       cv::Scalar point_color = point.fast ? cv::Scalar(42, 58, 235) : cv::Scalar(40, 220, 220);
       if (point.constant_speed) {
@@ -1036,6 +1049,12 @@ struct TopViewMap::Impl
         point_color = cv::Scalar(42, 58, 235);
       } else if (point.task_type == kTaskTypePlace) {
         point_color = cv::Scalar(58, 150, 235);
+      }
+      const bool custom_speed_endpoint =
+        (i > 0 && isCustomSpeedSegmentTarget(points[i])) ||
+        (i + 1 < points.size() && isCustomSpeedSegmentTarget(points[i + 1]));
+      if (custom_speed_endpoint) {
+        point_color = customSpeedColor();
       }
       cv::circle(canvas, center, 8, cv::Scalar(20, 30, 35), cv::FILLED, cv::LINE_AA);
       cv::circle(canvas, center, 6, point_color, cv::FILLED, cv::LINE_AA);
@@ -1348,6 +1367,43 @@ int TopViewMap::hitTestPoint(int pixel_x, int pixel_y, int radius_px) const
   return -1;
 }
 
+int TopViewMap::hitTestSegmentTarget(int pixel_x, int pixel_y, int radius_px) const
+{
+  if (impl_->points.size() < 2) {
+    return -1;
+  }
+
+  const double radius_sq = static_cast<double>(radius_px * radius_px);
+  int best_target_index = -1;
+  double best_distance_sq = std::numeric_limits<double>::max();
+
+  for (std::size_t i = 1; i < impl_->points.size(); ++i) {
+    const auto p0 = impl_->worldToPixel({impl_->points[i - 1].x, impl_->points[i - 1].y});
+    const auto p1 = impl_->worldToPixel({impl_->points[i].x, impl_->points[i].y});
+    const double vx = static_cast<double>(p1.x - p0.x);
+    const double vy = static_cast<double>(p1.y - p0.y);
+    const double length_sq = vx * vx + vy * vy;
+    if (length_sq < 1.0) {
+      continue;
+    }
+
+    const double wx = static_cast<double>(pixel_x - p0.x);
+    const double wy = static_cast<double>(pixel_y - p0.y);
+    const double t = std::clamp((wx * vx + wy * vy) / length_sq, 0.0, 1.0);
+    const double nearest_x = static_cast<double>(p0.x) + t * vx;
+    const double nearest_y = static_cast<double>(p0.y) + t * vy;
+    const double dx = static_cast<double>(pixel_x) - nearest_x;
+    const double dy = static_cast<double>(pixel_y) - nearest_y;
+    const double distance_sq = dx * dx + dy * dy;
+    if (distance_sq <= radius_sq && distance_sq < best_distance_sq) {
+      best_distance_sq = distance_sq;
+      best_target_index = static_cast<int>(i);
+    }
+  }
+
+  return best_target_index;
+}
+
 int TopViewMap::nearestPointIndex(int pixel_x, int pixel_y) const
 {
   if (impl_->points.empty()) {
@@ -1417,6 +1473,29 @@ bool TopViewMap::setPointConstantSpeed(std::size_t index, bool constant_speed)
     impl_->points[index].fast = false;
     impl_->points[index].task_type = kTaskTypeNone;
   }
+  return true;
+}
+
+bool TopViewMap::setPointSegmentSpeed(
+  std::size_t index,
+  bool custom_speed,
+  std::uint8_t level,
+  double linear_x,
+  double max_angular_speed,
+  double k_alpha,
+  double k_beta)
+{
+  if (index >= impl_->points.size()) {
+    return false;
+  }
+
+  auto & point = impl_->points[index];
+  point.segment_custom_speed = custom_speed;
+  point.segment_speed_level = custom_speed ? static_cast<std::uint8_t>(std::clamp<int>(level, 0, 5)) : 0;
+  point.segment_linear_x = custom_speed ? linear_x : 0.0;
+  point.segment_max_angular_speed = custom_speed ? max_angular_speed : 0.0;
+  point.segment_k_alpha = custom_speed ? k_alpha : 0.0;
+  point.segment_k_beta = custom_speed ? k_beta : 0.0;
   return true;
 }
 

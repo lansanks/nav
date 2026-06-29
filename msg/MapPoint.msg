@@ -6,5 +6,11 @@ float64 x
 float64 y
 bool fast
 bool constant_speed
+bool segment_custom_speed
+uint8 segment_speed_level
+float64 segment_linear_x
+float64 segment_max_angular_speed
+float64 segment_k_alpha
+float64 segment_k_beta
 uint8 task_type
 string event_label

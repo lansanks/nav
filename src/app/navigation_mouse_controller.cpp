@@ -196,11 +196,16 @@ void NavigationMouseController::handleLeftClick(int x, int y, int flags)
 
   if ((flags & cv::EVENT_FLAG_CTRLKEY) != 0) {
     const int point_index = context_.map->hitTestPoint(x, y, 14);
-    if (point_index < 0) {
-      context_.status_message = "Ctrl+click near a point to set event";
+    if (point_index >= 0) {
+      ui_coordinator_.beginEventLabelInput(static_cast<std::size_t>(point_index));
       return;
     }
-    ui_coordinator_.beginEventLabelInput(static_cast<std::size_t>(point_index));
+    const int segment_target_index = context_.map->hitTestSegmentTarget(x, y, 10);
+    if (segment_target_index >= 0) {
+      ui_coordinator_.beginSegmentSpeedInput(static_cast<std::size_t>(segment_target_index));
+      return;
+    }
+    context_.status_message = "Ctrl+click a point for event or a segment for speed";
     return;
   }
 
