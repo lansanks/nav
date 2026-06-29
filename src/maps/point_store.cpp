@@ -109,14 +109,35 @@ std::string quoteScalar(const std::string & value)
   return output;
 }
 
+std::filesystem::path sourcePackagePathFromShare(const std::filesystem::path & share_path)
+{
+  std::error_code error;
+  for (auto current = share_path; !current.empty(); current = current.parent_path()) {
+    const auto candidate = current / "src" / "navigation";
+    if (std::filesystem::exists(candidate / "CMakeLists.txt", error) &&
+      std::filesystem::exists(candidate / "config" / "points" / "points.yaml", error))
+    {
+      return candidate;
+    }
+    if (current == current.parent_path()) {
+      break;
+    }
+  }
+  return {};
+}
+
 }  // namespace
 
 std::string defaultPointsFilePath()
 {
   try {
-    return (
-      std::filesystem::path(ament_index_cpp::get_package_share_directory("navigation")) /
-      "config" / "points" / "points.yaml").string();
+    const auto share_path =
+      std::filesystem::path(ament_index_cpp::get_package_share_directory("navigation"));
+    const auto source_path = sourcePackagePathFromShare(share_path);
+    if (!source_path.empty()) {
+      return (source_path / "config" / "points" / "points.yaml").string();
+    }
+    return (share_path / "config" / "points" / "points.yaml").string();
   } catch (const std::exception &) {
     return (std::filesystem::path("config") / "points" / "points.yaml").string();
   }

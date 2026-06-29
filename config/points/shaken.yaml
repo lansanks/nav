@@ -1,0 +1,37 @@
+points:
+  - id: 1
+    x: 9.335725
+    y: 4.927586
+    fast: false
+    task_type: none
+    event_label: "low"
+  - id: 2
+    x: 10.876360
+    y: 4.939897
+    fast: false
+    task_type: none
+    event_label: "stand"
+  - id: 3
+    x: 10.929953
+    y: 4.943593
+    fast: false
+    task_type: none
+    event_label: "_obstacle"
+  - id: 4
+    x: 12.356541
+    y: 4.924594
+    fast: false
+    task_type: none
+    event_label: ""
+  - id: 5
+    x: 13.008304
+    y: 4.257609
+    fast: false
+    task_type: none
+    event_label: ""
+  - id: 6
+    x: 12.938491
+    y: 2.558258
+    fast: false
+    task_type: none
+    event_label: ""
