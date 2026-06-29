@@ -1,6 +1,6 @@
 /**:
   ros__parameters:
-    # Race logic: obstacle keeps adjacent red-point fast pairs; mission treats red points as arm task points.
+    # Race logic: obstacle keeps adjacent red/blue marker segments; mission treats red points as arm task points.
     race_logic: obstacle
 
     # Mission race behavior.
@@ -20,12 +20,13 @@
     k_alpha: 2.40
     k_beta: -0.60
 
-    # Obstacle-race fast segment tuning. Used only when adjacent red-point pairs mark a fast segment.
+    # Obstacle-race marker tuning. Red segments use fast gains; blue segments use fixed forward speed.
     fast_max_linear_speed: 1.20
     fast_max_angular_speed: 2.20
     fast_k_rho: 1.60
     fast_k_alpha: 2.80
     fast_k_beta: -0.70
+    constant_speed_linear_x: 0.60
 
     # Runtime loop rate. Increase only if pose input and downstream command handling can keep up.
     update_rate_hz: 30.0

@@ -16,6 +16,16 @@ std::string normalizedPathText(const std::string & path)
   return std::filesystem::path(path).lexically_normal().string();
 }
 
+bool isFastMarker(const MapPoint & point)
+{
+  return point.fast && !point.constant_speed && point.task_type == kTaskTypeNone;
+}
+
+bool isConstantSpeedMarker(const MapPoint & point)
+{
+  return point.constant_speed && !point.fast && point.task_type == kTaskTypeNone;
+}
+
 }  // namespace
 
 int findPathIndex(const std::vector<std::string> & paths, const std::string & path)
@@ -85,50 +95,45 @@ std::string defaultNewPointsName()
 
 bool validateFastMarkers(const std::vector<MapPoint> & points, std::string * error_message)
 {
-  for (std::size_t i = 0; i < points.size();) {
-    if (!points[i].fast || points[i].task_type != kTaskTypeNone) {
-      ++i;
+  for (std::size_t i = 0; i < points.size(); ) {
+    if (isFastMarker(points[i])) {
+      const std::size_t begin = i;
+      while (i < points.size() && isFastMarker(points[i])) {
+        ++i;
+      }
+      if (i - begin < 2) {
+        if (error_message != nullptr) {
+          *error_message = "Fast red points must have an adjacent red point";
+        }
+        return false;
+      }
       continue;
     }
 
-    if (i + 1 < points.size() && points[i + 1].fast &&
-      points[i + 1].task_type == kTaskTypeNone)
-    {
-      i += 2;
+    if (isConstantSpeedMarker(points[i])) {
+      const std::size_t begin = i;
+      while (i < points.size() && isConstantSpeedMarker(points[i])) {
+        ++i;
+      }
+      if (i - begin != 2) {
+        if (error_message != nullptr) {
+          *error_message = "Blue constant-speed points must be adjacent pairs";
+        }
+        return false;
+      }
       continue;
     }
 
-    if (error_message != nullptr) {
-      *error_message = "Fast red points must be adjacent pairs";
-    }
-    return false;
-  }
-  return true;
-}
-
-int pendingFastMarkerIndex(const std::vector<MapPoint> & points)
-{
-  int pending_index = -1;
-  for (std::size_t i = 0; i < points.size();) {
-    if (!points[i].fast || points[i].task_type != kTaskTypeNone) {
-      ++i;
-      continue;
+    if (points[i].fast && points[i].constant_speed) {
+      if (error_message != nullptr) {
+        *error_message = "Point cannot be both red and blue";
+      }
+      return false;
     }
 
-    if (i + 1 < points.size() && points[i + 1].fast &&
-      points[i + 1].task_type == kTaskTypeNone)
-    {
-      i += 2;
-      continue;
-    }
-
-    if (pending_index >= 0) {
-      return -2;
-    }
-    pending_index = static_cast<int>(i);
     ++i;
   }
-  return pending_index;
+  return true;
 }
 
 }  // namespace navigation::maps

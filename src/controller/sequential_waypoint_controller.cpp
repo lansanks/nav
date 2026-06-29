@@ -98,6 +98,24 @@ public:
     }
 
     const auto & target = waypoints_[target_index_];
+    if (isConstantSpeedSegment(target_index_)) {
+      const double dx = target.x - state.x;
+      const double dy = target.y - state.y;
+      const double gamma = std::atan2(dy, dx);
+      const double theta_g = headingBetween(waypoints_[target_index_ - 1], target);
+      const double alpha = wrapAngle(gamma - state.yaw);
+      const double beta = wrapAngle(theta_g - gamma);
+
+      geometry_msgs::msg::Twist command;
+      command.linear.x = config_.constant_speed_linear_x;
+      command.angular.z = std::clamp(
+        config_.k_alpha * alpha + config_.k_beta * beta,
+        -config_.max_angular_speed,
+        config_.max_angular_speed);
+      updateMessage();
+      return command;
+    }
+
     const double dx = target.x - state.x;
     const double dy = target.y - state.y;
     const double rho = std::hypot(dx, dy);
@@ -137,9 +155,7 @@ private:
   void advanceArrivedWaypoints(const RobotNavigationState & state)
   {
     while (target_index_ < waypoints_.size()) {
-      const auto & target = waypoints_[target_index_];
-      const double rho = std::hypot(target.x - state.x, target.y - state.y);
-      if (rho >= config_.waypoint_tolerance) {
+      if (!hasArrivedAtTarget(state, target_index_)) {
         break;
       }
 
@@ -198,9 +214,49 @@ private:
     if (target_index == 0 || target_index >= waypoints_.size()) {
       return false;
     }
-    return waypoints_[target_index - 1].fast && waypoints_[target_index].fast &&
-      waypoints_[target_index - 1].task_type == maps::kTaskTypeNone &&
-      waypoints_[target_index].task_type == maps::kTaskTypeNone;
+    return isFastMarker(waypoints_[target_index - 1]) && isFastMarker(waypoints_[target_index]);
+  }
+
+  bool isConstantSpeedSegment(std::size_t target_index) const
+  {
+    if (target_index == 0 || target_index >= waypoints_.size()) {
+      return false;
+    }
+    return isConstantSpeedMarker(waypoints_[target_index - 1]) &&
+      isConstantSpeedMarker(waypoints_[target_index]);
+  }
+
+  bool hasArrivedAtTarget(const RobotNavigationState & state, std::size_t target_index) const
+  {
+    const auto & target = waypoints_[target_index];
+    if (!isConstantSpeedSegment(target_index)) {
+      const double rho = std::hypot(target.x - state.x, target.y - state.y);
+      return rho < config_.waypoint_tolerance;
+    }
+
+    const auto & start = waypoints_[target_index - 1];
+    const double segment_x = target.x - start.x;
+    const double segment_y = target.y - start.y;
+    const double segment_length = std::hypot(segment_x, segment_y);
+    if (segment_length < 1e-6) {
+      return std::hypot(target.x - state.x, target.y - state.y) < config_.waypoint_tolerance;
+    }
+
+    const double unit_x = segment_x / segment_length;
+    const double unit_y = segment_y / segment_length;
+    const double past_target_distance =
+      (state.x - target.x) * unit_x + (state.y - target.y) * unit_y;
+    return past_target_distance >= 0.0 && past_target_distance < config_.waypoint_tolerance;
+  }
+
+  static bool isFastMarker(const maps::MapPoint & point)
+  {
+    return point.fast && !point.constant_speed && point.task_type == maps::kTaskTypeNone;
+  }
+
+  static bool isConstantSpeedMarker(const maps::MapPoint & point)
+  {
+    return point.constant_speed && !point.fast && point.task_type == maps::kTaskTypeNone;
   }
 
   void updateMessage()

@@ -378,6 +378,16 @@ cv::Scalar mapMutedText(bool light_theme)
   return light_theme ? cv::Scalar(92, 92, 92) : cv::Scalar(182, 182, 182);
 }
 
+bool isFastMarker(const MapPoint & point)
+{
+  return point.fast && !point.constant_speed && point.task_type == kTaskTypeNone;
+}
+
+bool isConstantSpeedMarker(const MapPoint & point)
+{
+  return point.constant_speed && !point.fast && point.task_type == kTaskTypeNone;
+}
+
 }  // namespace
 
 std::string resolveScenePath(const std::string & robot_name, const std::string & scene)
@@ -1003,21 +1013,25 @@ struct TopViewMap::Impl
 
       const auto p0 = worldToPixel({points[i - 1].x, points[i - 1].y});
       const auto p1 = worldToPixel({points[i].x, points[i].y});
-      const bool fast_segment =
-        points[i - 1].fast && points[i].fast &&
-        points[i - 1].task_type == kTaskTypeNone && points[i].task_type == kTaskTypeNone;
+      const bool fast_segment = isFastMarker(points[i - 1]) && isFastMarker(points[i]);
+      const bool constant_speed_segment =
+        isConstantSpeedMarker(points[i - 1]) && isConstantSpeedMarker(points[i]);
       cv::line(
         canvas,
         p0,
         p1,
-        fast_segment ? cv::Scalar(42, 58, 235) : cv::Scalar(40, 220, 220),
-        fast_segment ? 3 : 2,
+        constant_speed_segment ? cv::Scalar(235, 155, 35) :
+        (fast_segment ? cv::Scalar(42, 58, 235) : cv::Scalar(40, 220, 220)),
+        (fast_segment || constant_speed_segment) ? 3 : 2,
         cv::LINE_AA);
     }
 
     for (const auto & point : points) {
       const auto center = worldToPixel({point.x, point.y});
       cv::Scalar point_color = point.fast ? cv::Scalar(42, 58, 235) : cv::Scalar(40, 220, 220);
+      if (point.constant_speed) {
+        point_color = cv::Scalar(235, 155, 35);
+      }
       if (point.task_type == kTaskTypePickup) {
         point_color = cv::Scalar(42, 58, 235);
       } else if (point.task_type == kTaskTypePlace) {
@@ -1383,7 +1397,24 @@ bool TopViewMap::setPointFast(std::size_t index, bool fast)
   }
 
   impl_->points[index].fast = fast;
+  if (fast) {
+    impl_->points[index].constant_speed = false;
+  }
   if (!fast) {
+    impl_->points[index].task_type = kTaskTypeNone;
+  }
+  return true;
+}
+
+bool TopViewMap::setPointConstantSpeed(std::size_t index, bool constant_speed)
+{
+  if (index >= impl_->points.size()) {
+    return false;
+  }
+
+  impl_->points[index].constant_speed = constant_speed;
+  if (constant_speed) {
+    impl_->points[index].fast = false;
     impl_->points[index].task_type = kTaskTypeNone;
   }
   return true;
@@ -1406,6 +1437,9 @@ bool TopViewMap::togglePointFast(std::size_t index)
   }
 
   impl_->points[index].fast = !impl_->points[index].fast;
+  if (impl_->points[index].fast) {
+    impl_->points[index].constant_speed = false;
+  }
   if (!impl_->points[index].fast) {
     impl_->points[index].task_type = kTaskTypeNone;
   }

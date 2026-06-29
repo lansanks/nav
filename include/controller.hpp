@@ -26,6 +26,7 @@ struct ControllerConfig
   double fast_k_rho{1.60};
   double fast_k_alpha{2.80};
   double fast_k_beta{-0.70};
+  double constant_speed_linear_x{0.60};
 };
 
 struct ControllerStatus

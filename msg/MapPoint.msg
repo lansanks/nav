@@ -5,5 +5,6 @@ int32 id
 float64 x
 float64 y
 bool fast
+bool constant_speed
 uint8 task_type
 string event_label

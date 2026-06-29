@@ -16,7 +16,6 @@ std::string defaultNewPointsName();
 bool validateFastMarkers(
   const std::vector<MapPoint> & points,
   std::string * error_message = nullptr);
-int pendingFastMarkerIndex(const std::vector<MapPoint> & points);
 
 }  // namespace navigation::maps
 

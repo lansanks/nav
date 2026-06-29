@@ -267,6 +267,7 @@ void appendMapPoint(
   map_point.x = point.x;
   map_point.y = point.y;
   map_point.fast = task_type != navigation::maps::kTaskTypeNone;
+  map_point.constant_speed = false;
   map_point.task_type = task_type;
   route.push_back(map_point);
 }
@@ -1585,6 +1586,7 @@ void NavigationUiCoordinator::saveRadarPointAs(const std::string & path_or_name)
   point.x = state.x;
   point.y = state.y;
   point.fast = false;
+  point.constant_speed = false;
 
   std::string saved_path;
   std::string error_message;

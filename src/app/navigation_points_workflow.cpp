@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cmath>
 #include <filesystem>
 #include <string>
 #include <system_error>
@@ -133,6 +132,7 @@ void NavigationPointsWorkflow::addClickedPoint(int pixel_x, int pixel_y)
     }
 
     point.fast = false;
+    point.constant_speed = false;
     point.task_type = navigation::maps::kTaskTypeNone;
     point.event_label.clear();
     context_.route_patch_points.push_back(point);
@@ -152,19 +152,10 @@ void NavigationPointsWorkflow::addClickedPoint(int pixel_x, int pixel_y)
     return;
   }
 
-  const int pending_fast_index = navigation::maps::pendingFastMarkerIndex(context_.map->points());
-  if (context_.race_logic == "obstacle" &&
-    pending_fast_index >= 0 &&
-    pending_fast_index != static_cast<int>(context_.map->points().size()) - 1)
-  {
-    context_.status_message = "Fast marker must pair with adjacent next point";
-    RCLCPP_WARN(logger_, "%s", context_.status_message.c_str());
-    return;
-  }
-
   runtime_.stopNavigationForRouteChange();
   point.id = static_cast<int>(context_.map->points().size() + 1);
-  point.fast = pending_fast_index == static_cast<int>(context_.map->points().size()) - 1;
+  point.fast = false;
+  point.constant_speed = false;
   context_.map->addPoint(point);
   runtime_.syncControllerWaypoints();
   if (savePoints()) {
@@ -206,47 +197,38 @@ void NavigationPointsWorkflow::toggleFastMarker(std::size_t index)
   }
 
   runtime_.stopNavigationForRouteChange();
+  if (context_.race_logic == "mission") {
+    const bool was_fast = points[index].fast;
+    context_.map->setPointFast(index, !points[index].fast);
+    runtime_.syncControllerWaypoints();
+    savePoints();
+    context_.status_message = was_fast ? "Mission point cleared" : "Mission point marked";
+    return;
+  }
+
+  if (points[index].constant_speed) {
+    context_.map->setPointConstantSpeed(index, false);
+    runtime_.syncControllerWaypoints();
+    if (savePoints()) {
+      context_.status_message = "Point marker cleared";
+    }
+    return;
+  }
+
   if (points[index].fast) {
     context_.map->setPointFast(index, false);
-    if (context_.race_logic == "obstacle" && index > 0 && points[index - 1].fast) {
-      context_.map->setPointFast(index - 1, false);
-    }
-    if (context_.race_logic == "obstacle" && index + 1 < points.size() && points[index + 1].fast) {
-      context_.map->setPointFast(index + 1, false);
-    }
+    context_.map->setPointConstantSpeed(index, true);
     runtime_.syncControllerWaypoints();
-    savePoints();
-    context_.status_message = context_.race_logic == "mission" ? "Mission point cleared" : "Fast pair cleared";
-    return;
-  }
-
-  if (context_.race_logic == "mission") {
-    context_.map->setPointFast(index, true);
-    runtime_.syncControllerWaypoints();
-    savePoints();
-    context_.status_message = "Mission point marked";
-    return;
-  }
-
-  const int pending_index = navigation::maps::pendingFastMarkerIndex(points);
-  if (pending_index == -2) {
-    context_.status_message = "Fix existing fast markers first";
-    RCLCPP_WARN(logger_, "%s", context_.status_message.c_str());
-    return;
-  }
-  if (pending_index >= 0 && std::abs(pending_index - static_cast<int>(index)) != 1) {
-    context_.status_message = "Fast markers must be adjacent";
-    RCLCPP_WARN(logger_, "%s", context_.status_message.c_str());
+    if (savePoints()) {
+      context_.status_message = "Blue constant-speed pair marked";
+    }
     return;
   }
 
   context_.map->setPointFast(index, true);
   runtime_.syncControllerWaypoints();
-  if (pending_index >= 0) {
-    savePoints();
-    context_.status_message = "Fast pair marked";
-  } else {
-    context_.status_message = "Select adjacent point for fast pair";
+  if (savePoints()) {
+    context_.status_message = "Fast red segment marked";
   }
 }
 
@@ -264,7 +246,6 @@ void NavigationPointsWorkflow::removeNearestPoint(int pixel_x, int pixel_y)
 
   const auto index = static_cast<std::size_t>(point_index);
   const auto & points = context_.map->points();
-  const bool removed_fast = points[index].fast;
   const int removed_id = points[index].id;
   const bool patch_middle_point = index > 0 && index + 1 < points.size();
 
@@ -279,15 +260,6 @@ void NavigationPointsWorkflow::removeNearestPoint(int pixel_x, int pixel_y)
   if (!context_.map->removePoint(index)) {
     clearRoutePatchState(context_);
     return;
-  }
-
-  if (context_.race_logic == "obstacle" && removed_fast) {
-    if (index > 0 && context_.map->points()[index - 1].fast) {
-      context_.map->setPointFast(index - 1, false);
-    }
-    if (index < context_.map->points().size() && context_.map->points()[index].fast) {
-      context_.map->setPointFast(index, false);
-    }
   }
 
   if (patch_middle_point) {
@@ -319,6 +291,7 @@ void NavigationPointsWorkflow::confirmRoutePatch()
   const auto insert_index = std::min(context_.route_patch_insert_index, points.size());
   for (auto & point : context_.route_patch_points) {
     point.fast = false;
+    point.constant_speed = false;
     point.task_type = navigation::maps::kTaskTypeNone;
     point.event_label.clear();
   }
@@ -367,17 +340,11 @@ void NavigationPointsWorkflow::removeLastRoutePatchPoint()
 
 void NavigationPointsWorkflow::removeLastPoint()
 {
-  const bool removed_fast = !context_.map->points().empty() && context_.map->points().back().fast;
   if (!context_.map->removeLastPoint()) {
     return;
   }
 
   runtime_.stopNavigationForRouteChange();
-  if (context_.race_logic == "obstacle" &&
-    removed_fast && !context_.map->points().empty() && context_.map->points().back().fast)
-  {
-    context_.map->setPointFast(context_.map->points().size() - 1, false);
-  }
   runtime_.syncControllerWaypoints();
   if (savePoints()) {
     RCLCPP_INFO(logger_, "Removed last navigation point. Remaining points: %zu", context_.map->points().size());

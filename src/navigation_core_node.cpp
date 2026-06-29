@@ -53,7 +53,8 @@ void applyConfigFromRequest(
   double max_angular_speed,
   double k_rho, double k_alpha, double k_beta,
   double fast_max_linear_speed, double fast_max_angular_speed,
-  double fast_k_rho, double fast_k_alpha, double fast_k_beta)
+  double fast_k_rho, double fast_k_alpha, double fast_k_beta,
+  double constant_speed_linear_x)
 {
   if (waypoint_tolerance > 0.0) { config.waypoint_tolerance = waypoint_tolerance; }
   if (max_linear_speed > 0.0) { config.max_linear_speed = max_linear_speed; }
@@ -66,6 +67,7 @@ void applyConfigFromRequest(
   config.fast_k_rho = fast_k_rho;
   config.fast_k_alpha = fast_k_alpha;
   config.fast_k_beta = fast_k_beta;
+  if (constant_speed_linear_x > 0.0) { config.constant_speed_linear_x = constant_speed_linear_x; }
 }
 
 std::string normalizeRaceLogic(const std::string & race_logic)
@@ -81,6 +83,7 @@ std::vector<navigation::maps::MapPoint> controllerPointsForRace(
   if (race_logic == "mission") {
     for (auto & point : controller_points) {
       point.fast = false;
+      point.constant_speed = false;
     }
   }
   return controller_points;
@@ -347,6 +350,7 @@ private:
       point.x = mp.x;
       point.y = mp.y;
       point.fast = mp.fast;
+      point.constant_speed = mp.constant_speed;
       point.task_type = mp.task_type;
       point.event_label = mp.event_label;
       points.push_back(point);
@@ -377,7 +381,8 @@ private:
       request->k_rho, request->k_alpha, request->k_beta,
       request->fast_max_linear_speed,
       request->fast_max_angular_speed,
-      request->fast_k_rho, request->fast_k_alpha, request->fast_k_beta);
+      request->fast_k_rho, request->fast_k_alpha, request->fast_k_beta,
+      request->constant_speed_linear_x);
 
     runtime_.applyControllerConfig();
     context_.navigation_status = "Params updated";
@@ -406,6 +411,7 @@ private:
       point.x = mp.x;
       point.y = mp.y;
       point.fast = mp.fast;
+      point.constant_speed = mp.constant_speed;
       point.task_type = mp.task_type;
       point.event_label = mp.event_label;
       points.push_back(point);
@@ -422,7 +428,8 @@ private:
       request->k_rho, request->k_alpha, request->k_beta,
       request->fast_max_linear_speed,
       request->fast_max_angular_speed,
-      request->fast_k_rho, request->fast_k_alpha, request->fast_k_beta);
+      request->fast_k_rho, request->fast_k_alpha, request->fast_k_beta,
+      request->constant_speed_linear_x);
 
     runtime_.applyControllerConfig();
     runtime_.syncControllerWaypoints();

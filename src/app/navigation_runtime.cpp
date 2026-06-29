@@ -39,6 +39,7 @@ void fillConfigRequest(
   request.fast_k_rho = config.fast_k_rho;
   request.fast_k_alpha = config.fast_k_alpha;
   request.fast_k_beta = config.fast_k_beta;
+  request.constant_speed_linear_x = config.constant_speed_linear_x;
 }
 
 void fillStartConfigRequest(
@@ -56,6 +57,7 @@ void fillStartConfigRequest(
   request.fast_k_rho = config.fast_k_rho;
   request.fast_k_alpha = config.fast_k_alpha;
   request.fast_k_beta = config.fast_k_beta;
+  request.constant_speed_linear_x = config.constant_speed_linear_x;
 }
 
 std::string normalizeRaceLogic(const std::string & race_logic)
@@ -341,6 +343,7 @@ void NavigationRuntime::sendSetWaypointsRequest(
     mp.x = point.x;
     mp.y = point.y;
     mp.fast = point.fast;
+    mp.constant_speed = point.constant_speed;
     mp.task_type = point.task_type;
     mp.event_label = point.event_label;
     request->points.push_back(mp);
@@ -419,6 +422,7 @@ void NavigationRuntime::sendStartRequest(
     mp.x = point.x;
     mp.y = point.y;
     mp.fast = point.fast;
+    mp.constant_speed = point.constant_speed;
     mp.task_type = point.task_type;
     mp.event_label = point.event_label;
     request->points.push_back(mp);
@@ -578,6 +582,7 @@ std::vector<navigation::maps::MapPoint> NavigationRuntime::controllerWaypointsFo
   if (context_.race_logic == "mission") {
     for (auto & point : points) {
       point.fast = false;
+      point.constant_speed = false;
     }
   }
   return points;

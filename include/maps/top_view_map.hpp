@@ -27,6 +27,7 @@ struct MapPoint
   double x{0.0};
   double y{0.0};
   bool fast{false};
+  bool constant_speed{false};
   std::uint8_t task_type{kTaskTypeNone};
   std::string event_label;
 };
@@ -54,6 +55,7 @@ public:
   void setPoints(const std::vector<MapPoint> & points);
   void addPoint(const MapPoint & point);
   bool setPointFast(std::size_t index, bool fast);
+  bool setPointConstantSpeed(std::size_t index, bool constant_speed);
   bool setPointEventLabel(std::size_t index, const std::string & event_label);
   bool togglePointFast(std::size_t index);
   bool removePoint(std::size_t index);

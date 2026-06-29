@@ -90,6 +90,7 @@ std::vector<ParamField> makeControllerParamFields(ControllerConfig & config)
     {"fast_k_rho", &config.fast_k_rho, false},
     {"fast_k_alpha", &config.fast_k_alpha, false},
     {"fast_k_beta", &config.fast_k_beta, false},
+    {"constant_speed_linear_x", &config.constant_speed_linear_x, true},
   };
 }
 
@@ -126,6 +127,8 @@ RuntimeConfig declareRuntimeConfig(rclcpp::Node & node)
   controller_config.fast_k_rho = node.declare_parameter<double>("fast_k_rho", 1.60);
   controller_config.fast_k_alpha = node.declare_parameter<double>("fast_k_alpha", 2.80);
   controller_config.fast_k_beta = node.declare_parameter<double>("fast_k_beta", -0.70);
+  controller_config.constant_speed_linear_x =
+    positiveOrDefault(node.declare_parameter<double>("constant_speed_linear_x", 0.60), 0.60);
 
   config.ui_size = clampUiSize(node.declare_parameter<int>("ui_size", config.ui_size));
   config.map_width_px = node.declare_parameter<int>("map_width_px", config.map_width_px);

@@ -246,6 +246,8 @@ std::vector<MapPoint> loadPointsFile(const std::string & path)
         current.y = std::stod(value);
       } else if (key == "fast") {
         current.fast = parseBool(value);
+      } else if (key == "constant_speed") {
+        current.constant_speed = parseBool(value);
       } else if (key == "task_type") {
         current.task_type = parseTaskType(value);
       } else if (key == "event_label") {
@@ -289,6 +291,7 @@ bool savePointsFile(const std::string & path_text, const std::vector<MapPoint> &
     output << "    x: " << point.x << "\n";
     output << "    y: " << point.y << "\n";
     output << "    fast: " << (point.fast ? "true" : "false") << "\n";
+    output << "    constant_speed: " << (point.constant_speed ? "true" : "false") << "\n";
     output << "    task_type: " << taskTypeText(point.task_type) << "\n";
     output << "    event_label: " << quoteScalar(point.event_label) << "\n";
   }
