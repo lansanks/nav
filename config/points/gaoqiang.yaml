@@ -1,0 +1,43 @@
+points:
+  - id: 1
+    x: 9.333524
+    y: 1.095718
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 2
+    x: 8.532778
+    y: 1.095718
+    fast: false
+    constant_speed: true
+    task_type: none
+    event_label: "_obstacle"
+  - id: 3
+    x: 6.792190
+    y: 1.122033
+    fast: false
+    constant_speed: true
+    task_type: none
+    event_label: ""
+  - id: 4
+    x: 5.949481
+    y: 1.035998
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 5
+    x: 5.430688
+    y: 1.105171
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 6
+    x: 4.868662
+    y: 1.079231
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
