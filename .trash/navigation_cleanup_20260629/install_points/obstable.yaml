@@ -1,0 +1,21 @@
+points:
+  - id: 1
+    x: 2.939130
+    y: 1.113043
+    fast: false
+    task_type: none
+  - id: 2
+    x: 1.121739
+    y: 1.078261
+    fast: false
+    task_type: none
+  - id: 3
+    x: 0.982609
+    y: 1.104348
+    fast: false
+    task_type: none
+  - id: 4
+    x: 1.060870
+    y: 1.295652
+    fast: false
+    task_type: none

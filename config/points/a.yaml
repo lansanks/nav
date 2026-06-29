@@ -1,0 +1,111 @@
+points:
+  - id: 1
+    x: 4.101447
+    y: 1.565938
+    fast: true
+    task_type: none
+  - id: 2
+    x: 4.952622
+    y: 1.565938
+    fast: true
+    task_type: none
+  - id: 3
+    x: 4.090700
+    y: 0.729809
+    fast: false
+    task_type: none
+  - id: 4
+    x: 4.946174
+    y: 0.723360
+    fast: false
+    task_type: none
+  - id: 5
+    x: 3.196332
+    y: 1.579962
+    fast: false
+    task_type: none
+  - id: 6
+    x: 1.523412
+    y: 1.572443
+    fast: false
+    task_type: none
+  - id: 7
+    x: 0.602367
+    y: 0.696510
+    fast: false
+    task_type: none
+  - id: 8
+    x: 0.600148
+    y: 4.546482
+    fast: false
+    task_type: none
+  - id: 9
+    x: 2.481216
+    y: 5.398394
+    fast: false
+    task_type: none
+  - id: 10
+    x: 4.087843
+    y: 4.535047
+    fast: false
+    task_type: none
+  - id: 11
+    x: 4.956908
+    y: 4.535047
+    fast: false
+    task_type: none
+  - id: 12
+    x: 7.907154
+    y: 5.375524
+    fast: false
+    task_type: none
+  - id: 13
+    x: 7.941460
+    y: 3.540196
+    fast: false
+    task_type: none
+  - id: 14
+    x: 9.976901
+    y: 4.935274
+    fast: false
+    task_type: none
+  - id: 15
+    x: 11.474895
+    y: 5.432700
+    fast: false
+    task_type: none
+  - id: 16
+    x: 12.475463
+    y: 4.466437
+    fast: false
+    task_type: none
+  - id: 17
+    x: 13.436008
+    y: 5.415547
+    fast: false
+    task_type: none
+  - id: 18
+    x: 13.441726
+    y: 3.528761
+    fast: false
+    task_type: none
+  - id: 19
+    x: 12.979097
+    y: 2.097780
+    fast: false
+    task_type: none
+  - id: 20
+    x: 12.979097
+    y: 1.145039
+    fast: false
+    task_type: none
+  - id: 21
+    x: 10.975317
+    y: 1.129916
+    fast: false
+    task_type: none
+  - id: 22
+    x: 8.018795
+    y: 1.114793
+    fast: false
+    task_type: none

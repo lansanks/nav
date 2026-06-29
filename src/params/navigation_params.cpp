@@ -176,6 +176,8 @@ RuntimeConfig declareRuntimeConfig(rclcpp::Node & node)
     1.0);
   config.rl_debug_key_topic =
     node.declare_parameter<std::string>("rl_debug_key_topic", config.rl_debug_key_topic);
+  config.rl_policy_config_topic =
+    node.declare_parameter<std::string>("rl_policy_config_topic", config.rl_policy_config_topic);
   return config;
 }
 

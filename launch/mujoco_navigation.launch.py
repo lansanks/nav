@@ -47,6 +47,10 @@ def generate_launch_description():
         default_value="1.0",
     )
     rl_debug_key_topic_arg = DeclareLaunchArgument("rl_debug_key_topic", default_value="/rl_sim/debug_key")
+    rl_policy_config_topic_arg = DeclareLaunchArgument(
+        "rl_policy_config_topic",
+        default_value="/rl_sim/policy_config",
+    )
 
     rname = LaunchConfiguration("rname")
     scene = LaunchConfiguration("scene")
@@ -77,6 +81,7 @@ def generate_launch_description():
     mission_arm_retry_period = LaunchConfiguration("mission_arm_retry_period")
     navigation_event_wait_seconds = LaunchConfiguration("navigation_event_wait_seconds")
     rl_debug_key_topic = LaunchConfiguration("rl_debug_key_topic")
+    rl_policy_config_topic = LaunchConfiguration("rl_policy_config_topic")
 
     param_node = Node(
         package="demo_nodes_cpp",
@@ -157,6 +162,7 @@ def generate_launch_description():
                     value_type=float,
                 ),
                 "rl_debug_key_topic": ParameterValue(rl_debug_key_topic, value_type=str),
+                "rl_policy_config_topic": ParameterValue(rl_policy_config_topic, value_type=str),
             }
         ],
     )
@@ -192,6 +198,7 @@ def generate_launch_description():
             mission_arm_retry_period_arg,
             navigation_event_wait_seconds_arg,
             rl_debug_key_topic_arg,
+            rl_policy_config_topic_arg,
             param_node,
             mujoco_node,
             midware_node,

@@ -1,0 +1,101 @@
+<mujoco model="blackW robocon obstacle navigation scene">
+  <include file="blackW_description.xml"/>
+
+  <statistic center="3.0 -7.0 0.4" extent="8.0"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="90" elevation="-35"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+  </asset>
+
+  <worldbody>
+    <light pos="3 -7 6" dir="0 0 -1" directional="true"/>
+
+    <!-- Obstacle race field: 14m length along y, 6m width along x. -->
+    <geom name="floor" type="plane" pos="3 -7 0" size="0 0 0.05" rgba="1 1 1 1"/>
+    <geom name="field_visual" type="box" pos="3 -7 -0.01" size="3 7 0.01" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+    <geom name="field_wall_left" type="box" pos="-0.03 -7 0.10" size="0.03 7 0.10" rgba="0.12 0.12 0.12 1"/>
+    <geom name="field_wall_right" type="box" pos="6.03 -7 0.10" size="0.03 7 0.10" rgba="0.12 0.12 0.12 1"/>
+    <geom name="field_wall_top" type="box" pos="3 0.03 0.10" size="3.03 0.03 0.10" rgba="0.12 0.12 0.12 1"/>
+    <geom name="field_wall_bottom" type="box" pos="3 -14.03 0.10" size="3.03 0.03 0.10" rgba="0.12 0.12 0.12 1"/>
+
+    <!-- Ground start area, matching the robot default_pose in blackW_description.xml. -->
+    <geom name="start_ground" type="box" pos="3.7 -9.0 0.003" size="0.5 0.5 0.003"
+          rgba="1 0 0 0.35" contype="0" conaffinity="0"/>
+
+    <!-- Gravel / wood-chip pit: L footprint, 2m by 2m outer envelope, 1m corridor width. -->
+    <geom name="pit_long_leg" type="box" pos="1.15 -2.00 0.01" size="0.50 1.00 0.01" rgba="0.60 0.56 0.36 1"/>
+    <geom name="pit_short_leg" type="box" pos="1.65 -1.50 0.01" size="1.00 0.50 0.01" rgba="0.60 0.56 0.36 1"/>
+    <geom name="pit_left_rail" type="box" pos="0.62 -2.00 0.075" size="0.025 1.00 0.075" rgba="0.875 0.459 0 1"/>
+    <geom name="pit_bottom_rail" type="box" pos="1.15 -3.02 0.075" size="0.50 0.025 0.075" rgba="0.875 0.459 0 1"/>
+    <geom name="pit_top_rail" type="box" pos="1.65 -0.98 0.075" size="1.00 0.025 0.075" rgba="0.875 0.459 0 1"/>
+    <geom name="pit_right_rail" type="box" pos="2.68 -1.50 0.075" size="0.025 0.50 0.075" rgba="0.875 0.459 0 1"/>
+    <geom name="pit_inner_rail_x" type="box" pos="1.65 -2.02 0.075" size="0.50 0.025 0.075" rgba="0.875 0.459 0 1"/>
+    <geom name="pit_inner_rail_y" type="box" pos="1.12 -1.50 0.075" size="0.025 0.50 0.075" rgba="0.875 0.459 0 1"/>
+
+    <!-- Height-limit bar, placed above the ground start area as in the top-view layout. -->
+    <geom name="height_bar_post_left" type="cylinder" pos="2.15 -5.20 0.15" size="0.025 0.15" rgba="0.875 0.459 0 1"/>
+    <geom name="height_bar_post_right" type="cylinder" pos="3.15 -5.20 0.15" size="0.025 0.15" rgba="0.875 0.459 0 1"/>
+    <geom name="height_bar_cross" type="cylinder" pos="2.65 -5.20 0.315" size="0.015 0.50"
+          quat="0.7071068 0 0.7071068 0" rgba="0.2 0.35 1 1"/>
+
+    <!-- Main 10deg ramp footprint: two 3m by 1m lanes, total width 2m. -->
+    <geom name="main_slope_left" type="box" pos="3.30 -2.35 0.27" size="0.50 1.50 0.02"
+          quat="0.9961947 -0.0871557 0 0" rgba="0.875 0.459 0 1"/>
+    <geom name="main_slope_right" type="box" pos="4.30 -2.35 0.27" size="0.50 1.50 0.02"
+          quat="0.9961947 -0.0871557 0 0" rgba="0.875 0.459 0 1"/>
+    <geom name="upper_platform" type="box" pos="3.80 -4.10 0.20" size="1.00 0.50 0.20" rgba="0.875 0.459 0 1"/>
+
+    <!-- Wood bridge A: upper-right bridge from the ramp platform toward the right side. -->
+    <geom name="bridge_a_0" type="box" pos="3.85 -4.85 0.20" size="0.18 0.50 0.20" rgba="0.875 0.459 0 1"/>
+    <geom name="bridge_a_1" type="box" pos="4.30 -4.85 0.20" size="0.18 0.50 0.20" rgba="0.875 0.459 0 1"/>
+    <geom name="bridge_a_2" type="box" pos="4.75 -4.85 0.20" size="0.18 0.50 0.20" rgba="0.875 0.459 0 1"/>
+    <geom name="bridge_a_3" type="box" pos="5.20 -4.85 0.20" size="0.18 0.50 0.20" rgba="0.875 0.459 0 1"/>
+    <geom name="bridge_a_platform" type="box" pos="5.20 -3.75 0.20" size="0.50 0.50 0.20" rgba="0.875 0.459 0 1"/>
+
+    <!-- Wood bridge B: right-side bridge leading down toward the T stairs. -->
+    <geom name="bridge_b_0" type="box" pos="5.15 -5.75 0.20" size="0.50 0.18 0.20" rgba="0.875 0.459 0 1"/>
+    <geom name="bridge_b_1" type="box" pos="5.15 -6.25 0.20" size="0.50 0.18 0.20" rgba="0.875 0.459 0 1"/>
+    <geom name="bridge_b_2" type="box" pos="5.15 -6.75 0.20" size="0.50 0.18 0.20" rgba="0.875 0.459 0 1"/>
+    <geom name="bridge_b_3" type="box" pos="5.15 -7.25 0.20" size="0.50 0.18 0.20" rgba="0.875 0.459 0 1"/>
+    <geom name="bridge_b_platform" type="box" pos="5.15 -8.00 0.20" size="0.50 0.50 0.20" rgba="0.875 0.459 0 1"/>
+
+    <!-- 30cm wall between the ground start area and the lower obstacle cluster. -->
+    <geom name="high_wall" type="box" pos="3.05 -8.20 0.15" size="0.025 0.50 0.15" rgba="0.875 0.459 0 1"/>
+
+    <!-- T stairs: 2.8m length, 1.9m width, 0.4m top platform. -->
+    <geom name="t_platform" type="box" pos="4.00 -11.00 0.20" size="0.50 0.50 0.20" rgba="0.875 0.459 0 1"/>
+    <geom name="start_t_stairs" type="box" pos="4.00 -11.00 0.405" size="0.50 0.50 0.003"
+          rgba="1 0 0 0.35" contype="0" conaffinity="0"/>
+    <geom name="t_step_y_pos_1" type="box" pos="4.00 -10.35 0.15" size="0.50 0.15 0.15" rgba="0.875 0.459 0 1"/>
+    <geom name="t_step_y_pos_2" type="box" pos="4.00 -10.05 0.10" size="0.50 0.15 0.10" rgba="0.875 0.459 0 1"/>
+    <geom name="t_step_y_pos_3" type="box" pos="4.00 -9.75 0.05" size="0.50 0.15 0.05" rgba="0.875 0.459 0 1"/>
+    <geom name="t_step_y_neg_1" type="box" pos="4.00 -11.65 0.15" size="0.50 0.15 0.15" rgba="0.875 0.459 0 1"/>
+    <geom name="t_step_y_neg_2" type="box" pos="4.00 -11.95 0.10" size="0.50 0.15 0.10" rgba="0.875 0.459 0 1"/>
+    <geom name="t_step_y_neg_3" type="box" pos="4.00 -12.25 0.05" size="0.50 0.15 0.05" rgba="0.875 0.459 0 1"/>
+    <geom name="t_step_x_pos_1" type="box" pos="4.65 -11.00 0.15" size="0.15 0.50 0.15" rgba="0.875 0.459 0 1"/>
+    <geom name="t_step_x_pos_2" type="box" pos="4.95 -11.00 0.10" size="0.15 0.50 0.10" rgba="0.875 0.459 0 1"/>
+    <geom name="t_step_x_pos_3" type="box" pos="5.25 -11.00 0.05" size="0.15 0.50 0.05" rgba="0.875 0.459 0 1"/>
+
+    <!-- Right-angle slalom poles in the lower-left corner. -->
+    <geom name="slalom_zone_start" type="cylinder" pos="0.80 -10.15 0.003" size="0.175 0.003"
+          rgba="1 0 0 0.35" contype="0" conaffinity="0"/>
+    <geom name="slalom_zone_corner" type="cylinder" pos="0.80 -13.00 0.003" size="0.175 0.003"
+          rgba="1 0 0 0.35" contype="0" conaffinity="0"/>
+    <geom name="slalom_zone_finish" type="cylinder" pos="2.50 -12.60 0.003" size="0.175 0.003"
+          rgba="1 0 0 0.35" contype="0" conaffinity="0"/>
+    <geom name="slalom_pole_0_base" type="cylinder" pos="1.20 -10.60 0.02" size="0.05 0.02" rgba="0.875 0.459 0 1"/>
+    <geom name="slalom_pole_0" type="cylinder" pos="1.20 -10.60 0.27" size="0.015 0.25" rgba="0.875 0.459 0 1"/>
+    <geom name="slalom_pole_1_base" type="cylinder" pos="1.20 -11.60 0.02" size="0.05 0.02" rgba="0.875 0.459 0 1"/>
+    <geom name="slalom_pole_1" type="cylinder" pos="1.20 -11.60 0.27" size="0.015 0.25" rgba="0.875 0.459 0 1"/>
+    <geom name="slalom_pole_2_base" type="cylinder" pos="1.20 -12.60 0.02" size="0.05 0.02" rgba="0.875 0.459 0 1"/>
+    <geom name="slalom_pole_2" type="cylinder" pos="1.20 -12.60 0.27" size="0.015 0.25" rgba="0.875 0.459 0 1"/>
+    <geom name="slalom_pole_3_base" type="cylinder" pos="2.20 -12.60 0.02" size="0.05 0.02" rgba="0.875 0.459 0 1"/>
+    <geom name="slalom_pole_3" type="cylinder" pos="2.20 -12.60 0.27" size="0.015 0.25" rgba="0.875 0.459 0 1"/>
+  </worldbody>
+</mujoco>

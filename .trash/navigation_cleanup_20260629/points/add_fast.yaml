@@ -1,0 +1,153 @@
+points:
+  - id: 1
+    x: 3.708081
+    y: -9.035496
+    fast: true
+  - id: 2
+    x: 5.621515
+    y: -7.225891
+    fast: true
+  - id: 3
+    x: 5.599266
+    y: -6.194463
+    fast: false
+  - id: 4
+    x: 5.633381
+    y: -5.989770
+    fast: true
+  - id: 5
+    x: 5.650439
+    y: -4.198707
+    fast: true
+  - id: 6
+    x: 5.667497
+    y: -3.260531
+    fast: false
+  - id: 7
+    x: 5.633381
+    y: -1.333006
+    fast: false
+  - id: 8
+    x: 5.462804
+    y: -0.292484
+    fast: false
+  - id: 9
+    x: 4.251704
+    y: -0.121906
+    fast: false
+  - id: 10
+    x: 3.125893
+    y: -0.138964
+    fast: false
+  - id: 11
+    x: 1.812447
+    y: -0.258368
+    fast: true
+  - id: 12
+    x: 1.846562
+    y: -1.861796
+    fast: true
+  - id: 13
+    x: 1.778331
+    y: -3.038781
+    fast: false
+  - id: 14
+    x: 1.795389
+    y: -3.891668
+    fast: false
+  - id: 15
+    x: 1.778331
+    y: -5.068652
+    fast: true
+  - id: 16
+    x: 1.795389
+    y: -6.620907
+    fast: true
+  - id: 17
+    x: 1.870443
+    y: -7.211958
+    fast: false
+  - id: 18
+    x: 1.870443
+    y: -7.486588
+    fast: true
+  - id: 19
+    x: 1.850827
+    y: -9.919022
+    fast: true
+  - id: 20
+    x: 1.203485
+    y: -10.860610
+    fast: false
+  - id: 21
+    x: 2.360853
+    y: -10.978308
+    fast: false
+  - id: 22
+    x: 2.341237
+    y: -11.782581
+    fast: false
+  - id: 23
+    x: 1.301567
+    y: -12.057210
+    fast: false
+  - id: 24
+    x: 1.321184
+    y: -12.939949
+    fast: false
+  - id: 25
+    x: 2.223538
+    y: -13.194962
+    fast: false
+  - id: 26
+    x: 2.302004
+    y: -12.292607
+    fast: false
+  - id: 27
+    x: 3.204359
+    y: -12.155292
+    fast: false
+  - id: 28
+    x: 3.439755
+    y: -12.763401
+    fast: false
+  - id: 29
+    x: 4.087097
+    y: -12.684935
+    fast: false
+  - id: 30
+    x: 4.655973
+    y: -12.684935
+    fast: false
+  - id: 31
+    x: 5.499478
+    y: -12.665319
+    fast: false
+  - id: 32
+    x: 5.872190
+    y: -12.567237
+    fast: false
+  - id: 33
+    x: 5.891806
+    y: -11.488335
+    fast: false
+  - id: 34
+    x: 5.891806
+    y: -10.605596
+    fast: true
+  - id: 35
+    x: 5.656409
+    y: -9.487461
+    fast: true
+  - id: 36
+    x: 5.754491
+    y: -8.585106
+    fast: false
+  - id: 37
+    x: 5.597560
+    y: -8.310477
+    fast: true
+  - id: 38
+    x: 3.380906
+    y: -9.016667
+    fast: true

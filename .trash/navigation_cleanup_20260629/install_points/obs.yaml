@@ -1,0 +1,41 @@
+points:
+  - id: 1
+    x: 1.347124
+    y: -3.948021
+    fast: true
+    task_type: none
+  - id: 2
+    x: 2.255233
+    y: -3.055303
+    fast: true
+    task_type: none
+  - id: 3
+    x: 1.332283
+    y: -0.455649
+    fast: false
+    task_type: none
+  - id: 4
+    x: 2.274488
+    y: 0.455150
+    fast: false
+    task_type: none
+  - id: 5
+    x: 5.357805
+    y: -1.599378
+    fast: false
+    task_type: none
+  - id: 6
+    x: 5.285262
+    y: -3.086512
+    fast: false
+    task_type: none
+  - id: 7
+    x: 6.276684
+    y: -4.090025
+    fast: false
+    task_type: none
+  - id: 8
+    x: 1.815974
+    y: -10.545850
+    fast: false
+    task_type: none

@@ -1,0 +1,57 @@
+points:
+  - id: 1
+    x: 3.135174
+    y: -7.738153
+    fast: true
+  - id: 2
+    x: -3.406931
+    y: -6.271819
+    fast: true
+  - id: 3
+    x: -4.196496
+    y: -4.873162
+    fast: true
+  - id: 4
+    x: -4.219055
+    y: -2.707500
+    fast: true
+  - id: 5
+    x: -3.903229
+    y: -1.105812
+    fast: true
+  - id: 6
+    x: -2.098510
+    y: -0.226012
+    fast: true
+  - id: 7
+    x: -0.090761
+    y: 0.157491
+    fast: true
+  - id: 8
+    x: 1.916989
+    y: 0.022137
+    fast: true
+  - id: 9
+    x: 3.270528
+    y: -0.316247
+    fast: true
+  - id: 10
+    x: 3.383322
+    y: -1.692345
+    fast: true
+  - id: 11
+    x: 3.270528
+    y: -3.384269
+    fast: true
+  - id: 12
+    x: 3.225410
+    y: -4.557336
+    fast: true
+  - id: 13
+    x: 2.999820
+    y: -6.046229
+    fast: true
+  - id: 14
+    x: 3.620201
+    y: -7.551494
+    fast: true

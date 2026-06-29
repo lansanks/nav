@@ -35,6 +35,7 @@ struct RuntimeConfig
   double mission_arm_retry_period{1.0};
   double navigation_event_wait_seconds{1.0};
   std::string rl_debug_key_topic{"/rl_sim/debug_key"};
+  std::string rl_policy_config_topic{"/rl_sim/policy_config"};
   ControllerConfig controller_config;
 };
 

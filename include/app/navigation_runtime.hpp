@@ -18,12 +18,14 @@ class NavigationRuntime
 public:
   using PublishVelocity = std::function<void(const geometry_msgs::msg::Twist &)>;
   using PublishEventCommand = std::function<void(const std::string &)>;
+  using PublishPolicyConfig = std::function<void(const std::string &)>;
 
   NavigationRuntime(
     NavigationNodeContext & context,
     rclcpp::Logger logger,
     PublishVelocity publish_velocity,
-    PublishEventCommand publish_event_command = {});
+    PublishEventCommand publish_event_command = {},
+    PublishPolicyConfig publish_policy_config = {});
 
   void applyControllerConfig();
   bool isNavigationActive() const;
@@ -64,6 +66,7 @@ private:
   rclcpp::Logger logger_;
   PublishVelocity publish_velocity_;
   PublishEventCommand publish_event_command_;
+  PublishPolicyConfig publish_policy_config_;
 };
 
 }  // namespace navigation::app

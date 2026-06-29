@@ -115,6 +115,7 @@ struct NavigationNodeContext
   bool event_label_edit_active{false};
   double navigation_event_wait_seconds{1.0};
   std::string rl_debug_key_topic{"/rl_sim/debug_key"};
+  std::string rl_policy_config_topic{"/rl_sim/policy_config"};
   std::vector<bool> navigation_event_triggered;
   bool navigation_event_wait_active{false};
   std::chrono::steady_clock::time_point navigation_event_wait_until;

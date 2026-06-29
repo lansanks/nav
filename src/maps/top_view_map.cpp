@@ -433,10 +433,12 @@ std::vector<std::string> listSceneFiles(const std::string & robot_name)
     }
 
     const auto filename = path.filename().string();
-    if (is_image && filename.find("preview") != std::string::npos) {
+    if (is_xml && filename.find("scene") == std::string::npos &&
+      filename.find("sence") == std::string::npos)
+    {
       return;
     }
-    if (filename.find("scene") == std::string::npos && filename.find("sence") == std::string::npos) {
+    if (is_image && filename.find("preview") != std::string::npos) {
       return;
     }
 
@@ -464,11 +466,6 @@ std::vector<std::string> listSceneFiles(const std::string & robot_name)
 
   try {
     collect_scene_files(navigationMapsDir() / robot_name);
-  } catch (const std::exception &) {
-  }
-
-  try {
-    collect_scene_files(robotDescriptionShareDir() / robot_name);
   } catch (const std::exception &) {
   }
 

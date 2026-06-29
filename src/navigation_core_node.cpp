@@ -101,6 +101,9 @@ public:
       },
       [this](const std::string & command) {
         publishRlDebugKey(command);
+      },
+      [this](const std::string & policy_config) {
+        publishRlPolicyConfig(policy_config);
       })
   {
     const auto config = navigation::params::declareRuntimeConfig(*this);
@@ -120,6 +123,7 @@ public:
     context_.mission_arm_retry_period = config.mission_arm_retry_period;
     context_.navigation_event_wait_seconds = config.navigation_event_wait_seconds;
     context_.rl_debug_key_topic = config.rl_debug_key_topic;
+    context_.rl_policy_config_topic = config.rl_policy_config_topic;
 
     context_.current_map_file = navigation::maps::resolveScenePath(context_.robot_name, config.scene);
     context_.map = std::make_unique<navigation::maps::TopViewMap>(
@@ -150,6 +154,8 @@ public:
       create_publisher<geometry_msgs::msg::Twist>(context_.cmd_vel_topic, rclcpp::QoS(10));
     rl_debug_key_publisher_ =
       create_publisher<std_msgs::msg::String>(context_.rl_debug_key_topic, rclcpp::QoS(10));
+    rl_policy_config_publisher_ =
+      create_publisher<std_msgs::msg::String>(context_.rl_policy_config_topic, rclcpp::QoS(10));
 
     // Service servers (replacing topic-based command subscription)
     set_waypoints_service_ = create_service<navigation::srv::SetWaypoints>(
@@ -252,6 +258,17 @@ private:
     std_msgs::msg::String msg;
     msg.data = command;
     rl_debug_key_publisher_->publish(msg);
+  }
+
+  void publishRlPolicyConfig(const std::string & policy_config)
+  {
+    if (rl_policy_config_publisher_ == nullptr) {
+      return;
+    }
+
+    std_msgs::msg::String msg;
+    msg.data = policy_config;
+    rl_policy_config_publisher_->publish(msg);
   }
 
   void onTimer()
@@ -511,6 +528,7 @@ private:
   NavigationRuntime runtime_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr rl_debug_key_publisher_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr rl_policy_config_publisher_;
   rclcpp::Service<navigation::srv::SetWaypoints>::SharedPtr set_waypoints_service_;
   rclcpp::Service<navigation::srv::SetControllerConfig>::SharedPtr set_config_service_;
   rclcpp::Service<navigation::srv::StartNavigation>::SharedPtr start_service_;

@@ -839,7 +839,6 @@ void NavigationUiCoordinator::beginDropdown(navigation::ui::MapDropdownMode mode
       RCLCPP_ERROR(logger_, "Failed to list map files: %s", error.what());
       context_.dropdown_paths.clear();
     }
-    navigation::maps::addExistingPath(context_.dropdown_paths, context_.current_map_file);
     context_.dropdown_selected_index =
       navigation::maps::findPathIndex(context_.dropdown_paths, context_.current_map_file);
     context_.status_message = context_.dropdown_paths.empty() ? "No map files found" : "Select map file";

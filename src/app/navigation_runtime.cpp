@@ -126,11 +126,13 @@ NavigationRuntime::NavigationRuntime(
   NavigationNodeContext & context,
   rclcpp::Logger logger,
   PublishVelocity publish_velocity,
-  PublishEventCommand publish_event_command)
+  PublishEventCommand publish_event_command,
+  PublishPolicyConfig publish_policy_config)
 : context_(context),
   logger_(logger),
   publish_velocity_(std::move(publish_velocity)),
-  publish_event_command_(std::move(publish_event_command))
+  publish_event_command_(std::move(publish_event_command)),
+  publish_policy_config_(std::move(publish_policy_config))
 {
 }
 
@@ -649,20 +651,30 @@ bool NavigationRuntime::triggerNavigationEvent(
   });
 
   std::string command;
+  std::string policy_config;
   std::string event_name;
-  if (normalized == "bridge") {
+  if (normalized == "stand") {
+    command = "1";
+    event_name = "Stand";
+  } else if (normalized == "bridge") {
     command = "2";
     event_name = "Bridge";
   } else if (normalized == "low") {
     command = "3";
     event_name = "Low-bar";
+  } else if (normalized.size() > 1 && normalized.front() == '_') {
+    policy_config = "himloco" + normalized;
+    event_name = "Policy " + policy_config;
   } else {
     context_.status_message = "Navigation event ignored: " + point.event_label;
     return false;
   }
 
-  if (publish_event_command_ != nullptr) {
+  if (!command.empty() && publish_event_command_ != nullptr) {
     publish_event_command_(command);
+  }
+  if (!policy_config.empty() && publish_policy_config_ != nullptr) {
+    publish_policy_config_(policy_config);
   }
 
   const auto wait_seconds = std::max(0.0, context_.navigation_event_wait_seconds);
@@ -671,13 +683,14 @@ bool NavigationRuntime::triggerNavigationEvent(
     std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
       std::chrono::duration<double>(wait_seconds));
   context_.navigation_status = event_name + " event triggered at point " + std::to_string(point.id);
-  context_.status_message = event_name + " mode command sent";
+  context_.status_message = event_name + " command sent";
   RCLCPP_INFO(
     logger_,
-    "Navigation event '%s' reached at point %d. Published rl debug key '%s' and waiting %.3fs.",
+    "Navigation event '%s' reached at point %d. Published rl debug key '%s', policy config '%s' and waiting %.3fs.",
     normalized.c_str(),
     point.id,
     command.c_str(),
+    policy_config.c_str(),
     wait_seconds);
   return true;
 }
