@@ -1479,6 +1479,7 @@ bool TopViewMap::setPointConstantSpeed(std::size_t index, bool constant_speed)
 bool TopViewMap::setPointSegmentSpeed(
   std::size_t index,
   bool custom_speed,
+  bool constant_speed,
   std::uint8_t level,
   double linear_x,
   double max_angular_speed,
@@ -1491,7 +1492,8 @@ bool TopViewMap::setPointSegmentSpeed(
 
   auto & point = impl_->points[index];
   point.segment_custom_speed = custom_speed;
-  point.segment_speed_level = custom_speed ? static_cast<std::uint8_t>(std::clamp<int>(level, 0, 5)) : 0;
+  point.segment_constant_speed = custom_speed ? constant_speed : true;
+  point.segment_speed_level = custom_speed ? static_cast<std::uint8_t>(std::clamp<int>(level, 0, 7)) : 0;
   point.segment_linear_x = custom_speed ? linear_x : 0.0;
   point.segment_max_angular_speed = custom_speed ? max_angular_speed : 0.0;
   point.segment_k_alpha = custom_speed ? k_alpha : 0.0;

@@ -118,6 +118,18 @@ struct NavigationNodeContext
   bool event_label_edit_active{false};
   std::size_t segment_speed_edit_target_index{0};
   bool segment_speed_edit_active{false};
+  int segment_speed_selected_index{0};
+  bool segment_speed_field_editing{false};
+  std::string segment_speed_edit_text;
+  int segment_speed_last_click_index{-1};
+  std::chrono::steady_clock::time_point segment_speed_last_click_time;
+  bool segment_speed_constant_mode{true};
+  std::uint8_t segment_speed_level{3};
+  double segment_speed_linear_x{0.0};
+  double segment_speed_max_angular_speed{0.0};
+  double segment_speed_k_alpha{0.0};
+  double segment_speed_k_beta{0.0};
+  std::string segment_speed_title;
   double navigation_event_wait_seconds{1.0};
   std::string rl_debug_key_topic{"/rl_sim/debug_key"};
   std::string rl_policy_config_topic{"/rl_sim/policy_config"};

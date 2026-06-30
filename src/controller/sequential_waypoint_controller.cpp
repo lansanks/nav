@@ -136,12 +136,21 @@ public:
     const double theta_g = targetHeading(target_index_);
     const double alpha = wrapAngle(gamma - state.yaw);
     const double beta = wrapAngle(theta_g - gamma);
-    const bool fast_segment = isFastSegment(target_index_);
-    const double max_linear = fast_segment ? config_.fast_max_linear_speed : config_.max_linear_speed;
-    const double max_angular = fast_segment ? config_.fast_max_angular_speed : config_.max_angular_speed;
+    const bool custom_p_segment = isCustomPControlSegment(target_index_);
+    const bool fast_segment = !custom_p_segment && isFastSegment(target_index_);
+    const double max_linear = custom_p_segment ?
+      positiveOrDefault(target.segment_linear_x, config_.max_linear_speed) :
+      (fast_segment ? config_.fast_max_linear_speed : config_.max_linear_speed);
+    const double max_angular = custom_p_segment ?
+      positiveOrDefault(target.segment_max_angular_speed, config_.max_angular_speed) :
+      (fast_segment ? config_.fast_max_angular_speed : config_.max_angular_speed);
     const double k_rho = fast_segment ? config_.fast_k_rho : config_.k_rho;
-    const double k_alpha = fast_segment ? config_.fast_k_alpha : config_.k_alpha;
-    const double k_beta = fast_segment ? config_.fast_k_beta : config_.k_beta;
+    const double k_alpha = custom_p_segment ?
+      nonZeroOrDefault(target.segment_k_alpha, config_.k_alpha) :
+      (fast_segment ? config_.fast_k_alpha : config_.k_alpha);
+    const double k_beta = custom_p_segment ?
+      nonZeroOrDefault(target.segment_k_beta, config_.k_beta) :
+      (fast_segment ? config_.fast_k_beta : config_.k_beta);
 
     geometry_msgs::msg::Twist command;
     command.linear.x = std::clamp(k_rho * rho, 0.0, max_linear);
@@ -191,7 +200,9 @@ private:
     std::size_t best_index = 0;
     double best_distance = config_.waypoint_tolerance;
     bool found_nearby = false;
-    for (std::size_t i = 0; i < waypoints_.size(); ++i) {
+    const std::size_t candidate_count =
+      waypoints_.size() > 1 ? waypoints_.size() - 1 : waypoints_.size();
+    for (std::size_t i = 0; i < candidate_count; ++i) {
       const auto & point = waypoints_[i];
       const double distance = std::hypot(point.x - state->x, point.y - state->y);
       if (distance < best_distance) {
@@ -250,7 +261,7 @@ private:
 
   bool isFixedSpeedSegment(std::size_t target_index) const
   {
-    return isConstantSpeedSegment(target_index) || isCustomSpeedSegment(target_index);
+    return isConstantSpeedSegment(target_index) || isCustomConstantSpeedSegment(target_index);
   }
 
   bool hasArrivedAtTarget(const RobotNavigationState & state, std::size_t target_index) const
@@ -284,6 +295,22 @@ private:
   static bool isConstantSpeedMarker(const maps::MapPoint & point)
   {
     return point.constant_speed && !point.fast && point.task_type == maps::kTaskTypeNone;
+  }
+
+  bool isCustomConstantSpeedSegment(std::size_t target_index) const
+  {
+    if (target_index == 0 || target_index >= waypoints_.size()) {
+      return false;
+    }
+    return isCustomSpeedSegment(target_index) && waypoints_[target_index].segment_constant_speed;
+  }
+
+  bool isCustomPControlSegment(std::size_t target_index) const
+  {
+    if (target_index == 0 || target_index >= waypoints_.size()) {
+      return false;
+    }
+    return isCustomSpeedSegment(target_index) && !waypoints_[target_index].segment_constant_speed;
   }
 
   static double positiveOrDefault(double value, double fallback)

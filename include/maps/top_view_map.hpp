@@ -29,6 +29,7 @@ struct MapPoint
   bool fast{false};
   bool constant_speed{false};
   bool segment_custom_speed{false};
+  bool segment_constant_speed{true};
   std::uint8_t segment_speed_level{0};
   double segment_linear_x{0.0};
   double segment_max_angular_speed{0.0};
@@ -66,6 +67,7 @@ public:
   bool setPointSegmentSpeed(
     std::size_t index,
     bool custom_speed,
+    bool constant_speed,
     std::uint8_t level,
     double linear_x,
     double max_angular_speed,

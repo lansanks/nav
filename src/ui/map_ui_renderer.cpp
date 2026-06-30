@@ -241,6 +241,26 @@ MapUiHit MapUiRenderer::hitTest(int pixel_x, int pixel_y, const MapUiState & ui_
     return {MapUiAction::UiOnly, -1};
   }
 
+  if (ui_state.segment_speed_active) {
+    const cv::Point point(pixel_x, pixel_y);
+    if (segmentSpeedCloseButtonRect(ui_state).contains(point) ||
+      !segmentSpeedPopupRect(ui_state).contains(point))
+    {
+      return {MapUiAction::SegmentSpeedClose, -1};
+    }
+    if (segmentSpeedApplyButtonRect(ui_state).contains(point)) {
+      return {MapUiAction::SegmentSpeedApply, -1};
+    }
+    if (segmentSpeedClearButtonRect(ui_state).contains(point)) {
+      return {MapUiAction::SegmentSpeedClear, -1};
+    }
+    const int field_index = hitTestSegmentSpeedField(pixel_x, pixel_y, ui_state);
+    if (field_index >= 0) {
+      return {MapUiAction::SegmentSpeedField, field_index};
+    }
+    return {MapUiAction::UiOnly, -1};
+  }
+
   if (ui_state.params_active) {
     const auto save_rect = paramsSaveButtonRect(ui_state);
     if (save_rect.contains(cv::Point(pixel_x, pixel_y))) {
@@ -470,6 +490,48 @@ std::vector<cv::Rect> MapUiRenderer::settingsFieldRects(const MapUiState & ui_st
   return rects;
 }
 
+cv::Rect MapUiRenderer::segmentSpeedPopupRect(const MapUiState & ui_state) const
+{
+  const int canvas_width = canvasWidth(ui_state);
+  const int popup_width = 620;
+  const int popup_height = std::min(430, std::max(360, height_ - 24));
+  const int popup_x = (canvas_width - popup_width) / 2;
+  const int popup_y = std::max(12, (height_ - popup_height) / 2);
+  return cv::Rect(popup_x, popup_y, popup_width, popup_height);
+}
+
+cv::Rect MapUiRenderer::segmentSpeedCloseButtonRect(const MapUiState & ui_state) const
+{
+  const auto popup = segmentSpeedPopupRect(ui_state);
+  return cv::Rect(popup.x + popup.width - 42, popup.y + 12, 26, 26);
+}
+
+cv::Rect MapUiRenderer::segmentSpeedApplyButtonRect(const MapUiState & ui_state) const
+{
+  const auto popup = segmentSpeedPopupRect(ui_state);
+  return cv::Rect(popup.x + popup.width - 274, popup.y + popup.height - 58, 104, 34);
+}
+
+cv::Rect MapUiRenderer::segmentSpeedClearButtonRect(const MapUiState & ui_state) const
+{
+  const auto popup = segmentSpeedPopupRect(ui_state);
+  return cv::Rect(popup.x + popup.width - 146, popup.y + popup.height - 58, 100, 34);
+}
+
+std::vector<cv::Rect> MapUiRenderer::segmentSpeedFieldRects(const MapUiState & ui_state) const
+{
+  std::vector<cv::Rect> rects;
+  const auto popup = segmentSpeedPopupRect(ui_state);
+  constexpr int row_height = 35;
+  int y = popup.y + 76;
+  rects.reserve(ui_state.segment_speed_field_names.size());
+  for (std::size_t i = 0; i < ui_state.segment_speed_field_names.size(); ++i) {
+    rects.emplace_back(popup.x + 24, y, popup.width - 48, row_height - 4);
+    y += row_height;
+  }
+  return rects;
+}
+
 std::vector<cv::Rect> MapUiRenderer::paramRowRects(const MapUiState & ui_state) const
 {
   std::vector<cv::Rect> rects;
@@ -633,6 +695,21 @@ int MapUiRenderer::hitTestSettingsField(int pixel_x, int pixel_y, const MapUiSta
   return -1;
 }
 
+int MapUiRenderer::hitTestSegmentSpeedField(int pixel_x, int pixel_y, const MapUiState & ui_state) const
+{
+  if (!segmentSpeedPopupRect(ui_state).contains(cv::Point(pixel_x, pixel_y))) {
+    return -1;
+  }
+
+  const auto rects = segmentSpeedFieldRects(ui_state);
+  for (std::size_t i = 0; i < rects.size(); ++i) {
+    if (rects[i].contains(cv::Point(pixel_x, pixel_y))) {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
+
 std::string MapUiRenderer::shortenMiddle(const std::string & text, std::size_t max_len)
 {
   if (text.size() <= max_len) {
@@ -772,6 +849,9 @@ void MapUiRenderer::drawUiPanel(cv::Mat & canvas, const MapUiState & ui_state, s
   drawDropdownMenu(canvas, ui_state);
   if (ui_state.settings_active) {
     drawSettingsPopup(canvas, ui_state);
+  }
+  if (ui_state.segment_speed_active) {
+    drawSegmentSpeedPopup(canvas, ui_state);
   }
   if (ui_state.params_active) {
     drawParamsPopup(canvas, ui_state);
@@ -969,7 +1049,7 @@ void MapUiRenderer::drawSettingsPopup(cv::Mat & canvas, const MapUiState & ui_st
     }
     cv::rectangle(canvas, row, palette.button_border, 1, cv::LINE_AA);
 
-    const int text_y = row.y + 24;
+    const int text_y = row.y + 22;
     putPanelText(canvas, ui_state.settings_field_names[i], cv::Point(name_x, text_y), 0.44, palette.text);
     std::string value = i < ui_state.settings_field_values.size() ? ui_state.settings_field_values[i] : "";
     if (ui_state.settings_editing && static_cast<int>(i) == ui_state.settings_selected_index) {
@@ -999,6 +1079,82 @@ void MapUiRenderer::drawSettingsPopup(cv::Mat & canvas, const MapUiState & ui_st
   putPanelText(
     canvas,
     "Enter edit/apply field  Up/Down select  Esc close",
+    cv::Point(popup.x + 24, popup.y + popup.height - 18),
+    0.38,
+    palette.text_muted);
+}
+
+void MapUiRenderer::drawSegmentSpeedPopup(cv::Mat & canvas, const MapUiState & ui_state) const
+{
+  const auto palette = paletteFor(ui_state.light_theme);
+  const int canvas_width = canvasWidth(ui_state);
+  cv::Mat overlay = canvas.clone();
+  cv::rectangle(overlay, cv::Rect(0, 0, canvas_width, height_), palette.overlay, cv::FILLED);
+  cv::addWeighted(overlay, 0.48, canvas, 0.52, 0.0, canvas);
+
+  const auto popup = segmentSpeedPopupRect(ui_state);
+  cv::rectangle(canvas, popup, palette.surface, cv::FILLED);
+  cv::rectangle(canvas, popup, palette.button_border, 1, cv::LINE_AA);
+
+  const auto close_rect = segmentSpeedCloseButtonRect(ui_state);
+  cv::rectangle(canvas, close_rect, palette.button, cv::FILLED);
+  cv::rectangle(canvas, close_rect, palette.button_border, 1, cv::LINE_AA);
+  putPanelText(canvas, "X", cv::Point(close_rect.x + 7, close_rect.y + 19), 0.50, palette.text);
+
+  const std::string title = ui_state.segment_speed_title.empty() ?
+    std::string("Segment Speed") :
+    ui_state.segment_speed_title;
+  putPanelText(canvas, title, cv::Point(popup.x + 24, popup.y + 38), 0.68, palette.title);
+  putPanelText(
+    canvas,
+    "Mode switches between constant speed and P control; Level loads defaults.",
+    cv::Point(popup.x + 24, popup.y + 62),
+    0.38,
+    palette.text_muted);
+
+  const int name_x = popup.x + 36;
+  const int value_x = popup.x + 322;
+  const auto field_rects = segmentSpeedFieldRects(ui_state);
+  for (std::size_t i = 0; i < ui_state.segment_speed_field_names.size(); ++i) {
+    const auto & row = field_rects[i];
+    if (static_cast<int>(i) == ui_state.segment_speed_selected_index) {
+      cv::rectangle(canvas, row, palette.selected, cv::FILLED);
+    } else {
+      cv::rectangle(canvas, row, palette.surface_alt, cv::FILLED);
+    }
+    cv::rectangle(canvas, row, palette.button_border, 1, cv::LINE_AA);
+
+    const int text_y = row.y + 24;
+    putPanelText(canvas, ui_state.segment_speed_field_names[i], cv::Point(name_x, text_y), 0.45, palette.text);
+    std::string value = i < ui_state.segment_speed_field_values.size() ?
+      ui_state.segment_speed_field_values[i] :
+      "";
+    if (ui_state.segment_speed_editing && static_cast<int>(i) == ui_state.segment_speed_selected_index) {
+      value = ui_state.segment_speed_edit_text + "_";
+    }
+    putPanelText(
+      canvas,
+      fitTextToWidth(value, popup.x + popup.width - value_x - 40, 0.45),
+      cv::Point(value_x, text_y),
+      0.45,
+      palette.text);
+  }
+
+  const auto apply_rect = segmentSpeedApplyButtonRect(ui_state);
+  const auto clear_rect = segmentSpeedClearButtonRect(ui_state);
+  cv::rectangle(canvas, apply_rect, palette.button, cv::FILLED);
+  cv::rectangle(canvas, apply_rect, palette.button_border, 1, cv::LINE_AA);
+  cv::rectangle(canvas, clear_rect, palette.button, cv::FILLED);
+  cv::rectangle(canvas, clear_rect, palette.button_border, 1, cv::LINE_AA);
+  putPanelText(canvas, "Apply", cv::Point(apply_rect.x + 27, apply_rect.y + 23), 0.48, palette.text);
+  putPanelText(canvas, "Clear", cv::Point(clear_rect.x + 27, clear_rect.y + 23), 0.48, palette.text);
+
+  putPanelText(
+    canvas,
+    fitTextToWidth(
+      "Enter edit/toggle  Double-click edit  Level 1..7  Esc close",
+      apply_rect.x - popup.x - 48,
+      0.38),
     cv::Point(popup.x + 24, popup.y + popup.height - 18),
     0.38,
     palette.text_muted);

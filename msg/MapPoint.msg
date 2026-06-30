@@ -7,6 +7,7 @@ float64 y
 bool fast
 bool constant_speed
 bool segment_custom_speed
+bool segment_constant_speed
 uint8 segment_speed_level
 float64 segment_linear_x
 float64 segment_max_angular_speed

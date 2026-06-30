@@ -41,12 +41,18 @@ private:
   cv::Rect settingsCloseButtonRect(const MapUiState & ui_state) const;
   cv::Rect settingsApplyButtonRect(const MapUiState & ui_state) const;
   std::vector<cv::Rect> settingsFieldRects(const MapUiState & ui_state) const;
+  cv::Rect segmentSpeedPopupRect(const MapUiState & ui_state) const;
+  cv::Rect segmentSpeedCloseButtonRect(const MapUiState & ui_state) const;
+  cv::Rect segmentSpeedApplyButtonRect(const MapUiState & ui_state) const;
+  cv::Rect segmentSpeedClearButtonRect(const MapUiState & ui_state) const;
+  std::vector<cv::Rect> segmentSpeedFieldRects(const MapUiState & ui_state) const;
   std::vector<cv::Rect> paramRowRects(const MapUiState & ui_state) const;
   cv::Rect paramsSaveButtonRect(const MapUiState & ui_state) const;
   cv::Rect paramsLoadButtonRect(const MapUiState & ui_state) const;
   cv::Rect paramsWindowCloseButtonRect(const MapUiState & ui_state) const;
   int hitTestParamRow(int pixel_x, int pixel_y, const MapUiState & ui_state) const;
   int hitTestSettingsField(int pixel_x, int pixel_y, const MapUiState & ui_state) const;
+  int hitTestSegmentSpeedField(int pixel_x, int pixel_y, const MapUiState & ui_state) const;
   cv::Rect radarPopupRect(const MapUiState & ui_state) const;
   cv::Rect radarListenButtonRect(const MapUiState & ui_state) const;
   cv::Rect radarSavePointButtonRect(const MapUiState & ui_state) const;
@@ -78,6 +84,7 @@ private:
   void drawDropdownMenu(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawTextInputPopup(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawSettingsPopup(cv::Mat & canvas, const MapUiState & ui_state) const;
+  void drawSegmentSpeedPopup(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawParamsPopup(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawRadarPopup(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawRadarButton(

@@ -271,8 +271,10 @@ std::vector<MapPoint> loadPointsFile(const std::string & path)
         current.constant_speed = parseBool(value);
       } else if (key == "segment_custom_speed") {
         current.segment_custom_speed = parseBool(value);
+      } else if (key == "segment_constant_speed") {
+        current.segment_constant_speed = parseBool(value);
       } else if (key == "segment_speed_level") {
-        current.segment_speed_level = static_cast<std::uint8_t>(std::clamp(std::stoi(value), 0, 5));
+        current.segment_speed_level = static_cast<std::uint8_t>(std::clamp(std::stoi(value), 0, 7));
       } else if (key == "segment_linear_x") {
         current.segment_linear_x = std::stod(value);
       } else if (key == "segment_max_angular_speed") {
@@ -326,6 +328,7 @@ bool savePointsFile(const std::string & path_text, const std::vector<MapPoint> &
     output << "    fast: " << (point.fast ? "true" : "false") << "\n";
     output << "    constant_speed: " << (point.constant_speed ? "true" : "false") << "\n";
     output << "    segment_custom_speed: " << (point.segment_custom_speed ? "true" : "false") << "\n";
+    output << "    segment_constant_speed: " << (point.segment_constant_speed ? "true" : "false") << "\n";
     output << "    segment_speed_level: " << static_cast<int>(point.segment_speed_level) << "\n";
     output << "    segment_linear_x: " << point.segment_linear_x << "\n";
     output << "    segment_max_angular_speed: " << point.segment_max_angular_speed << "\n";

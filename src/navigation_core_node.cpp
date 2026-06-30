@@ -359,6 +359,7 @@ private:
       point.fast = mp.fast;
       point.constant_speed = mp.constant_speed;
       point.segment_custom_speed = mp.segment_custom_speed;
+      point.segment_constant_speed = mp.segment_constant_speed;
       point.segment_speed_level = mp.segment_speed_level;
       point.segment_linear_x = mp.segment_linear_x;
       point.segment_max_angular_speed = mp.segment_max_angular_speed;
@@ -426,6 +427,7 @@ private:
       point.fast = mp.fast;
       point.constant_speed = mp.constant_speed;
       point.segment_custom_speed = mp.segment_custom_speed;
+      point.segment_constant_speed = mp.segment_constant_speed;
       point.segment_speed_level = mp.segment_speed_level;
       point.segment_linear_x = mp.segment_linear_x;
       point.segment_max_angular_speed = mp.segment_max_angular_speed;

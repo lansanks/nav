@@ -35,7 +35,7 @@ void NavigationMouseController::handleMouseEvent(int event, int x, int y, int fl
     handleMouseMove(x, y, flags);
   } else if (event == cv::EVENT_MBUTTONUP) {
     handleMiddleUp();
-  } else if (event == cv::EVENT_LBUTTONDOWN) {
+  } else if (event == cv::EVENT_LBUTTONDOWN || event == cv::EVENT_LBUTTONDBLCLK) {
     handleLeftClick(x, y, flags);
   } else if (event == cv::EVENT_RBUTTONDOWN) {
     handleRightClick(x, y);
@@ -60,6 +60,7 @@ void NavigationMouseController::handleWheelDelta(int x, int y, int delta)
 {
   if (context_.input_mode != navigation::keyboards::TextInputMode::None ||
     context_.params_session.active() ||
+    context_.segment_speed_edit_active ||
     context_.settings_popup_active ||
     context_.radar_popup_active)
   {
@@ -107,6 +108,7 @@ void NavigationMouseController::handleMiddleDown(int x, int y)
 {
   if (context_.input_mode != navigation::keyboards::TextInputMode::None ||
     context_.params_session.active() ||
+    context_.segment_speed_edit_active ||
     context_.settings_popup_active ||
     context_.radar_popup_active)
   {
@@ -179,6 +181,17 @@ void NavigationMouseController::handleLeftClick(int x, int y, int flags)
     return;
   }
 
+  if (context_.segment_speed_edit_active) {
+    if (hit.action == navigation::ui::MapUiAction::SegmentSpeedField ||
+      hit.action == navigation::ui::MapUiAction::SegmentSpeedApply ||
+      hit.action == navigation::ui::MapUiAction::SegmentSpeedClear ||
+      hit.action == navigation::ui::MapUiAction::SegmentSpeedClose)
+    {
+      ui_coordinator_.handleUiHit(hit);
+    }
+    return;
+  }
+
   if (hit.action != navigation::ui::MapUiAction::None) {
     if (hit.action == navigation::ui::MapUiAction::DropdownOption) {
       ui_coordinator_.handleDropdownClick(hit.option_index, (flags & cv::EVENT_FLAG_CTRLKEY) != 0);
@@ -216,6 +229,7 @@ void NavigationMouseController::handleRightClick(int x, int y)
 {
   if (context_.input_mode != navigation::keyboards::TextInputMode::None ||
     context_.params_session.active() ||
+    context_.segment_speed_edit_active ||
     context_.settings_popup_active ||
     context_.radar_popup_active)
   {

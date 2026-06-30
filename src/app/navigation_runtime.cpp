@@ -345,6 +345,7 @@ void NavigationRuntime::sendSetWaypointsRequest(
     mp.fast = point.fast;
     mp.constant_speed = point.constant_speed;
     mp.segment_custom_speed = point.segment_custom_speed;
+    mp.segment_constant_speed = point.segment_constant_speed;
     mp.segment_speed_level = point.segment_speed_level;
     mp.segment_linear_x = point.segment_linear_x;
     mp.segment_max_angular_speed = point.segment_max_angular_speed;
@@ -430,6 +431,7 @@ void NavigationRuntime::sendStartRequest(
     mp.fast = point.fast;
     mp.constant_speed = point.constant_speed;
     mp.segment_custom_speed = point.segment_custom_speed;
+    mp.segment_constant_speed = point.segment_constant_speed;
     mp.segment_speed_level = point.segment_speed_level;
     mp.segment_linear_x = point.segment_linear_x;
     mp.segment_max_angular_speed = point.segment_max_angular_speed;

@@ -97,6 +97,36 @@ bool parseIntField(const std::string & text, const std::string & label, int & va
   return true;
 }
 
+bool parseSignedDoubleField(const std::string & text, const std::string & label, double & value, std::string & error)
+{
+  const auto trimmed = trimCopy(text);
+  if (trimmed.empty()) {
+    error = label + " is empty";
+    return false;
+  }
+  try {
+    std::size_t consumed = 0;
+    value = std::stod(trimmed, &consumed);
+    if (consumed != trimmed.size()) {
+      error = label + " has trailing text";
+      return false;
+    }
+  } catch (const std::exception &) {
+    error = label + " is invalid";
+    return false;
+  }
+  return true;
+}
+
+double segmentSpeedFactorForLevel(std::uint8_t level)
+{
+  constexpr std::array<double, 7> factors{0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00};
+  if (level < 1 || level > factors.size()) {
+    return factors[2];
+  }
+  return factors[static_cast<std::size_t>(level - 1)];
+}
+
 bool parseSlotCategories(const std::string & text, std::vector<int> & categories, std::string & error)
 {
   categories.clear();
@@ -669,6 +699,10 @@ void NavigationUiCoordinator::handleUiHit(const navigation::ui::MapUiHit & hit)
     selectSettingsField(hit.option_index);
     return;
   }
+  if (hit.action == navigation::ui::MapUiAction::SegmentSpeedField) {
+    selectSegmentSpeedField(hit.option_index);
+    return;
+  }
 
   handleUiAction(hit.action);
 }
@@ -704,6 +738,8 @@ void NavigationUiCoordinator::handleUiAction(navigation::ui::MapUiAction action)
       break;
     case navigation::ui::MapUiAction::OnlineParams:
       clearDropdown();
+      context_.segment_speed_edit_active = false;
+      context_.segment_speed_field_editing = false;
       context_.params_session.open(context_.status_message);
       break;
     case navigation::ui::MapUiAction::Settings:
@@ -715,9 +751,22 @@ void NavigationUiCoordinator::handleUiAction(navigation::ui::MapUiAction action)
     case navigation::ui::MapUiAction::SettingsClose:
       closeSettings();
       break;
+    case navigation::ui::MapUiAction::SegmentSpeedApply:
+      applySegmentSpeed();
+      break;
+    case navigation::ui::MapUiAction::SegmentSpeedClear:
+      clearSegmentSpeed();
+      break;
+    case navigation::ui::MapUiAction::SegmentSpeedClose:
+      closeSegmentSpeedEditor();
+      break;
+    case navigation::ui::MapUiAction::SegmentSpeedField:
+      break;
     case navigation::ui::MapUiAction::Radar:
       clearDropdown();
       context_.params_session.setActive(false);
+      context_.segment_speed_edit_active = false;
+      context_.segment_speed_field_editing = false;
       context_.radar_popup_active = true;
       context_.radar_result_pending = false;
       context_.status_message = "Radar calibration";
@@ -1005,6 +1054,8 @@ void NavigationUiCoordinator::beginTextInput(
   const std::string & default_text)
 {
   clearDropdown();
+  context_.segment_speed_edit_active = false;
+  context_.segment_speed_field_editing = false;
   context_.input_mode = mode;
   context_.input_label = label;
   context_.input_text = default_text;
@@ -1032,25 +1083,34 @@ void NavigationUiCoordinator::beginSegmentSpeedInput(std::size_t target_index)
     return;
   }
 
+  clearDropdown();
+  resetTextInput();
+  context_.params_session.setActive(false);
+  context_.settings_popup_active = false;
+  context_.radar_popup_active = false;
   context_.segment_speed_edit_target_index = target_index;
   context_.segment_speed_edit_active = true;
+  context_.segment_speed_selected_index = 0;
+  context_.segment_speed_field_editing = false;
+  context_.segment_speed_edit_text.clear();
   const auto & from = context_.map->points()[target_index - 1];
   const auto & to = context_.map->points()[target_index];
-  std::string default_text = "3";
+  context_.segment_speed_title =
+    "Segment " + std::to_string(from.id) + "-" + std::to_string(to.id) + " Speed";
   if (to.segment_custom_speed) {
-    std::ostringstream stream;
-    if (to.segment_speed_level >= 1 && to.segment_speed_level <= 5) {
-      stream << static_cast<int>(to.segment_speed_level);
-    } else {
-      stream << to.segment_linear_x << "," << to.segment_max_angular_speed << ","
-             << to.segment_k_alpha << "," << to.segment_k_beta;
-    }
-    default_text = stream.str();
+    context_.segment_speed_level =
+      to.segment_speed_level >= 1 && to.segment_speed_level <= 7 ? to.segment_speed_level : 3;
+    context_.segment_speed_constant_mode = to.segment_constant_speed;
+    context_.segment_speed_linear_x = to.segment_linear_x;
+    context_.segment_speed_max_angular_speed = to.segment_max_angular_speed;
+    context_.segment_speed_k_alpha = to.segment_k_alpha;
+    context_.segment_speed_k_beta = to.segment_k_beta;
+  } else {
+    context_.segment_speed_level = 3;
+    context_.segment_speed_constant_mode = true;
+    applySegmentSpeedLevelDefaults();
   }
-  beginTextInput(
-    navigation::keyboards::TextInputMode::SegmentSpeed,
-    "Segment " + std::to_string(from.id) + "-" + std::to_string(to.id) + " speed: 1-5 or vx,w,ka,kb",
-    default_text);
+  context_.status_message = "Segment speed editor";
 }
 
 void NavigationUiCoordinator::cancelTextInput()
@@ -1117,6 +1177,88 @@ bool NavigationUiCoordinator::handleTextInputKey(int key)
     [this]() {
       confirmTextInput();
     });
+}
+
+bool NavigationUiCoordinator::handleSegmentSpeedKey(int key)
+{
+  if (!context_.segment_speed_edit_active) {
+    return false;
+  }
+
+  if (key == -1) {
+    return true;
+  }
+
+  if (context_.segment_speed_field_editing) {
+    if (navigation::keyboards::isEscKey(key)) {
+      context_.segment_speed_field_editing = false;
+      context_.segment_speed_edit_text.clear();
+      context_.status_message = "Segment field edit cancelled";
+      return true;
+    }
+    if (navigation::keyboards::isEnterKey(key)) {
+      applySegmentSpeedFieldEdit();
+      return true;
+    }
+    if (navigation::keyboards::isBackspaceKey(key)) {
+      if (!context_.segment_speed_edit_text.empty()) {
+        context_.segment_speed_edit_text.pop_back();
+      }
+      return true;
+    }
+    if (navigation::keyboards::isArrowKey(key)) {
+      return true;
+    }
+
+    const int ascii = navigation::keyboards::keyAscii(key);
+    if ((ascii >= '0' && ascii <= '9') || ascii == '.' || ascii == '-' || ascii == '+') {
+      context_.segment_speed_edit_text.push_back(static_cast<char>(ascii));
+    }
+    return true;
+  }
+
+  if (navigation::keyboards::isEscKey(key)) {
+    closeSegmentSpeedEditor();
+    return true;
+  }
+  if (navigation::keyboards::isEnterKey(key)) {
+    if (context_.segment_speed_selected_index == 0) {
+      context_.segment_speed_constant_mode = !context_.segment_speed_constant_mode;
+      context_.status_message = context_.segment_speed_constant_mode ?
+        "Segment mode: constant speed" :
+        "Segment mode: P control";
+    } else if (context_.segment_speed_selected_index == 1) {
+      applySegmentSpeedLevelDefaults();
+    } else {
+      beginSegmentSpeedFieldEdit();
+    }
+    return true;
+  }
+  if (navigation::keyboards::isUpKey(key)) {
+    context_.segment_speed_selected_index = std::max(0, context_.segment_speed_selected_index - 1);
+    return true;
+  }
+  if (navigation::keyboards::isDownKey(key)) {
+    const int max_index = static_cast<int>(segmentSpeedFieldNames().size()) - 1;
+    context_.segment_speed_selected_index = std::min(max_index, context_.segment_speed_selected_index + 1);
+    return true;
+  }
+
+  const int ascii = navigation::keyboards::keyAscii(key);
+  if (context_.segment_speed_selected_index == 1 && ascii >= '1' && ascii <= '7') {
+    context_.segment_speed_level = static_cast<std::uint8_t>(ascii - '0');
+    applySegmentSpeedLevelDefaults();
+    return true;
+  }
+  if (ascii == 'a' || ascii == 'A') {
+    applySegmentSpeed();
+    return true;
+  }
+  if (ascii == 'c' || ascii == 'C') {
+    clearSegmentSpeed();
+    return true;
+  }
+  return true;
 }
 
 bool NavigationUiCoordinator::handleSettingsKey(int key)
@@ -1226,6 +1368,9 @@ bool NavigationUiCoordinator::handleDropdownKey(int key)
 bool NavigationUiCoordinator::handleActiveInputKey(int key)
 {
   if (handleTextInputKey(key)) {
+    return true;
+  }
+  if (handleSegmentSpeedKey(key)) {
     return true;
   }
   if (handleRoutePatchKey(key)) {
@@ -1344,6 +1489,13 @@ navigation::ui::MapUiState NavigationUiCoordinator::buildUiState()
   ui_state.settings_edit_text = context_.settings_edit_text;
   ui_state.settings_field_names = settingsFieldNames();
   ui_state.settings_field_values = settingsFieldValues();
+  ui_state.segment_speed_active = context_.segment_speed_edit_active;
+  ui_state.segment_speed_editing = context_.segment_speed_field_editing;
+  ui_state.segment_speed_selected_index = context_.segment_speed_selected_index;
+  ui_state.segment_speed_edit_text = context_.segment_speed_edit_text;
+  ui_state.segment_speed_title = context_.segment_speed_title;
+  ui_state.segment_speed_field_names = segmentSpeedFieldNames();
+  ui_state.segment_speed_field_values = segmentSpeedFieldValues();
   ui_state.mission_plan_summary = context_.mission_plan_summary;
   ui_state.mission_plan_points = context_.mission_plan_points;
   ui_state.route_patch_active = context_.route_patch_active;
@@ -1392,12 +1544,191 @@ std::vector<std::string> NavigationUiCoordinator::settingsFieldValues() const
   };
 }
 
+std::vector<std::string> NavigationUiCoordinator::segmentSpeedFieldNames() const
+{
+  return {
+    "Mode",
+    "Level",
+    context_.segment_speed_constant_mode ? "linear_x" : "max_linear_speed",
+    "max_angular_speed",
+    "k_alpha",
+    "k_beta",
+  };
+}
+
+std::vector<std::string> NavigationUiCoordinator::segmentSpeedFieldValues() const
+{
+  return {
+    context_.segment_speed_constant_mode ? "Constant speed" : "P control",
+    std::to_string(static_cast<int>(context_.segment_speed_level)),
+    navigation::ui::formatDouble(context_.segment_speed_linear_x),
+    navigation::ui::formatDouble(context_.segment_speed_max_angular_speed),
+    navigation::ui::formatDouble(context_.segment_speed_k_alpha),
+    navigation::ui::formatDouble(context_.segment_speed_k_beta),
+  };
+}
+
+void NavigationUiCoordinator::closeSegmentSpeedEditor()
+{
+  context_.segment_speed_edit_active = false;
+  context_.segment_speed_field_editing = false;
+  context_.segment_speed_edit_text.clear();
+  context_.status_message = "Segment speed editor closed";
+}
+
+void NavigationUiCoordinator::selectSegmentSpeedField(int field_index)
+{
+  const auto names = segmentSpeedFieldNames();
+  if (field_index < 0 || field_index >= static_cast<int>(names.size())) {
+    return;
+  }
+
+  const auto now = std::chrono::steady_clock::now();
+  const bool double_click = field_index == context_.segment_speed_last_click_index &&
+    (now - context_.segment_speed_last_click_time) <= std::chrono::milliseconds(450);
+
+  context_.segment_speed_selected_index = field_index;
+  context_.segment_speed_field_editing = false;
+  context_.segment_speed_edit_text.clear();
+  context_.segment_speed_last_click_index = field_index;
+  context_.segment_speed_last_click_time = now;
+
+  if (!double_click) {
+    context_.status_message = "Segment speed field selected";
+    return;
+  }
+
+  if (field_index == 0) {
+    context_.segment_speed_constant_mode = !context_.segment_speed_constant_mode;
+    context_.status_message = context_.segment_speed_constant_mode ?
+      "Segment mode: constant speed" :
+      "Segment mode: P control";
+    return;
+  }
+
+  beginSegmentSpeedFieldEdit();
+}
+
+void NavigationUiCoordinator::beginSegmentSpeedFieldEdit()
+{
+  const auto values = segmentSpeedFieldValues();
+  if (context_.segment_speed_selected_index < 0 ||
+    context_.segment_speed_selected_index >= static_cast<int>(values.size()))
+  {
+    return;
+  }
+  context_.segment_speed_field_editing = true;
+  context_.segment_speed_edit_text = values[static_cast<std::size_t>(context_.segment_speed_selected_index)];
+  context_.status_message = "Typing segment speed field";
+}
+
+void NavigationUiCoordinator::applySegmentSpeedFieldEdit()
+{
+  const int selected = context_.segment_speed_selected_index;
+  std::string error;
+  if (selected == 0) {
+    context_.segment_speed_field_editing = false;
+    context_.segment_speed_edit_text.clear();
+    return;
+  }
+
+  if (selected == 1) {
+    int level = 0;
+    if (!parseIntField(context_.segment_speed_edit_text, "Level", level, error) || level < 1 || level > 7) {
+      context_.status_message = error.empty() ? "Level must be 1..7" : error;
+      return;
+    }
+    context_.segment_speed_level = static_cast<std::uint8_t>(level);
+    context_.segment_speed_field_editing = false;
+    context_.segment_speed_edit_text.clear();
+    applySegmentSpeedLevelDefaults();
+    return;
+  }
+
+  double value = 0.0;
+  const auto names = segmentSpeedFieldNames();
+  const std::string label =
+    selected >= 0 && selected < static_cast<int>(names.size()) ? names[static_cast<std::size_t>(selected)] : "Value";
+  const bool positive_field = selected == 2 || selected == 3;
+  const bool parsed = positive_field ?
+    parseDoubleField(context_.segment_speed_edit_text, label, value, error) :
+    parseSignedDoubleField(context_.segment_speed_edit_text, label, value, error);
+  if (!parsed || (positive_field && value <= 0.0)) {
+    context_.status_message = error.empty() ? label + " must be > 0" : error;
+    return;
+  }
+
+  if (selected == 2) {
+    context_.segment_speed_linear_x = value;
+  } else if (selected == 3) {
+    context_.segment_speed_max_angular_speed = value;
+  } else if (selected == 4) {
+    context_.segment_speed_k_alpha = value;
+  } else if (selected == 5) {
+    context_.segment_speed_k_beta = value;
+  }
+  context_.segment_speed_field_editing = false;
+  context_.segment_speed_edit_text.clear();
+  context_.status_message = "Segment field updated";
+}
+
+void NavigationUiCoordinator::applySegmentSpeedLevelDefaults()
+{
+  context_.segment_speed_linear_x =
+    context_.controller_config.constant_speed_linear_x *
+    segmentSpeedFactorForLevel(context_.segment_speed_level);
+  context_.segment_speed_max_angular_speed = context_.controller_config.max_angular_speed;
+  context_.segment_speed_k_alpha = context_.controller_config.k_alpha;
+  context_.segment_speed_k_beta = context_.controller_config.k_beta;
+  context_.status_message = "Segment level defaults loaded";
+}
+
+void NavigationUiCoordinator::applySegmentSpeed()
+{
+  if (!context_.segment_speed_edit_active) {
+    return;
+  }
+  points_workflow_.setSegmentSpeedValues(
+    context_.segment_speed_edit_target_index,
+    true,
+    context_.segment_speed_constant_mode,
+    context_.segment_speed_level,
+    context_.segment_speed_linear_x,
+    context_.segment_speed_max_angular_speed,
+    context_.segment_speed_k_alpha,
+    context_.segment_speed_k_beta);
+  context_.segment_speed_edit_active = false;
+  context_.segment_speed_field_editing = false;
+  context_.segment_speed_edit_text.clear();
+}
+
+void NavigationUiCoordinator::clearSegmentSpeed()
+{
+  if (!context_.segment_speed_edit_active) {
+    return;
+  }
+  points_workflow_.setSegmentSpeedValues(
+    context_.segment_speed_edit_target_index,
+    false,
+    true,
+    0,
+    0.0,
+    0.0,
+    0.0,
+    0.0);
+  context_.segment_speed_edit_active = false;
+  context_.segment_speed_field_editing = false;
+  context_.segment_speed_edit_text.clear();
+}
+
 void NavigationUiCoordinator::openSettings()
 {
   clearDropdown();
   resetTextInput();
   context_.params_session.setActive(false);
   context_.radar_popup_active = false;
+  context_.segment_speed_edit_active = false;
+  context_.segment_speed_field_editing = false;
   context_.settings_popup_active = true;
   context_.settings_editing = false;
   context_.settings_edit_text.clear();

@@ -72,12 +72,12 @@ std::vector<double> parseNumbers(const std::string & text)
 
 bool isSingleDigitLevel(const std::string & text)
 {
-  return text.size() == 1 && text[0] >= '1' && text[0] <= '5';
+  return text.size() == 1 && text[0] >= '1' && text[0] <= '7';
 }
 
 double speedFactorForLevel(std::uint8_t level)
 {
-  constexpr std::array<double, 5> factors{0.50, 0.75, 1.00, 1.25, 1.50};
+  constexpr std::array<double, 7> factors{0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00};
   if (level < 1 || level > factors.size()) {
     return factors[2];
   }
@@ -307,7 +307,7 @@ void NavigationPointsWorkflow::setSegmentSpeed(std::size_t target_index, const s
   const auto lowered = lowerAscii(text);
   if (text.empty() || lowered == "clear" || lowered == "off" || lowered == "0") {
     runtime_.stopNavigationForRouteChange();
-    context_.map->setPointSegmentSpeed(target_index, false, 0, 0.0, 0.0, 0.0, 0.0);
+    context_.map->setPointSegmentSpeed(target_index, false, true, 0, 0.0, 0.0, 0.0, 0.0);
     runtime_.syncControllerWaypoints();
     if (savePoints()) {
       context_.status_message = "Segment speed cleared";
@@ -326,8 +326,8 @@ void NavigationPointsWorkflow::setSegmentSpeed(std::size_t target_index, const s
     lowered.rfind("gear", 0) == 0;
   if (level_text && !values.empty()) {
     const int requested_level = static_cast<int>(std::lround(values.front()));
-    if (requested_level < 1 || requested_level > 5) {
-      context_.status_message = "Speed level must be 1..5";
+    if (requested_level < 1 || requested_level > 7) {
+      context_.status_message = "Speed level must be 1..7";
       return;
     }
     level = static_cast<std::uint8_t>(requested_level);
@@ -337,7 +337,7 @@ void NavigationPointsWorkflow::setSegmentSpeed(std::size_t target_index, const s
     k_beta = context_.controller_config.k_beta;
   } else {
     if (values.empty()) {
-      context_.status_message = "Use 1..5 or vx,w,k_alpha,k_beta";
+      context_.status_message = "Use 1..7 or vx,w,k_alpha,k_beta";
       return;
     }
     linear_x = values[0];
@@ -357,10 +357,35 @@ void NavigationPointsWorkflow::setSegmentSpeed(std::size_t target_index, const s
     return;
   }
 
+  setSegmentSpeedValues(target_index, true, true, level, linear_x, max_angular_speed, k_alpha, k_beta);
+}
+
+void NavigationPointsWorkflow::setSegmentSpeedValues(
+  std::size_t target_index,
+  bool custom_speed,
+  bool constant_speed,
+  std::uint8_t level,
+  double linear_x,
+  double max_angular_speed,
+  double k_alpha,
+  double k_beta)
+{
+  const auto & points = context_.map->points();
+  if (target_index == 0 || target_index >= points.size()) {
+    context_.status_message = "No segment selected";
+    return;
+  }
+
+  if (custom_speed && (linear_x <= 0.0 || max_angular_speed <= 0.0)) {
+    context_.status_message = "Speed and angular limit must be positive";
+    return;
+  }
+
   runtime_.stopNavigationForRouteChange();
   context_.map->setPointSegmentSpeed(
     target_index,
-    true,
+    custom_speed,
+    constant_speed,
     level,
     linear_x,
     max_angular_speed,
@@ -368,6 +393,11 @@ void NavigationPointsWorkflow::setSegmentSpeed(std::size_t target_index, const s
     k_beta);
   runtime_.syncControllerWaypoints();
   if (savePoints()) {
+    if (!custom_speed) {
+      context_.status_message = "Segment speed cleared";
+      return;
+    }
+
     std::ostringstream message;
     message << "Segment " << points[target_index - 1].id << "-" << points[target_index].id
             << " speed vx=" << linear_x;

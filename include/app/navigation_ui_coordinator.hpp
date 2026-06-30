@@ -48,6 +48,7 @@ private:
   void cancelTextInput();
   void confirmTextInput();
   bool handleTextInputKey(int key);
+  bool handleSegmentSpeedKey(int key);
   bool handleRoutePatchKey(int key);
   bool handleSettingsKey(int key);
   bool handleParamsKey(int key);
@@ -55,6 +56,15 @@ private:
   void openSettings();
   void closeSettings();
   void selectSettingsField(int field_index);
+  void closeSegmentSpeedEditor();
+  void selectSegmentSpeedField(int field_index);
+  void beginSegmentSpeedFieldEdit();
+  void applySegmentSpeedFieldEdit();
+  void applySegmentSpeedLevelDefaults();
+  void applySegmentSpeed();
+  void clearSegmentSpeed();
+  std::vector<std::string> segmentSpeedFieldNames() const;
+  std::vector<std::string> segmentSpeedFieldValues() const;
   void beginSettingsEdit();
   void applySettingsEdit();
   void applyMissionSettings();

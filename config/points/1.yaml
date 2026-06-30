@@ -12,3 +12,29 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
+  - id: 2
+    x: 7.034826
+    y: 1.131117
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
+  - id: 3
+    x: 7.447483
+    y: 1.160948
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""

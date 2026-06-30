@@ -39,6 +39,10 @@ enum class MapUiAction
   SettingsField,
   SettingsApply,
   SettingsClose,
+  SegmentSpeedField,
+  SegmentSpeedApply,
+  SegmentSpeedClear,
+  SegmentSpeedClose,
   DropdownOption,
   TogglePanel,
   UiOnly,
@@ -126,6 +130,13 @@ struct MapUiState
   std::string settings_edit_text;
   std::vector<std::string> settings_field_names;
   std::vector<std::string> settings_field_values;
+  bool segment_speed_active{false};
+  bool segment_speed_editing{false};
+  int segment_speed_selected_index{0};
+  std::string segment_speed_edit_text;
+  std::string segment_speed_title;
+  std::vector<std::string> segment_speed_field_names;
+  std::vector<std::string> segment_speed_field_values;
   std::string mission_plan_summary;
   std::vector<MapPlanPoint> mission_plan_points;
   bool route_patch_active{false};
