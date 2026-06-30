@@ -1,0 +1,14 @@
+points:
+  - id: 1
+    x: 6.350052
+    y: 1.195852
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
