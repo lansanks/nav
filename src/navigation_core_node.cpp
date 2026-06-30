@@ -31,6 +31,13 @@ namespace navigation::app
 namespace
 {
 
+rclcpp::QoS remoteTelemetryQoS()
+{
+  auto qos = rclcpp::QoS(10);
+  qos.best_effort();
+  return qos;
+}
+
 std::string sanitizeField(std::string value)
 {
   std::replace(value.begin(), value.end(), ';', ' ');
@@ -216,7 +223,7 @@ public:
     context_.arm_mission_client =
       create_client<navigation::srv::MissionCommand>(context_.arm_mission_service);
 
-    status_publisher_ = create_publisher<std_msgs::msg::String>(status_topic, rclcpp::QoS(10));
+    status_publisher_ = create_publisher<std_msgs::msg::String>(status_topic, remoteTelemetryQoS());
     state_publisher_ = create_publisher<nav_msgs::msg::Odometry>(state_topic, rclcpp::SensorDataQoS());
 
     // Heartbeat publisher: sends a pulse every second so remote UI can detect disconnection

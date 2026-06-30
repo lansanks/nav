@@ -27,6 +27,13 @@ namespace navigation::app
 namespace
 {
 
+rclcpp::QoS remoteTelemetryQoS()
+{
+  auto qos = rclcpp::QoS(10);
+  qos.best_effort();
+  return qos;
+}
+
 double yawFromQuaternionWxyz(double w, double x, double y, double z)
 {
   return std::atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z));
@@ -437,10 +444,10 @@ NavigationMapNode::NavigationMapNode()
       rclcpp::SensorDataQoS(),
       [this](nav_msgs::msg::Odometry::SharedPtr msg) {
         handleRemoteState(msg);
-      });
+    });
     remote_status_subscription_ = create_subscription<std_msgs::msg::String>(
       status_topic,
-      rclcpp::QoS(10),
+      remoteTelemetryQoS(),
       [this](std_msgs::msg::String::SharedPtr msg) {
         handleRemoteStatus(msg);
       });
@@ -455,7 +462,7 @@ NavigationMapNode::NavigationMapNode()
 
     cmd_vel_subscription_ = create_subscription<geometry_msgs::msg::Twist>(
       context_.cmd_vel_topic,
-      rclcpp::QoS(10),
+      remoteTelemetryQoS(),
       [this](geometry_msgs::msg::Twist::SharedPtr msg) {
         recordCommandVelocity(*msg);
       });

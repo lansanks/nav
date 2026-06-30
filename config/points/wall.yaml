@@ -1,7 +1,7 @@
 points:
   - id: 1
-    x: 6.350052
-    y: 1.195852
+    x: 8.876560
+    y: 1.086765
     fast: false
     constant_speed: false
     segment_custom_speed: false
@@ -11,23 +11,10 @@ points:
     segment_k_alpha: 0.000000
     segment_k_beta: 0.000000
     task_type: none
-    event_label: "_obstacle"
+    event_label: "_wall"
   - id: 2
-    x: 5.366567
-    y: 1.042688
-    fast: false
-    constant_speed: false
-    segment_custom_speed: true
-    segment_speed_level: 2
-    segment_linear_x: 0.450000
-    segment_max_angular_speed: 1.800000
-    segment_k_alpha: 2.400000
-    segment_k_beta: -0.600000
-    task_type: none
-    event_label: ""
-  - id: 3
-    x: 4.362815
-    y: 1.208100
+    x: 6.556909
+    y: 1.086489
     fast: false
     constant_speed: false
     segment_custom_speed: true
