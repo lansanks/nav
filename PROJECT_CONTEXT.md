@@ -165,6 +165,13 @@ Point files live under `config/points/*.yaml`. The parser is a small project-loc
 
 Fast-marker validation is in `navigation_map_helpers.cpp`. Obstacle mode validates fast markers before saving or starting.
 
+Waypoint `event_label` conventions:
+
+- Legacy labels without a leading `@` keep the old behavior: `stand`, `bridge`, `low`, and `_name` policy labels.
+- Labels with a leading `@` are special navigation labels and are drawn in green.
+- `@stop_0.5` pauses at that point for 0.5 seconds; `@stop_1` pauses for 1 second.
+- `@back_20` drives backward 20 cm after reaching the point. The number after `@back_` is centimeters.
+
 ### UI
 
 The UI is OpenCV HighGUI-rendered, not a native Qt widget UI.

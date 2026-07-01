@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -101,6 +102,33 @@ bool isEventValidForTask(
   return event == "grabbed";
 }
 
+bool startsWith(const std::string & text, const std::string & prefix)
+{
+  return text.rfind(prefix, 0) == 0;
+}
+
+bool parsePositiveDoubleAfterPrefix(
+  const std::string & text,
+  const std::string & prefix,
+  double & value)
+{
+  if (!startsWith(text, prefix) || text.size() <= prefix.size()) {
+    return false;
+  }
+
+  try {
+    std::size_t consumed = 0;
+    const auto parsed = std::stod(text.substr(prefix.size()), &consumed);
+    if (consumed != text.size() - prefix.size() || parsed <= 0.0) {
+      return false;
+    }
+    value = parsed;
+    return true;
+  } catch (const std::exception &) {
+    return false;
+  }
+}
+
 template<typename ClientT>
 bool serviceReady(
   const typename ClientT::SharedPtr & client,
@@ -180,6 +208,7 @@ void NavigationRuntime::stopNavigation(const std::string & message)
     context_.controller->stop();
   }
   clearMissionPause();
+  resetNavigationEventState();
   publishZeroVelocity();
   context_.navigation_status = message;
   context_.status_message = message;
@@ -553,7 +582,6 @@ void NavigationRuntime::updateNavigationController(
   }
 
   if (maybeHoldForNavigationEvent()) {
-    publishZeroVelocity();
     return;
   }
 
@@ -640,6 +668,8 @@ void NavigationRuntime::resetNavigationEventState()
   context_.navigation_event_triggered.assign(point_count, false);
   context_.navigation_event_wait_active = false;
   context_.navigation_event_wait_until = std::chrono::steady_clock::time_point{};
+  context_.navigation_event_back_active = false;
+  context_.navigation_event_back_linear_x = 0.0;
 }
 
 bool NavigationRuntime::maybeHoldForNavigationEvent()
@@ -650,12 +680,23 @@ bool NavigationRuntime::maybeHoldForNavigationEvent()
 
   const auto now = std::chrono::steady_clock::now();
   if (now < context_.navigation_event_wait_until) {
+    if (context_.navigation_event_back_active && publish_velocity_ != nullptr) {
+      geometry_msgs::msg::Twist command;
+      command.linear.x = -std::abs(context_.navigation_event_back_linear_x);
+      publish_velocity_(command);
+    } else {
+      publishZeroVelocity();
+    }
     return true;
   }
 
+  const bool was_backing = context_.navigation_event_back_active;
   context_.navigation_event_wait_active = false;
   context_.navigation_event_wait_until = std::chrono::steady_clock::time_point{};
-  context_.status_message = "Navigation event wait complete";
+  context_.navigation_event_back_active = false;
+  context_.navigation_event_back_linear_x = 0.0;
+  publishZeroVelocity();
+  context_.status_message = was_backing ? "Navigation back complete" : "Navigation event wait complete";
   return false;
 }
 
@@ -700,6 +741,62 @@ bool NavigationRuntime::triggerNavigationEvent(
   std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
     return static_cast<char>(std::tolower(ch));
   });
+
+  if (!normalized.empty() && normalized.front() == '@') {
+    double value = 0.0;
+    if (parsePositiveDoubleAfterPrefix(normalized, "@stop_", value)) {
+      context_.navigation_event_wait_active = true;
+      context_.navigation_event_wait_until =
+        std::chrono::steady_clock::now() +
+        std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+        std::chrono::duration<double>(value));
+      context_.navigation_event_back_active = false;
+      context_.navigation_event_back_linear_x = 0.0;
+      context_.navigation_status =
+        "Stop event at point " + std::to_string(point.id) + " for " + std::to_string(value) + "s";
+      context_.status_message = "Special navigation stop";
+      RCLCPP_INFO(
+        logger_,
+        "Special navigation event '%s' reached at point %d. Pausing %.3fs.",
+        normalized.c_str(),
+        point.id,
+        value);
+      return true;
+    }
+
+    if (parsePositiveDoubleAfterPrefix(normalized, "@back_", value)) {
+      const double back_distance_m = value * 0.01;
+      const double back_speed_mps = std::max(0.05, std::abs(context_.controller_config.constant_speed_linear_x));
+      const double back_seconds = back_distance_m / back_speed_mps;
+      context_.navigation_event_wait_active = true;
+      context_.navigation_event_wait_until =
+        std::chrono::steady_clock::now() +
+        std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+        std::chrono::duration<double>(back_seconds));
+      context_.navigation_event_back_active = true;
+      context_.navigation_event_back_linear_x = back_speed_mps;
+      context_.navigation_status =
+        "Back event at point " + std::to_string(point.id) + " for " + std::to_string(value) + "cm";
+      context_.status_message = "Special navigation back";
+      RCLCPP_INFO(
+        logger_,
+        "Special navigation event '%s' reached at point %d. Backing %.3fm at %.3fm/s for %.3fs.",
+        normalized.c_str(),
+        point.id,
+        back_distance_m,
+        back_speed_mps,
+        back_seconds);
+      return true;
+    }
+
+    context_.status_message = "Special navigation label reached: " + point.event_label;
+    RCLCPP_INFO(
+      logger_,
+      "Special navigation label '%s' reached at point %d with no action.",
+      point.event_label.c_str(),
+      point.id);
+    return false;
+  }
 
   std::string command;
   std::string policy_config;

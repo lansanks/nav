@@ -136,6 +136,8 @@ struct NavigationNodeContext
   std::vector<bool> navigation_event_triggered;
   bool navigation_event_wait_active{false};
   std::chrono::steady_clock::time_point navigation_event_wait_until;
+  bool navigation_event_back_active{false};
+  double navigation_event_back_linear_x{0.0};
 
   struct MissionTaskState
   {

@@ -393,6 +393,24 @@ bool isCustomSpeedSegmentTarget(const MapPoint & point)
   return point.segment_custom_speed && point.task_type == kTaskTypeNone;
 }
 
+bool isSpecialNavigationLabel(const std::string & event_label)
+{
+  return !event_label.empty() && event_label.front() == '@';
+}
+
+std::string displayEventLabel(const std::string & event_label)
+{
+  if (isSpecialNavigationLabel(event_label)) {
+    return event_label;
+  }
+  return "@" + event_label;
+}
+
+cv::Scalar specialNavigationColor()
+{
+  return cv::Scalar(48, 170, 48);
+}
+
 cv::Scalar customSpeedColor()
 {
   return cv::Scalar(190, 55, 190);
@@ -1056,6 +1074,9 @@ struct TopViewMap::Impl
       if (custom_speed_endpoint) {
         point_color = customSpeedColor();
       }
+      if (isSpecialNavigationLabel(point.event_label)) {
+        point_color = specialNavigationColor();
+      }
       cv::circle(canvas, center, 8, cv::Scalar(20, 30, 35), cv::FILLED, cv::LINE_AA);
       cv::circle(canvas, center, 6, point_color, cv::FILLED, cv::LINE_AA);
       cv::circle(canvas, center, 8, cv::Scalar(245, 245, 245), 1, cv::LINE_AA);
@@ -1080,7 +1101,10 @@ struct TopViewMap::Impl
         1,
         cv::LINE_AA);
       if (!point.event_label.empty()) {
-        const auto event_text = "@" + point.event_label;
+        const auto event_text = displayEventLabel(point.event_label);
+        const auto event_color = isSpecialNavigationLabel(point.event_label) ?
+          specialNavigationColor() :
+          cv::Scalar(30, 85, 210);
         cv::putText(
           canvas,
           event_text,
@@ -1096,7 +1120,7 @@ struct TopViewMap::Impl
           cv::Point(center.x + 10, center.y + 14),
           cv::FONT_HERSHEY_SIMPLEX,
           0.43,
-          cv::Scalar(30, 85, 210),
+          event_color,
           1,
           cv::LINE_AA);
       }
