@@ -14,8 +14,50 @@ points:
     task_type: none
     event_label: "@stop_2"
   - id: 2
-    x: 10.670319
-    y: 2.783082
+    x: 10.295652
+    y: 2.495652
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
+  - id: 3
+    x: 8.405805
+    y: 3.393265
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
+  - id: 4
+    x: 6.792922
+    y: 3.726956
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
+  - id: 5
+    x: 5.513043
+    y: 4.173913
     fast: false
     constant_speed: false
     segment_custom_speed: false

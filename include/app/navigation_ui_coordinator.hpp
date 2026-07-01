@@ -49,6 +49,7 @@ private:
   void confirmTextInput();
   bool handleTextInputKey(int key);
   bool handleSegmentSpeedKey(int key);
+  bool handlePointGroupEditKey(int key);
   bool handleRoutePatchKey(int key);
   bool handleSettingsKey(int key);
   bool handleParamsKey(int key);

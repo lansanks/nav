@@ -45,6 +45,7 @@ enum class MapUiAction
   SegmentSpeedClose,
   DropdownOption,
   TogglePanel,
+  TogglePointGroupSelect,
   UiOnly,
 };
 
@@ -142,6 +143,20 @@ struct MapUiState
   bool route_patch_active{false};
   std::size_t route_patch_insert_index{0};
   std::vector<MapPlanPoint> route_patch_points;
+  bool point_group_select_mode_active{false};
+  bool point_group_selection_drag_active{false};
+  bool point_group_edit_active{false};
+  double point_group_selection_drag_start_x{0.0};
+  double point_group_selection_drag_start_y{0.0};
+  double point_group_selection_drag_end_x{0.0};
+  double point_group_selection_drag_end_y{0.0};
+  double point_group_selection_min_x{0.0};
+  double point_group_selection_max_x{0.0};
+  double point_group_selection_min_y{0.0};
+  double point_group_selection_max_y{0.0};
+  double point_group_selection_center_x{0.0};
+  double point_group_selection_center_y{0.0};
+  std::vector<std::size_t> point_group_selected_indices;
 };
 
 }  // namespace navigation::ui

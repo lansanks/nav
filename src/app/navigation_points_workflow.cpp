@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include "maps/navigation_map_helpers.hpp"
@@ -33,6 +34,70 @@ void clearRoutePatchState(NavigationNodeContext & context)
   context.route_patch_insert_index = 0;
   context.route_patch_original_points.clear();
   context.route_patch_points.clear();
+}
+
+void clearPointGroupSelectionDrag(NavigationNodeContext & context)
+{
+  context.point_group_selection_drag_active = false;
+  context.point_group_selection_start_pixel_x = 0;
+  context.point_group_selection_start_pixel_y = 0;
+}
+
+void clearPointGroupEditState(NavigationNodeContext & context)
+{
+  context.point_group_selection_drag_active = false;
+  context.point_group_edit_active = false;
+  context.point_group_selection_start_pixel_x = 0;
+  context.point_group_selection_start_pixel_y = 0;
+  context.point_group_selected_indices.clear();
+  context.point_group_original_points.clear();
+}
+
+bool updatePointGroupSelectionRect(
+  NavigationNodeContext & context,
+  int start_pixel_x,
+  int start_pixel_y,
+  int end_pixel_x,
+  int end_pixel_y)
+{
+  navigation::maps::MapPoint start;
+  navigation::maps::MapPoint end;
+  if (!context.map->pixelToWorldClamped(start_pixel_x, start_pixel_y, start) ||
+    !context.map->pixelToWorldClamped(end_pixel_x, end_pixel_y, end))
+  {
+    return false;
+  }
+
+  context.point_group_selection_min_x = std::min(start.x, end.x);
+  context.point_group_selection_max_x = std::max(start.x, end.x);
+  context.point_group_selection_min_y = std::min(start.y, end.y);
+  context.point_group_selection_max_y = std::max(start.y, end.y);
+  context.point_group_selection_drag_start_x = start.x;
+  context.point_group_selection_drag_start_y = start.y;
+  context.point_group_selection_drag_end_x = end.x;
+  context.point_group_selection_drag_end_y = end.y;
+  context.point_group_selection_center_x =
+    0.5 * (context.point_group_selection_min_x + context.point_group_selection_max_x);
+  context.point_group_selection_center_y =
+    0.5 * (context.point_group_selection_min_y + context.point_group_selection_max_y);
+  return true;
+}
+
+std::vector<std::size_t> pointIndicesInSelectionRect(const NavigationNodeContext & context)
+{
+  std::vector<std::size_t> indices;
+  const auto & points = context.map->points();
+  for (std::size_t i = 0; i < points.size(); ++i) {
+    const auto & point = points[i];
+    if (point.x >= context.point_group_selection_min_x &&
+      point.x <= context.point_group_selection_max_x &&
+      point.y >= context.point_group_selection_min_y &&
+      point.y <= context.point_group_selection_max_y)
+    {
+      indices.push_back(i);
+    }
+  }
+  return indices;
 }
 
 std::string trim(std::string text)
@@ -601,6 +666,168 @@ void NavigationPointsWorkflow::removeLastRoutePatchPoint()
 
   context_.route_patch_points.pop_back();
   context_.status_message = "Patch point removed";
+}
+
+void NavigationPointsWorkflow::beginPointGroupSelectionDrag(int pixel_x, int pixel_y)
+{
+  if (context_.route_patch_active) {
+    context_.status_message = "Finish route patch first";
+    return;
+  }
+  if (context_.point_group_edit_active) {
+    context_.status_message = "Finish point group edit first";
+    return;
+  }
+
+  if (!updatePointGroupSelectionRect(context_, pixel_x, pixel_y, pixel_x, pixel_y)) {
+    context_.status_message = "Selection must start on the map";
+    return;
+  }
+
+  context_.point_group_selection_drag_active = true;
+  context_.point_group_selection_start_pixel_x = pixel_x;
+  context_.point_group_selection_start_pixel_y = pixel_y;
+  context_.status_message = "Drag to select points";
+}
+
+void NavigationPointsWorkflow::updatePointGroupSelectionDrag(int pixel_x, int pixel_y)
+{
+  if (!context_.point_group_selection_drag_active) {
+    return;
+  }
+
+  updatePointGroupSelectionRect(
+    context_,
+    context_.point_group_selection_start_pixel_x,
+    context_.point_group_selection_start_pixel_y,
+    pixel_x,
+    pixel_y);
+}
+
+void NavigationPointsWorkflow::finishPointGroupSelectionDrag(int pixel_x, int pixel_y)
+{
+  if (!context_.point_group_selection_drag_active) {
+    return;
+  }
+
+  if (!updatePointGroupSelectionRect(
+      context_,
+      context_.point_group_selection_start_pixel_x,
+      context_.point_group_selection_start_pixel_y,
+      pixel_x,
+      pixel_y))
+  {
+    clearPointGroupSelectionDrag(context_);
+    context_.status_message = "Point selection cancelled";
+    return;
+  }
+
+  auto selected_indices = pointIndicesInSelectionRect(context_);
+  clearPointGroupSelectionDrag(context_);
+  if (selected_indices.empty()) {
+    context_.status_message = "No points selected";
+    return;
+  }
+
+  runtime_.stopNavigationForRouteChange();
+  context_.point_group_edit_active = true;
+  context_.point_group_selected_indices = std::move(selected_indices);
+  context_.point_group_original_points = context_.map->points();
+  context_.status_message =
+    "Selected " + std::to_string(context_.point_group_selected_indices.size()) +
+    " points. WASD 10cm / Shift+WASD 2cm / wheel 1deg / Shift+wheel 5deg / Enter / Esc";
+}
+
+void NavigationPointsWorkflow::cancelPointGroupSelectionDrag()
+{
+  if (!context_.point_group_selection_drag_active) {
+    return;
+  }
+  clearPointGroupSelectionDrag(context_);
+  context_.status_message = "Point selection cancelled";
+}
+
+void NavigationPointsWorkflow::moveSelectedPointGroup(double delta_x, double delta_y)
+{
+  if (!context_.point_group_edit_active || context_.point_group_selected_indices.empty()) {
+    return;
+  }
+
+  auto points = context_.map->points();
+  for (const auto index : context_.point_group_selected_indices) {
+    if (index >= points.size()) {
+      continue;
+    }
+    points[index].x += delta_x;
+    points[index].y += delta_y;
+  }
+
+  context_.map->setPoints(points);
+  context_.point_group_selection_min_x += delta_x;
+  context_.point_group_selection_max_x += delta_x;
+  context_.point_group_selection_min_y += delta_y;
+  context_.point_group_selection_max_y += delta_y;
+  context_.point_group_selection_center_x += delta_x;
+  context_.point_group_selection_center_y += delta_y;
+  context_.status_message = "Point group moved";
+}
+
+void NavigationPointsWorkflow::rotateSelectedPointGroup(double angle_radians)
+{
+  if (!context_.point_group_edit_active || context_.point_group_selected_indices.empty() ||
+    std::abs(angle_radians) <= 1.0e-9)
+  {
+    return;
+  }
+
+  auto points = context_.map->points();
+  const double center_x = context_.point_group_selection_center_x;
+  const double center_y = context_.point_group_selection_center_y;
+  const double c = std::cos(angle_radians);
+  const double s = std::sin(angle_radians);
+  for (const auto index : context_.point_group_selected_indices) {
+    if (index >= points.size()) {
+      continue;
+    }
+    const double dx = points[index].x - center_x;
+    const double dy = points[index].y - center_y;
+    points[index].x = center_x + c * dx - s * dy;
+    points[index].y = center_y + s * dx + c * dy;
+  }
+
+  context_.map->setPoints(points);
+  context_.status_message = "Point group rotated";
+}
+
+bool NavigationPointsWorkflow::confirmPointGroupEdit()
+{
+  if (!context_.point_group_edit_active) {
+    return false;
+  }
+
+  runtime_.syncControllerWaypoints();
+  if (!savePoints()) {
+    return false;
+  }
+
+  clearPointGroupEditState(context_);
+  context_.status_message = "Point group edit saved";
+  return true;
+}
+
+void NavigationPointsWorkflow::cancelPointGroupEdit()
+{
+  if (context_.point_group_selection_drag_active) {
+    cancelPointGroupSelectionDrag();
+  }
+  if (!context_.point_group_edit_active) {
+    return;
+  }
+
+  context_.map->setPoints(context_.point_group_original_points);
+  clearPointGroupEditState(context_);
+  runtime_.syncControllerWaypoints();
+  context_.status_message = "Point group edit cancelled";
 }
 
 void NavigationPointsWorkflow::removeLastPoint()

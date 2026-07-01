@@ -8,6 +8,14 @@
 
 namespace navigation::app
 {
+namespace
+{
+
+constexpr int kPointGroupDragThresholdPx = 6;
+constexpr double kPointGroupWheelRotationRadFine = 3.14159265358979323846 / 180.0;   // ~1°  per click
+constexpr double kPointGroupWheelRotationRadCoarse = 3.14159265358979323846 / 36.0;  // ~5°  per click
+
+}  // namespace
 
 NavigationMouseController::NavigationMouseController(
   NavigationNodeContext & context,
@@ -19,6 +27,11 @@ NavigationMouseController::NavigationMouseController(
   points_workflow_(points_workflow),
   logger_(logger)
 {
+}
+
+void NavigationMouseController::setCtrlPressed(bool pressed)
+{
+  ctrl_pressed_ = pressed;
 }
 
 void NavigationMouseController::handleMouseEvent(int event, int x, int y, int flags)
@@ -37,6 +50,8 @@ void NavigationMouseController::handleMouseEvent(int event, int x, int y, int fl
     handleMiddleUp();
   } else if (event == cv::EVENT_LBUTTONDOWN || event == cv::EVENT_LBUTTONDBLCLK) {
     handleLeftClick(x, y, flags);
+  } else if (event == cv::EVENT_LBUTTONUP) {
+    handleLeftUp(x, y);
   } else if (event == cv::EVENT_RBUTTONDOWN) {
     handleRightClick(x, y);
   }
@@ -53,21 +68,38 @@ void NavigationMouseController::handleMouseWheel(int x, int y, int flags)
     delta = -delta * 120;
   }
 
-  handleWheelDelta(x, y, delta);
+  const bool shift_held = (flags & cv::EVENT_FLAG_SHIFTKEY) != 0;
+  handleWheelDelta(x, y, delta, shift_held);
 }
 
-void NavigationMouseController::handleWheelDelta(int x, int y, int delta)
+void NavigationMouseController::handleWheelDelta(int x, int y, int delta, bool shift_held)
 {
+  if (delta == 0) {
+    return;
+  }
+
+  if (context_.point_group_edit_active) {
+    const double clicks = static_cast<double>(delta) / 120.0;
+    const double angle = shift_held
+      ? clicks * kPointGroupWheelRotationRadCoarse   // ~5° per click
+      : clicks * kPointGroupWheelRotationRadFine;     // ~1° per click
+    points_workflow_.rotateSelectedPointGroup(angle);
+    rememberMousePosition(x, y);
+    return;
+  }
+
+  if (context_.point_group_selection_drag_active) {
+    return;
+  }
+
   if (context_.input_mode != navigation::keyboards::TextInputMode::None ||
     context_.params_session.active() ||
     context_.segment_speed_edit_active ||
     context_.settings_popup_active ||
-    context_.radar_popup_active)
+    context_.radar_popup_active ||
+    context_.point_group_selection_drag_active ||
+    context_.point_group_edit_active)
   {
-    return;
-  }
-
-  if (delta == 0) {
     return;
   }
 
@@ -110,7 +142,9 @@ void NavigationMouseController::handleMiddleDown(int x, int y)
     context_.params_session.active() ||
     context_.segment_speed_edit_active ||
     context_.settings_popup_active ||
-    context_.radar_popup_active)
+    context_.radar_popup_active ||
+    context_.point_group_selection_drag_active ||
+    context_.point_group_edit_active)
   {
     return;
   }
@@ -133,6 +167,11 @@ void NavigationMouseController::handleMiddleDown(int x, int y)
 void NavigationMouseController::handleMouseMove(int x, int y, int flags)
 {
   (void)flags;  // EVENT_FLAG_MBUTTON is unreliable with the GTK backend.
+  if (ctrl_left_dragging_) {
+    points_workflow_.updatePointGroupSelectionDrag(x, y);
+    return;
+  }
+
   if (!map_dragging_) {
     return;
   }
@@ -156,6 +195,11 @@ void NavigationMouseController::handleLeftClick(int x, int y, int flags)
     if (hit.action == navigation::ui::MapUiAction::InputClose) {
       ui_coordinator_.handleUiHit(hit);
     }
+    return;
+  }
+
+  if (context_.point_group_edit_active) {
+    context_.status_message = "WASD 10cm / Shift+WASD 2cm / wheel 1deg / Shift+wheel 5deg / Enter / Esc";
     return;
   }
 
@@ -207,22 +251,70 @@ void NavigationMouseController::handleLeftClick(int x, int y, int flags)
     return;
   }
 
-  if ((flags & cv::EVENT_FLAG_CTRLKEY) != 0) {
-    const int point_index = context_.map->hitTestPoint(x, y, 14);
-    if (point_index >= 0) {
-      ui_coordinator_.beginEventLabelInput(static_cast<std::size_t>(point_index));
-      return;
-    }
-    const int segment_target_index = context_.map->hitTestSegmentTarget(x, y, 10);
-    if (segment_target_index >= 0) {
-      ui_coordinator_.beginSegmentSpeedInput(static_cast<std::size_t>(segment_target_index));
-      return;
-    }
-    context_.status_message = "Ctrl+click a point for event or a segment for speed";
+  // Enter point-group selection drag when the panel "Select Points" mode
+  // is toggled on, or when Ctrl is held (keyboard shortcut fallback).
+  if (context_.point_group_select_mode_active ||
+      ctrl_pressed_ ||
+      (flags & cv::EVENT_FLAG_CTRLKEY) != 0)
+  {
+    ctrl_left_start_x_ = x;
+    ctrl_left_start_y_ = y;
+    points_workflow_.beginPointGroupSelectionDrag(x, y);
+    ctrl_left_dragging_ = context_.point_group_selection_drag_active;
     return;
   }
 
   points_workflow_.addClickedPoint(x, y);
+}
+
+void NavigationMouseController::handleLeftUp(int x, int y)
+{
+  if (!ctrl_left_dragging_) {
+    // Clear sticky Ctrl state on any left button release so that a
+    // stale ctrl_pressed_ (set via keyboard event) does not leak into
+    // the next click.
+    ctrl_pressed_ = false;
+    return;
+  }
+  if (!context_.point_group_selection_drag_active) {
+    ctrl_left_dragging_ = false;
+    ctrl_pressed_ = false;
+    return;
+  }
+
+  const int dx = x - ctrl_left_start_x_;
+  const int dy = y - ctrl_left_start_y_;
+  const bool dragged =
+    dx * dx + dy * dy >= kPointGroupDragThresholdPx * kPointGroupDragThresholdPx;
+
+  if (dragged) {
+    points_workflow_.finishPointGroupSelectionDrag(x, y);
+  } else {
+    points_workflow_.cancelPointGroupSelectionDrag();
+    // Only fall back to Ctrl+click shortcuts (event label / segment speed)
+    // when the drag was initiated via the Ctrl key, not the panel toggle.
+    if (!context_.point_group_select_mode_active) {
+      handleCtrlLeftClick(x, y);
+    }
+  }
+
+  ctrl_left_dragging_ = false;
+  ctrl_pressed_ = false;
+}
+
+void NavigationMouseController::handleCtrlLeftClick(int x, int y)
+{
+  const int point_index = context_.map->hitTestPoint(x, y, 14);
+  if (point_index >= 0) {
+    ui_coordinator_.beginEventLabelInput(static_cast<std::size_t>(point_index));
+    return;
+  }
+  const int segment_target_index = context_.map->hitTestSegmentTarget(x, y, 10);
+  if (segment_target_index >= 0) {
+    ui_coordinator_.beginSegmentSpeedInput(static_cast<std::size_t>(segment_target_index));
+    return;
+  }
+  context_.status_message = "Ctrl+drag to select points, or Ctrl+click point/segment";
 }
 
 void NavigationMouseController::handleRightClick(int x, int y)

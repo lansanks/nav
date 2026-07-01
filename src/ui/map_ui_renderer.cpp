@@ -343,7 +343,7 @@ std::vector<MapUiRenderer::UiButton> MapUiRenderer::uiButtons(
   const int button_height = 36;
   const int gap = 12;
   std::vector<UiButton> buttons;
-  buttons.reserve(9);
+  buttons.reserve(10);
 
   auto add_button = [&](MapUiAction action, const std::string & label) {
     buttons.push_back({action, cv::Rect(left, top, button_width, button_height), label});
@@ -354,6 +354,9 @@ std::vector<MapUiRenderer::UiButton> MapUiRenderer::uiButtons(
   add_button(MapUiAction::NewPoints, "New Points");
   add_button(MapUiAction::ChooseMap, "Choose Map");
   add_button(MapUiAction::SavePointsAs, "Save Points As");
+  add_button(
+    MapUiAction::TogglePointGroupSelect,
+    ui_state.point_group_select_mode_active ? "Select Points [ON]" : "Select Points");
   add_button(
     MapUiAction::ToggleRaceLogic,
     ui_state.race_logic == "mission" ? "Race: Mission" : "Race: Obstacle");
@@ -784,7 +787,7 @@ void MapUiRenderer::drawUiPanel(cv::Mat & canvas, const MapUiState & ui_state, s
   drawPanelToggle(canvas, ui_state);
 
   cv::putText(canvas, "Map Controls", cv::Point(panel_left + 22, 38), cv::FONT_HERSHEY_SIMPLEX, 0.72, palette.title, 2, cv::LINE_AA);
-  putPanelText(canvas, "Left click map: add point", cv::Point(panel_left + 22, 66), 0.48, palette.text);
+  putPanelText(canvas, "Left click: add point (Select Points to drag)", cv::Point(panel_left + 22, 66), 0.45, palette.text);
   putPanelText(canvas, "Wheel: zoom, middle drag: pan", cv::Point(panel_left + 22, 86), 0.43, palette.text_muted);
 
   const auto buttons = uiButtons(ui_state, ui_state.navigation_active);

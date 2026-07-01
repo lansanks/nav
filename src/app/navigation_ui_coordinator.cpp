@@ -214,6 +214,8 @@ using OptimPoint = navigation::optim::Point2;
 constexpr double kMissionLaneOffset = 0.05;
 constexpr double kMissionRowTolerance = 0.12;
 constexpr double kMissionEps = 1.0e-9;
+constexpr double kPointGroupMoveStepM = 0.02;
+constexpr double kPointGroupMoveStepCoarseM = 0.10;
 
 enum class LaneSide { Left, Right };
 
@@ -845,6 +847,13 @@ void NavigationUiCoordinator::handleUiAction(navigation::ui::MapUiAction action)
     case navigation::ui::MapUiAction::TogglePanel:
       togglePanel();
       break;
+    case navigation::ui::MapUiAction::TogglePointGroupSelect:
+      clearDropdown();
+      context_.point_group_select_mode_active = !context_.point_group_select_mode_active;
+      context_.status_message = context_.point_group_select_mode_active ?
+        "Select mode ON: left-drag to select points" :
+        "Select mode OFF";
+      break;
     case navigation::ui::MapUiAction::UiOnly:
       if (context_.dropdown_mode != navigation::ui::MapDropdownMode::None) {
         clearDropdown();
@@ -1263,6 +1272,83 @@ bool NavigationUiCoordinator::handleSegmentSpeedKey(int key)
   return true;
 }
 
+bool NavigationUiCoordinator::handlePointGroupEditKey(int key)
+{
+  if (context_.point_group_selection_drag_active) {
+    if (key == -1) {
+      return true;
+    }
+    if (navigation::keyboards::isEscKey(key)) {
+      points_workflow_.cancelPointGroupSelectionDrag();
+      return true;
+    }
+    return true;
+  }
+
+  if (!context_.point_group_edit_active) {
+    // When selection mode is toggled on but no drag/edit is active,
+    // Esc exits selection mode so the user can return to normal clicks.
+    if (context_.point_group_select_mode_active && navigation::keyboards::isEscKey(key)) {
+      context_.point_group_select_mode_active = false;
+      context_.status_message = "Select mode OFF";
+      return true;
+    }
+    return false;
+  }
+
+  if (key == -1) {
+    return true;
+  }
+
+  const int ascii = navigation::keyboards::keyAscii(key);
+
+  if (navigation::keyboards::isEscKey(key)) {
+    points_workflow_.cancelPointGroupEdit();
+    return true;
+  }
+  if (navigation::keyboards::isEnterKey(key)) {
+    points_workflow_.confirmPointGroupEdit();
+    return true;
+  }
+  // WASD coarse (10 cm) — lowercase without Shift
+  if (ascii == 'a') {
+    points_workflow_.moveSelectedPointGroup(-kPointGroupMoveStepCoarseM, 0.0);
+    return true;
+  }
+  if (ascii == 'd') {
+    points_workflow_.moveSelectedPointGroup(kPointGroupMoveStepCoarseM, 0.0);
+    return true;
+  }
+  if (ascii == 'w') {
+    points_workflow_.moveSelectedPointGroup(0.0, kPointGroupMoveStepCoarseM);
+    return true;
+  }
+  if (ascii == 's') {
+    points_workflow_.moveSelectedPointGroup(0.0, -kPointGroupMoveStepCoarseM);
+    return true;
+  }
+  // Shift+WASD fine (2 cm) — uppercase
+  if (ascii == 'A') {
+    points_workflow_.moveSelectedPointGroup(-kPointGroupMoveStepM, 0.0);
+    return true;
+  }
+  if (ascii == 'D') {
+    points_workflow_.moveSelectedPointGroup(kPointGroupMoveStepM, 0.0);
+    return true;
+  }
+  if (ascii == 'W') {
+    points_workflow_.moveSelectedPointGroup(0.0, kPointGroupMoveStepM);
+    return true;
+  }
+  if (ascii == 'S') {
+    points_workflow_.moveSelectedPointGroup(0.0, -kPointGroupMoveStepM);
+    return true;
+  }
+
+  context_.status_message = "WASD 10cm / Shift+WASD 2cm / wheel 1deg / Shift+wheel 5deg / Enter / Esc";
+  return true;
+}
+
 bool NavigationUiCoordinator::handleSettingsKey(int key)
 {
   if (!context_.settings_popup_active) {
@@ -1373,6 +1459,9 @@ bool NavigationUiCoordinator::handleActiveInputKey(int key)
     return true;
   }
   if (handleSegmentSpeedKey(key)) {
+    return true;
+  }
+  if (handlePointGroupEditKey(key)) {
     return true;
   }
   if (handleRoutePatchKey(key)) {
@@ -1507,6 +1596,20 @@ navigation::ui::MapUiState NavigationUiCoordinator::buildUiState()
   for (const auto & point : context_.route_patch_points) {
     ui_state.route_patch_points.push_back({point.x, point.y, false});
   }
+  ui_state.point_group_select_mode_active = context_.point_group_select_mode_active;
+  ui_state.point_group_selection_drag_active = context_.point_group_selection_drag_active;
+  ui_state.point_group_edit_active = context_.point_group_edit_active;
+  ui_state.point_group_selection_drag_start_x = context_.point_group_selection_drag_start_x;
+  ui_state.point_group_selection_drag_start_y = context_.point_group_selection_drag_start_y;
+  ui_state.point_group_selection_drag_end_x = context_.point_group_selection_drag_end_x;
+  ui_state.point_group_selection_drag_end_y = context_.point_group_selection_drag_end_y;
+  ui_state.point_group_selection_min_x = context_.point_group_selection_min_x;
+  ui_state.point_group_selection_max_x = context_.point_group_selection_max_x;
+  ui_state.point_group_selection_min_y = context_.point_group_selection_min_y;
+  ui_state.point_group_selection_max_y = context_.point_group_selection_max_y;
+  ui_state.point_group_selection_center_x = context_.point_group_selection_center_x;
+  ui_state.point_group_selection_center_y = context_.point_group_selection_center_y;
+  ui_state.point_group_selected_indices = context_.point_group_selected_indices;
   return ui_state;
 }
 

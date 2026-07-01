@@ -55,6 +55,7 @@ public:
   std::size_t geomCount() const;
   MapUiHit hitTestUi(int pixel_x, int pixel_y, const MapUiState & ui_state) const;
   bool pixelToWorld(int pixel_x, int pixel_y, MapPoint & point) const;
+  bool pixelToWorldClamped(int pixel_x, int pixel_y, MapPoint & point) const;
   int hitTestPoint(int pixel_x, int pixel_y, int radius_px = 10) const;
   int hitTestSegmentTarget(int pixel_x, int pixel_y, int radius_px = 9) const;
   int nearestPointIndex(int pixel_x, int pixel_y) const;

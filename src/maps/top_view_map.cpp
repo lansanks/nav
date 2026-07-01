@@ -416,6 +416,14 @@ cv::Scalar customSpeedColor()
   return cv::Scalar(190, 55, 190);
 }
 
+bool isSelectedPoint(std::size_t index, const MapUiState & ui_state)
+{
+  return std::find(
+    ui_state.point_group_selected_indices.begin(),
+    ui_state.point_group_selected_indices.end(),
+    index) != ui_state.point_group_selected_indices.end();
+}
+
 }  // namespace
 
 std::string resolveScenePath(const std::string & robot_name, const std::string & scene)
@@ -595,6 +603,7 @@ struct TopViewMap::Impl
       }
     }
     drawSavedPoints(canvas, ui_state);
+    drawPointGroupSelection(canvas, ui_state);
     drawRoutePatch(canvas, ui_state);
     drawOptimizedPlan(canvas, ui_state);
 
@@ -880,6 +889,19 @@ struct TopViewMap::Impl
     return true;
   }
 
+  bool pixelToWorldClamped(int pixel_x, int pixel_y, MapPoint & point) const
+  {
+    if (!bounds.valid || scale <= 1e-9) {
+      return false;
+    }
+
+    const double world_x = bounds.min_x + (static_cast<double>(pixel_x) - view_left) / scale;
+    const double world_y = bounds.max_y - (static_cast<double>(pixel_y) - view_top) / scale;
+    point.x = std::clamp(world_x, bounds.min_x, bounds.max_x);
+    point.y = std::clamp(world_y, bounds.min_y, bounds.max_y);
+    return true;
+  }
+
   bool zoomAt(int pixel_x, int pixel_y, double factor)
   {
     if (!bounds.valid || scale <= 1e-9 || fit_scale <= 1e-9 ||
@@ -1077,6 +1099,10 @@ struct TopViewMap::Impl
       if (isSpecialNavigationLabel(point.event_label)) {
         point_color = specialNavigationColor();
       }
+      const bool selected_for_group = ui_state.point_group_edit_active && isSelectedPoint(i, ui_state);
+      if (selected_for_group) {
+        cv::circle(canvas, center, 13, cv::Scalar(20, 145, 240), 2, cv::LINE_AA);
+      }
       cv::circle(canvas, center, 8, cv::Scalar(20, 30, 35), cv::FILLED, cv::LINE_AA);
       cv::circle(canvas, center, 6, point_color, cv::FILLED, cv::LINE_AA);
       cv::circle(canvas, center, 8, cv::Scalar(245, 245, 245), 1, cv::LINE_AA);
@@ -1124,6 +1150,70 @@ struct TopViewMap::Impl
           1,
           cv::LINE_AA);
       }
+    }
+  }
+
+  void drawPointGroupSelection(cv::Mat & canvas, const MapUiState & ui_state) const
+  {
+    if (!ui_state.point_group_selection_drag_active && !ui_state.point_group_edit_active) {
+      return;
+    }
+
+    const auto top_left = worldToPixel({
+        ui_state.point_group_selection_min_x,
+        ui_state.point_group_selection_max_y,
+      });
+    const auto bottom_right = worldToPixel({
+        ui_state.point_group_selection_max_x,
+        ui_state.point_group_selection_min_y,
+      });
+    const cv::Rect rect(
+      std::min(top_left.x, bottom_right.x),
+      std::min(top_left.y, bottom_right.y),
+      std::abs(bottom_right.x - top_left.x),
+      std::abs(bottom_right.y - top_left.y));
+    const cv::Scalar color = ui_state.point_group_edit_active ?
+      cv::Scalar(20, 145, 240) :
+      cv::Scalar(48, 160, 48);
+    if (rect.width > 0 && rect.height > 0) {
+      cv::rectangle(canvas, rect, color, 2, cv::LINE_AA);
+      if (ui_state.point_group_selection_drag_active) {
+        cv::line(
+          canvas,
+          worldToPixel({
+            ui_state.point_group_selection_drag_start_x,
+            ui_state.point_group_selection_drag_start_y,
+          }),
+          worldToPixel({
+            ui_state.point_group_selection_drag_end_x,
+            ui_state.point_group_selection_drag_end_y,
+          }),
+          color,
+          1,
+          cv::LINE_AA);
+      }
+    }
+
+    if (ui_state.point_group_edit_active) {
+      const auto center = worldToPixel({
+          ui_state.point_group_selection_center_x,
+          ui_state.point_group_selection_center_y,
+        });
+      cv::line(
+        canvas,
+        cv::Point(center.x - 8, center.y),
+        cv::Point(center.x + 8, center.y),
+        color,
+        2,
+        cv::LINE_AA);
+      cv::line(
+        canvas,
+        cv::Point(center.x, center.y - 8),
+        cv::Point(center.x, center.y + 8),
+        color,
+        2,
+        cv::LINE_AA);
+      cv::circle(canvas, center, 10, color, 1, cv::LINE_AA);
     }
   }
 
@@ -1375,6 +1465,11 @@ MapUiHit TopViewMap::hitTestUi(int pixel_x, int pixel_y, const MapUiState & ui_s
 bool TopViewMap::pixelToWorld(int pixel_x, int pixel_y, MapPoint & point) const
 {
   return impl_->pixelToWorld(pixel_x, pixel_y, point);
+}
+
+bool TopViewMap::pixelToWorldClamped(int pixel_x, int pixel_y, MapPoint & point) const
+{
+  return impl_->pixelToWorldClamped(pixel_x, pixel_y, point);
 }
 
 int TopViewMap::hitTestPoint(int pixel_x, int pixel_y, int radius_px) const

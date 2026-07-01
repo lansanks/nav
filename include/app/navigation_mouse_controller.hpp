@@ -19,7 +19,8 @@ public:
     rclcpp::Logger logger);
 
   void handleMouseEvent(int event, int x, int y, int flags);
-  void handleWheelDelta(int x, int y, int delta);
+  void handleWheelDelta(int x, int y, int delta, bool shift_held = false);
+  void setCtrlPressed(bool pressed);
 
 private:
   void handleMouseWheel(int x, int y, int flags);
@@ -28,6 +29,8 @@ private:
   void handleMouseMove(int x, int y, int flags);
   void handleMiddleUp();
   void handleLeftClick(int x, int y, int flags);
+  void handleLeftUp(int x, int y);
+  void handleCtrlLeftClick(int x, int y);
   void handleRightClick(int x, int y);
 
   NavigationNodeContext & context_;
@@ -40,6 +43,10 @@ private:
   int last_mouse_y_{0};
   int drag_last_x_{0};
   int drag_last_y_{0};
+  bool ctrl_pressed_{false};
+  bool ctrl_left_dragging_{false};
+  int ctrl_left_start_x_{0};
+  int ctrl_left_start_y_{0};
 };
 
 }  // namespace navigation::app

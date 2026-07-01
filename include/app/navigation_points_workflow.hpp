@@ -44,6 +44,14 @@ public:
   void confirmRoutePatch();
   void cancelRoutePatch();
   void removeLastRoutePatchPoint();
+  void beginPointGroupSelectionDrag(int pixel_x, int pixel_y);
+  void updatePointGroupSelectionDrag(int pixel_x, int pixel_y);
+  void finishPointGroupSelectionDrag(int pixel_x, int pixel_y);
+  void cancelPointGroupSelectionDrag();
+  void moveSelectedPointGroup(double delta_x, double delta_y);
+  void rotateSelectedPointGroup(double angle_radians);
+  bool confirmPointGroupEdit();
+  void cancelPointGroupEdit();
   void removeLastPoint();
   void clearPoints();
 
