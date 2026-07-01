@@ -379,6 +379,8 @@ NavigationMapNode::NavigationMapNode()
     context_.current_map_file = fallback_scene;
     context_.map->load(context_.current_map_file);
   }
+  context_.points_file =
+    navigation::maps::pointsFileForObstacleMap(context_.points_file, context_.current_map_file);
   context_.map->setPoints(navigation::maps::loadPointsFile(context_.points_file));
   context_.controller_names = navigation::controllerNames();
   if (!context_.controller_names.empty()) {

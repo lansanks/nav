@@ -21,6 +21,10 @@ namespace navigation::maps
 namespace
 {
 
+constexpr const char * kRightPointsGroup = "right";
+constexpr const char * kLeftPointsGroup = "left";
+constexpr double kObstacleMirrorY = 6.0;
+
 std::string trim(std::string text)
 {
   const auto first = text.find_first_not_of(" \t\r\n");
@@ -45,6 +49,34 @@ bool parseBool(std::string value)
     return static_cast<char>(std::tolower(ch));
   });
   return value == "true" || value == "1" || value == "yes" || value == "on";
+}
+
+bool isObstaclePointsGroup(const std::string & group)
+{
+  return group == kRightPointsGroup || group == kLeftPointsGroup;
+}
+
+std::string lowerAscii(std::string text)
+{
+  std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  return text;
+}
+
+std::filesystem::path defaultPointsDir()
+{
+  return std::filesystem::path(defaultPointsFilePath()).parent_path();
+}
+
+bool isRelativeGroupedPath(const std::filesystem::path & path)
+{
+  if (path.is_absolute() || !path.has_parent_path()) {
+    return false;
+  }
+
+  const auto first = *path.begin();
+  return isObstaclePointsGroup(first.string());
 }
 
 std::uint8_t parseTaskType(std::string value)
@@ -113,6 +145,12 @@ std::filesystem::path sourcePackagePathFromShare(const std::filesystem::path & s
 {
   std::error_code error;
   for (auto current = share_path; !current.empty(); current = current.parent_path()) {
+    if (std::filesystem::exists(current / "CMakeLists.txt", error) &&
+      std::filesystem::exists(current / "config" / "points" / "points.yaml", error))
+    {
+      return current;
+    }
+
     const auto candidate = current / "src" / "navigation";
     if (std::filesystem::exists(candidate / "CMakeLists.txt", error) &&
       std::filesystem::exists(candidate / "config" / "points" / "points.yaml", error))
@@ -154,6 +192,10 @@ std::string resolvePointsFilePath(const std::string & path_or_name)
     path += ".yaml";
   }
 
+  if (isRelativeGroupedPath(path)) {
+    return (std::filesystem::path(defaultPointsFilePath()).parent_path() / path).string();
+  }
+
   if (path.is_absolute() || path.has_parent_path()) {
     return path.string();
   }
@@ -161,7 +203,9 @@ std::string resolvePointsFilePath(const std::string & path_or_name)
   return (std::filesystem::path(defaultPointsFilePath()).parent_path() / path).string();
 }
 
-std::vector<std::string> listPointsFiles(const std::string & include_path)
+std::vector<std::string> listPointsFilesForGroup(
+  const std::string & group,
+  const std::string & include_path)
 {
   std::vector<std::string> files;
 
@@ -177,10 +221,11 @@ std::vector<std::string> listPointsFiles(const std::string & include_path)
     }
   };
 
-  const auto default_dir = std::filesystem::path(defaultPointsFilePath()).parent_path();
+  const auto default_dir = defaultPointsDir();
+  const auto scan_dir = isObstaclePointsGroup(group) ? default_dir / group : default_dir;
   std::error_code error;
-  if (!default_dir.empty() && std::filesystem::exists(default_dir, error)) {
-    for (const auto & entry : std::filesystem::directory_iterator(default_dir, error)) {
+  if (!scan_dir.empty() && std::filesystem::exists(scan_dir, error)) {
+    for (const auto & entry : std::filesystem::directory_iterator(scan_dir, error)) {
       if (error) {
         break;
       }
@@ -191,7 +236,8 @@ std::vector<std::string> listPointsFiles(const std::string & include_path)
   }
 
   if (!include_path.empty()) {
-    const std::filesystem::path current(include_path);
+    const std::filesystem::path current(
+      isObstaclePointsGroup(group) ? pointsFileForGroup(include_path, group) : include_path);
     if (std::filesystem::exists(current, error) && std::filesystem::is_regular_file(current, error)) {
       add_file(current);
     }
@@ -212,6 +258,65 @@ std::vector<std::string> listPointsFiles(const std::string & include_path)
     });
 
   return files;
+}
+
+std::vector<std::string> listPointsFiles(const std::string & include_path)
+{
+  return listPointsFilesForGroup("", include_path);
+}
+
+std::string obstacleMapPointsGroup(const std::string & map_path)
+{
+  const auto filename = lowerAscii(std::filesystem::path(map_path).filename().string());
+  if (filename.find("obstacle_right") != std::string::npos) {
+    return kRightPointsGroup;
+  }
+  if (filename.find("obstacle_left") != std::string::npos) {
+    return kLeftPointsGroup;
+  }
+  return "";
+}
+
+std::string oppositeObstaclePointsGroup(const std::string & group)
+{
+  if (group == kRightPointsGroup) {
+    return kLeftPointsGroup;
+  }
+  if (group == kLeftPointsGroup) {
+    return kRightPointsGroup;
+  }
+  return "";
+}
+
+std::string pointsFileGroup(const std::string & path_text)
+{
+  const auto path = std::filesystem::path(resolvePointsFilePath(path_text));
+  return isObstaclePointsGroup(path.parent_path().filename().string()) ?
+         path.parent_path().filename().string() : "";
+}
+
+std::string pointsFileForGroup(const std::string & path_or_name, const std::string & group)
+{
+  if (!isObstaclePointsGroup(group)) {
+    return resolvePointsFilePath(path_or_name);
+  }
+
+  const auto resolved = std::filesystem::path(resolvePointsFilePath(path_or_name));
+  const auto filename = resolved.has_filename() ?
+    resolved.filename() :
+    std::filesystem::path(defaultPointsFilePath()).filename();
+  return (defaultPointsDir() / group / filename).string();
+}
+
+std::string pointsFileForObstacleMap(
+  const std::string & path_or_name,
+  const std::string & map_path)
+{
+  const auto group = obstacleMapPointsGroup(map_path);
+  if (group.empty()) {
+    return resolvePointsFilePath(path_or_name);
+  }
+  return pointsFileForGroup(path_or_name, group);
 }
 
 std::vector<MapPoint> loadPointsFile(const std::string & path)
@@ -338,6 +443,15 @@ bool savePointsFile(const std::string & path_text, const std::vector<MapPoint> &
     output << "    event_label: " << quoteScalar(point.event_label) << "\n";
   }
   return true;
+}
+
+std::vector<MapPoint> mirrorObstaclePointsY(const std::vector<MapPoint> & points)
+{
+  auto mirrored = points;
+  for (auto & point : mirrored) {
+    point.y = kObstacleMirrorY - point.y;
+  }
+  return mirrored;
 }
 
 }  // namespace navigation::maps

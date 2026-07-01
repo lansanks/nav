@@ -99,6 +99,9 @@ NavigationPointsWorkflow::NavigationPointsWorkflow(
 
 bool NavigationPointsWorkflow::savePoints()
 {
+  context_.points_file =
+    navigation::maps::pointsFileForObstacleMap(context_.points_file, context_.current_map_file);
+
   std::string marker_error;
   if (context_.race_logic == "obstacle" &&
     !navigation::maps::validateFastMarkers(context_.map->points(), &marker_error))
@@ -115,13 +118,43 @@ bool NavigationPointsWorkflow::savePoints()
     return false;
   }
 
+  const auto group = navigation::maps::pointsFileGroup(context_.points_file);
+  const auto opposite_group = navigation::maps::oppositeObstaclePointsGroup(group);
+  if (!opposite_group.empty()) {
+    const auto mirror_path = navigation::maps::pointsFileForGroup(context_.points_file, opposite_group);
+    const auto mirror_points = navigation::maps::mirrorObstaclePointsY(context_.map->points());
+    if (!navigation::maps::savePointsFile(mirror_path, mirror_points, &error)) {
+      context_.status_message = "Mirror save failed";
+      RCLCPP_ERROR(logger_, "%s", error.c_str());
+      return false;
+    }
+    RCLCPP_INFO(logger_, "Saved mirrored navigation points to %s", mirror_path.c_str());
+  }
+
   return true;
 }
 
 void NavigationPointsWorkflow::loadPointsFromFile(const std::string & path_or_name)
 {
   runtime_.stopNavigationForRouteChange();
-  const auto path = navigation::maps::resolvePointsFilePath(path_or_name);
+  const auto path = navigation::maps::pointsFileForObstacleMap(path_or_name, context_.current_map_file);
+  const auto group = navigation::maps::pointsFileGroup(path);
+  const auto opposite_group = navigation::maps::oppositeObstaclePointsGroup(group);
+  std::error_code filesystem_error;
+  if (!opposite_group.empty() && !std::filesystem::exists(path, filesystem_error)) {
+    const auto opposite_path = navigation::maps::pointsFileForGroup(path, opposite_group);
+    if (std::filesystem::exists(opposite_path, filesystem_error)) {
+      const auto mirrored_points =
+        navigation::maps::mirrorObstaclePointsY(navigation::maps::loadPointsFile(opposite_path));
+      std::string save_error;
+      if (!navigation::maps::savePointsFile(path, mirrored_points, &save_error)) {
+        context_.status_message = "Mirror create failed";
+        RCLCPP_ERROR(logger_, "%s", save_error.c_str());
+      } else {
+        RCLCPP_INFO(logger_, "Created mirrored navigation points file: %s", path.c_str());
+      }
+    }
+  }
   auto loaded_points = navigation::maps::loadPointsFile(path);
   context_.map->setPoints(loaded_points);
   context_.points_file = path;
@@ -144,7 +177,8 @@ void NavigationPointsWorkflow::savePointsAs(const std::string & path_or_name)
     return;
   }
 
-  context_.points_file = navigation::maps::resolvePointsFilePath(path_or_name);
+  context_.points_file =
+    navigation::maps::pointsFileForObstacleMap(path_or_name, context_.current_map_file);
   if (savePoints()) {
     context_.status_message = "Saved: " + std::filesystem::path(context_.points_file).filename().string();
     RCLCPP_INFO(logger_, "Saved navigation points as %s", context_.points_file.c_str());
@@ -154,7 +188,7 @@ void NavigationPointsWorkflow::savePointsAs(const std::string & path_or_name)
 void NavigationPointsWorkflow::createNewPointsFile(const std::string & path_or_name)
 {
   runtime_.stopNavigationForRouteChange();
-  const auto path = navigation::maps::resolvePointsFilePath(path_or_name);
+  const auto path = navigation::maps::pointsFileForObstacleMap(path_or_name, context_.current_map_file);
   std::error_code filesystem_error;
   if (std::filesystem::exists(path, filesystem_error)) {
     context_.status_message = "Point file already exists";
@@ -173,6 +207,17 @@ void NavigationPointsWorkflow::createNewPointsFile(const std::string & path_or_n
   context_.map->clearPoints();
   context_.points_file = path;
   runtime_.syncControllerWaypoints();
+  const auto group = navigation::maps::pointsFileGroup(context_.points_file);
+  const auto opposite_group = navigation::maps::oppositeObstaclePointsGroup(group);
+  if (!opposite_group.empty()) {
+    const auto mirror_path = navigation::maps::pointsFileForGroup(context_.points_file, opposite_group);
+    if (!std::filesystem::exists(mirror_path, filesystem_error)) {
+      std::string mirror_error;
+      if (!navigation::maps::savePointsFile(mirror_path, empty_points, &mirror_error)) {
+        RCLCPP_WARN(logger_, "Failed to create mirrored point file: %s", mirror_error.c_str());
+      }
+    }
+  }
   RCLCPP_INFO(logger_, "Created empty navigation points file: %s", context_.points_file.c_str());
 }
 
@@ -206,7 +251,8 @@ void NavigationPointsWorkflow::mergePointsFilesAs(
     return;
   }
 
-  const auto output_path = navigation::maps::resolvePointsFilePath(path_or_name);
+  const auto output_path =
+    navigation::maps::pointsFileForObstacleMap(path_or_name, context_.current_map_file);
   std::string error;
   if (!navigation::maps::savePointsFile(output_path, merged_points, &error)) {
     context_.status_message = "Merge save failed";

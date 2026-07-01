@@ -136,6 +136,8 @@ public:
     context_.rl_policy_config_topic = config.rl_policy_config_topic;
 
     context_.current_map_file = navigation::maps::resolveScenePath(context_.robot_name, config.scene);
+    context_.points_file =
+      navigation::maps::pointsFileForObstacleMap(context_.points_file, context_.current_map_file);
     context_.map = std::make_unique<navigation::maps::TopViewMap>(
       config.map_width_px,
       config.map_height_px,

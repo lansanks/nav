@@ -1,7 +1,7 @@
 points:
   - id: 1
     x: 10.665347
-    y: 4.062118
+    y: 1.937882
     fast: false
     constant_speed: false
     segment_custom_speed: false
@@ -15,7 +15,7 @@ points:
     event_label: "@stop_2"
   - id: 2
     x: 10.670319
-    y: 3.216918
+    y: 2.783082
     fast: false
     constant_speed: false
     segment_custom_speed: false

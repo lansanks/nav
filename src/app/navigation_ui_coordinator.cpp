@@ -893,7 +893,9 @@ void NavigationUiCoordinator::beginDropdown(navigation::ui::MapDropdownMode mode
   context_.dropdown_marked_order.clear();
 
   if (mode == navigation::ui::MapDropdownMode::LoadPoints) {
-    context_.dropdown_paths = navigation::maps::listPointsFiles(context_.points_file);
+    context_.dropdown_paths = navigation::maps::listPointsFilesForGroup(
+      navigation::maps::obstacleMapPointsGroup(context_.current_map_file),
+      context_.points_file);
     navigation::maps::addExistingPath(context_.dropdown_paths, context_.points_file);
     context_.dropdown_selected_index =
       navigation::maps::findPathIndex(context_.dropdown_paths, context_.points_file);
@@ -2013,7 +2015,11 @@ void NavigationUiCoordinator::loadMapFile(const std::string & path_or_scene)
   }
 
   context_.current_map_file = scene_path;
-  context_.status_message = "Loaded map: " + std::filesystem::path(scene_path).filename().string();
+  points_workflow_.loadPointsFromFile(context_.points_file);
+  const auto points_group = navigation::maps::pointsFileGroup(context_.points_file);
+  const auto points_name = std::filesystem::path(context_.points_file).filename().string();
+  context_.status_message = "Loaded map: " + std::filesystem::path(scene_path).filename().string() +
+    ", points: " + (points_group.empty() ? points_name : points_group + "/" + points_name);
   RCLCPP_INFO(logger_, "Loaded map file: %s", context_.current_map_file.c_str());
 }
 

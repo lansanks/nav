@@ -1049,3 +1049,17 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
+  - id: 76
+    x: 4.173533
+    y: 1.188823
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""

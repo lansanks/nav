@@ -1,0 +1,169 @@
+points:
+  - id: 1
+    x: 2.657778
+    y: 4.880278
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 2
+    x: 1.105264
+    y: 5.012564
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 3
+    x: 0.975242
+    y: 4.973557
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 4
+    x: 0.884226
+    y: 4.856537
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 5
+    x: 0.945327
+    y: 4.722192
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 6
+    x: 1.022693
+    y: 4.628029
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 7
+    x: 1.018708
+    y: 4.493310
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 8
+    x: 1.012042
+    y: 1.043799
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 9
+    x: 1.026957
+    y: 0.944363
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 10
+    x: 1.076675
+    y: 0.859843
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 11
+    x: 1.187869
+    y: 0.853983
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 12
+    x: 1.319846
+    y: 0.861315
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 13
+    x: 1.412718
+    y: 0.917527
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 14
+    x: 1.478707
+    y: 0.990848
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 15
+    x: 1.586243
+    y: 1.037284
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 16
+    x: 2.006611
+    y: 1.036361
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 17
+    x: 2.327092
+    y: 1.042136
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 18
+    x: 2.453908
+    y: 1.042136
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 19
+    x: 2.541276
+    y: 1.043253
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 20
+    x: 4.061461
+    y: 1.043253
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 21
+    x: 4.196030
+    y: 1.044126
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 22
+    x: 4.947122
+    y: 1.107335
+    fast: true
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 23
+    x: 5.149222
+    y: 1.112989
+    fast: true
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 24
+    x: 9.415902
+    y: 1.108498
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""

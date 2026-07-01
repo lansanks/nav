@@ -1,0 +1,197 @@
+points:
+  - id: 1
+    x: 2.657778
+    y: 1.119722
+    fast: true
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 2
+    x: 1.105264
+    y: 0.987436
+    fast: true
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 3
+    x: 0.975242
+    y: 1.026443
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 4
+    x: 0.884226
+    y: 1.143463
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 5
+    x: 0.945327
+    y: 1.277808
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 6
+    x: 1.022693
+    y: 1.371971
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 7
+    x: 1.018708
+    y: 1.506690
+    fast: true
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 8
+    x: 1.008557
+    y: 4.829375
+    fast: true
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 9
+    x: 1.014242
+    y: 4.937394
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 10
+    x: 1.076780
+    y: 5.039729
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 11
+    x: 1.199013
+    y: 5.090896
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 12
+    x: 1.304190
+    y: 5.096581
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 13
+    x: 1.478707
+    y: 5.009152
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 14
+    x: 2.327473
+    y: 4.994100
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: "bridge"
+  - id: 15
+    x: 2.462459
+    y: 4.995707
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 16
+    x: 2.544415
+    y: 4.994100
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 17
+    x: 4.070764
+    y: 4.994030
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 18
+    x: 4.202117
+    y: 4.996825
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 19
+    x: 4.969247
+    y: 4.996329
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 20
+    x: 5.169247
+    y: 4.987633
+    fast: true
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 21
+    x: 7.815959
+    y: 4.963109
+    fast: true
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 22
+    x: 8.200965
+    y: 4.988918
+    fast: true
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 23
+    x: 9.335725
+    y: 4.927586
+    fast: true
+    constant_speed: false
+    task_type: none
+    event_label: "low"
+  - id: 24
+    x: 10.876360
+    y: 4.939897
+    fast: true
+    constant_speed: false
+    task_type: none
+    event_label: "stand"
+  - id: 25
+    x: 10.929953
+    y: 4.943593
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: "_obstacle"
+  - id: 26
+    x: 12.356541
+    y: 4.924594
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 27
+    x: 13.008304
+    y: 4.257609
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
+  - id: 28
+    x: 12.938491
+    y: 2.558258
+    fast: false
+    constant_speed: false
+    task_type: none
+    event_label: ""
