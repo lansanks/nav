@@ -171,6 +171,8 @@ Waypoint `event_label` conventions:
 - Labels with a leading `@` are special navigation labels and are drawn in green.
 - `@stop_0.5` pauses at that point for 0.5 seconds; `@stop_1` pauses for 1 second.
 - `@back_20` drives backward 20 cm after reaching the point. The number after `@back_` is centimeters.
+- `@end_3` marks an end/start overlap point and prevents the previous 3 points from being selected
+  as automatic startup points.
 
 ### UI
 

@@ -1075,7 +1075,7 @@ void NavigationUiCoordinator::beginEventLabelInput(std::size_t point_index)
   const auto & point = context_.map->points()[point_index];
   beginTextInput(
     navigation::keyboards::TextInputMode::EventLabel,
-    "Event label (@stop_1, @back_20) for point " + std::to_string(point.id),
+    "Event label (@stop_1, @back_20, @end_3) for point " + std::to_string(point.id),
     point.event_label);
 }
 

@@ -1,9 +1,12 @@
 #include "controller.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <charconv>
 #include <cmath>
 #include <memory>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace navigation
@@ -13,6 +16,7 @@ namespace
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr const char * kSequentialWaypointName = "Sequential Waypoint";
+constexpr const char * kEndStartupExclusionPrefix = "@end_";
 
 double wrapAngle(double angle)
 {
@@ -28,6 +32,34 @@ double wrapAngle(double angle)
 geometry_msgs::msg::Twist zeroTwist()
 {
   return geometry_msgs::msg::Twist{};
+}
+
+std::string lowerCopy(std::string text)
+{
+  std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  return text;
+}
+
+bool parseEndStartupExclusionCount(const std::string & event_label, std::size_t & count)
+{
+  const auto normalized = lowerCopy(event_label);
+  const std::string prefix{kEndStartupExclusionPrefix};
+  if (normalized.rfind(prefix, 0) != 0 || normalized.size() <= prefix.size()) {
+    return false;
+  }
+
+  std::size_t parsed = 0;
+  const auto * begin = normalized.data() + prefix.size();
+  const auto * end = normalized.data() + normalized.size();
+  const auto result = std::from_chars(begin, end, parsed);
+  if (result.ec != std::errc{} || result.ptr != end) {
+    return false;
+  }
+
+  count = parsed;
+  return true;
 }
 
 class SequentialWaypointController final : public NavigationController
@@ -200,9 +232,14 @@ private:
     std::size_t best_index = 0;
     double best_distance = config_.waypoint_tolerance;
     bool found_nearby = false;
+    const auto excluded_start_candidates = endStartupExcludedCandidates();
     const std::size_t candidate_count =
       waypoints_.size() > 1 ? waypoints_.size() - 1 : waypoints_.size();
     for (std::size_t i = 0; i < candidate_count; ++i) {
+      if (i < excluded_start_candidates.size() && excluded_start_candidates[i]) {
+        continue;
+      }
+
       const auto & point = waypoints_[i];
       const double distance = std::hypot(point.x - state->x, point.y - state->y);
       if (distance < best_distance) {
@@ -213,6 +250,26 @@ private:
     }
 
     return found_nearby ? best_index : 0;
+  }
+
+  std::vector<bool> endStartupExcludedCandidates() const
+  {
+    std::vector<bool> excluded(waypoints_.size(), false);
+    for (std::size_t end_index = 0; end_index < waypoints_.size(); ++end_index) {
+      std::size_t previous_count = 0;
+      if (!parseEndStartupExclusionCount(waypoints_[end_index].event_label, previous_count) ||
+        previous_count == 0)
+      {
+        continue;
+      }
+
+      const auto first_excluded =
+        previous_count < end_index ? end_index - previous_count : std::size_t{0};
+      for (std::size_t i = first_excluded; i < end_index; ++i) {
+        excluded[i] = true;
+      }
+    }
+    return excluded;
   }
 
   double targetHeading(std::size_t index) const
