@@ -21,6 +21,8 @@ def generate_launch_description():
     fast_max_linear_speed_arg = DeclareLaunchArgument("fast_max_linear_speed", default_value="1.20")
     fast_max_angular_speed_arg = DeclareLaunchArgument("fast_max_angular_speed", default_value="2.20")
     constant_speed_linear_x_arg = DeclareLaunchArgument("constant_speed_linear_x", default_value="0.60")
+    planar_max_linear_x_arg = DeclareLaunchArgument("planar_max_linear_x", default_value="1.20")
+    planar_max_linear_y_arg = DeclareLaunchArgument("planar_max_linear_y", default_value="1.20")
     ui_size_arg = DeclareLaunchArgument("ui_size", default_value="10")
     map_width_px_arg = DeclareLaunchArgument("map_width_px", default_value="0")
     map_height_px_arg = DeclareLaunchArgument("map_height_px", default_value="0")
@@ -68,6 +70,8 @@ def generate_launch_description():
     fast_max_linear_speed = LaunchConfiguration("fast_max_linear_speed")
     fast_max_angular_speed = LaunchConfiguration("fast_max_angular_speed")
     constant_speed_linear_x = LaunchConfiguration("constant_speed_linear_x")
+    planar_max_linear_x = LaunchConfiguration("planar_max_linear_x")
+    planar_max_linear_y = LaunchConfiguration("planar_max_linear_y")
     ui_size = LaunchConfiguration("ui_size")
     map_width_px = LaunchConfiguration("map_width_px")
     map_height_px = LaunchConfiguration("map_height_px")
@@ -141,6 +145,8 @@ def generate_launch_description():
                 "fast_max_linear_speed": ParameterValue(fast_max_linear_speed, value_type=float),
                 "fast_max_angular_speed": ParameterValue(fast_max_angular_speed, value_type=float),
                 "constant_speed_linear_x": ParameterValue(constant_speed_linear_x, value_type=float),
+                "planar_max_linear_x": ParameterValue(planar_max_linear_x, value_type=float),
+                "planar_max_linear_y": ParameterValue(planar_max_linear_y, value_type=float),
                 "ui_size": ParameterValue(ui_size, value_type=int),
                 "map_width_px": ParameterValue(map_width_px, value_type=int),
                 "map_height_px": ParameterValue(map_height_px, value_type=int),
@@ -187,6 +193,8 @@ def generate_launch_description():
             fast_max_linear_speed_arg,
             fast_max_angular_speed_arg,
             constant_speed_linear_x_arg,
+            planar_max_linear_x_arg,
+            planar_max_linear_y_arg,
             ui_size_arg,
             map_width_px_arg,
             map_height_px_arg,

@@ -27,6 +27,8 @@ struct ControllerConfig
   double fast_k_alpha{2.80};
   double fast_k_beta{-0.70};
   double constant_speed_linear_x{0.60};
+  double planar_max_linear_x{1.20};
+  double planar_max_linear_y{1.20};
 };
 
 struct ControllerStatus

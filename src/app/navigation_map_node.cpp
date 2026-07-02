@@ -397,6 +397,20 @@ NavigationMapNode::NavigationMapNode()
     context_.navigation_status = "No controllers";
   }
 
+  context_.param_fields = navigation::params::makeControllerParamFields(
+    context_.controller_config,
+    context_.selected_controller_name);
+  {
+    std::string params_error;
+    const auto params_path = navigation::params::resolveParamsFilePath(
+      navigation::maps::defaultPointsFilePath(),
+      context_.selected_controller_name,
+      "");
+    if (!navigation::params::loadParamsFile(params_path, context_.param_fields, &params_error)) {
+      RCLCPP_WARN(get_logger(), "Failed to load selected controller params: %s", params_error.c_str());
+    }
+  }
+
   if (!context_.remote_control) {
     if (config.source == "radar") {
       context_.interface = navigation::createRadarInterface();

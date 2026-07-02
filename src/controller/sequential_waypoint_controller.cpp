@@ -16,6 +16,7 @@ namespace
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr const char * kSequentialWaypointName = "Sequential Waypoint";
+constexpr const char * kPlanarVelocityName = "Planar Velocity";
 constexpr const char * kEndStartupExclusionPrefix = "@end_";
 
 double wrapAngle(double angle)
@@ -409,11 +410,193 @@ private:
   std::string message_{"No waypoints"};
 };
 
+class PlanarVelocityController final : public NavigationController
+{
+public:
+  explicit PlanarVelocityController(const ControllerConfig & config)
+  : config_(config)
+  {
+  }
+
+  std::string name() const override
+  {
+    return kPlanarVelocityName;
+  }
+
+  void configure(const ControllerConfig & config) override
+  {
+    config_ = config;
+  }
+
+  void setWaypoints(const std::vector<maps::MapPoint> & points) override
+  {
+    waypoints_ = points;
+    if (target_index_ >= waypoints_.size()) {
+      target_index_ = 0;
+    }
+    complete_ = false;
+    updateMessage();
+  }
+
+  bool start(
+    std::string * error_message,
+    const RobotNavigationState * initial_state = nullptr) override
+  {
+    if (waypoints_.empty()) {
+      if (error_message != nullptr) {
+        *error_message = "No waypoints loaded";
+      }
+      active_ = false;
+      complete_ = false;
+      target_index_ = 0;
+      updateMessage();
+      return false;
+    }
+
+    active_ = true;
+    complete_ = false;
+    target_index_ = startIndexForState(initial_state);
+    updateMessage();
+    return true;
+  }
+
+  void stop() override
+  {
+    active_ = false;
+    updateMessage();
+  }
+
+  geometry_msgs::msg::Twist update(const RobotNavigationState & state) override
+  {
+    if (!active_ || waypoints_.empty() || !state.valid) {
+      return zeroTwist();
+    }
+
+    advanceArrivedWaypoints(state);
+    if (!active_) {
+      return zeroTwist();
+    }
+
+    const auto & target = waypoints_[target_index_];
+    const double error_x = target.x - state.x;
+    const double error_y = target.y - state.y;
+    const double desired_world_x = config_.k_rho * error_x;
+    const double desired_world_y = config_.k_rho * error_y;
+    const double cos_yaw = std::cos(state.yaw);
+    const double sin_yaw = std::sin(state.yaw);
+    const double yaw_error = wrapAngle(0.0 - state.yaw);
+    const double max_linear_x = positiveOrDefault(config_.planar_max_linear_x, 1.2);
+    const double max_linear_y = positiveOrDefault(config_.planar_max_linear_y, 1.2);
+    const double max_angular = positiveOrDefault(config_.max_angular_speed, 1.2);
+
+    geometry_msgs::msg::Twist command;
+    command.linear.x = std::clamp(
+      cos_yaw * desired_world_x + sin_yaw * desired_world_y,
+      -max_linear_x,
+      max_linear_x);
+    command.linear.y = std::clamp(
+      -sin_yaw * desired_world_x + cos_yaw * desired_world_y,
+      -max_linear_y,
+      max_linear_y);
+    command.angular.z = std::clamp(config_.k_alpha * yaw_error, -max_angular, max_angular);
+    updateMessage();
+    return command;
+  }
+
+  ControllerStatus status() const override
+  {
+    ControllerStatus status;
+    status.active = active_;
+    status.complete = complete_;
+    status.target_index = target_index_;
+    status.point_count = waypoints_.size();
+    status.message = message_;
+    return status;
+  }
+
+private:
+  void advanceArrivedWaypoints(const RobotNavigationState & state)
+  {
+    while (target_index_ < waypoints_.size()) {
+      const auto & target = waypoints_[target_index_];
+      const double rho = std::hypot(target.x - state.x, target.y - state.y);
+      if (rho >= config_.waypoint_tolerance) {
+        break;
+      }
+
+      ++target_index_;
+      if (target_index_ >= waypoints_.size()) {
+        active_ = false;
+        complete_ = true;
+        updateMessage();
+        return;
+      }
+    }
+  }
+
+  std::size_t startIndexForState(const RobotNavigationState * state) const
+  {
+    if (state == nullptr || !state->valid) {
+      return 0;
+    }
+
+    std::size_t best_index = 0;
+    double best_distance = config_.waypoint_tolerance;
+    bool found_nearby = false;
+    const std::size_t candidate_count =
+      waypoints_.size() > 1 ? waypoints_.size() - 1 : waypoints_.size();
+    for (std::size_t i = 0; i < candidate_count; ++i) {
+      const auto & point = waypoints_[i];
+      const double distance = std::hypot(point.x - state->x, point.y - state->y);
+      if (distance < best_distance) {
+        best_distance = distance;
+        best_index = i;
+        found_nearby = true;
+      }
+    }
+
+    return found_nearby ? best_index : 0;
+  }
+
+  static double positiveOrDefault(double value, double fallback)
+  {
+    return value > 0.0 ? value : fallback;
+  }
+
+  void updateMessage()
+  {
+    if (waypoints_.empty()) {
+      message_ = "No waypoints";
+      return;
+    }
+
+    if (complete_) {
+      message_ = "Route complete";
+      return;
+    }
+
+    if (active_) {
+      message_ = "Target " + std::to_string(target_index_ + 1) + "/" +
+        std::to_string(waypoints_.size());
+      return;
+    }
+
+    message_ = "Ready: " + std::to_string(waypoints_.size()) + " points";
+  }
+
+  ControllerConfig config_;
+  std::vector<maps::MapPoint> waypoints_;
+  bool active_{false};
+  bool complete_{false};
+  std::size_t target_index_{0};
+  std::string message_{"No waypoints"};
+};
+
 }  // namespace
 
 std::vector<std::string> controllerNames()
 {
-  return {kSequentialWaypointName};
+  return {kSequentialWaypointName, kPlanarVelocityName};
 }
 
 std::unique_ptr<NavigationController> createController(
@@ -422,6 +605,9 @@ std::unique_ptr<NavigationController> createController(
 {
   if (name == kSequentialWaypointName) {
     return std::make_unique<SequentialWaypointController>(config);
+  }
+  if (name == kPlanarVelocityName) {
+    return std::make_unique<PlanarVelocityController>(config);
   }
   return nullptr;
 }

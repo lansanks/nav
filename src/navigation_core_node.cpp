@@ -61,7 +61,9 @@ void applyConfigFromRequest(
   double k_rho, double k_alpha, double k_beta,
   double fast_max_linear_speed, double fast_max_angular_speed,
   double fast_k_rho, double fast_k_alpha, double fast_k_beta,
-  double constant_speed_linear_x)
+  double constant_speed_linear_x,
+  double planar_max_linear_x,
+  double planar_max_linear_y)
 {
   if (waypoint_tolerance > 0.0) { config.waypoint_tolerance = waypoint_tolerance; }
   if (max_linear_speed > 0.0) { config.max_linear_speed = max_linear_speed; }
@@ -75,6 +77,8 @@ void applyConfigFromRequest(
   config.fast_k_alpha = fast_k_alpha;
   config.fast_k_beta = fast_k_beta;
   if (constant_speed_linear_x > 0.0) { config.constant_speed_linear_x = constant_speed_linear_x; }
+  if (planar_max_linear_x > 0.0) { config.planar_max_linear_x = planar_max_linear_x; }
+  if (planar_max_linear_y > 0.0) { config.planar_max_linear_y = planar_max_linear_y; }
 }
 
 std::string normalizeRaceLogic(const std::string & race_logic)
@@ -151,6 +155,9 @@ public:
     } else {
       context_.navigation_status = "No controllers";
     }
+    context_.param_fields = navigation::params::makeControllerParamFields(
+      context_.controller_config,
+      context_.selected_controller_name);
 
     if (config.source == "radar") {
       context_.interface = navigation::createRadarInterface();
@@ -398,7 +405,9 @@ private:
       request->fast_max_linear_speed,
       request->fast_max_angular_speed,
       request->fast_k_rho, request->fast_k_alpha, request->fast_k_beta,
-      request->constant_speed_linear_x);
+      request->constant_speed_linear_x,
+      request->planar_max_linear_x,
+      request->planar_max_linear_y);
 
     runtime_.applyControllerConfig();
     context_.navigation_status = "Params updated";
@@ -452,7 +461,9 @@ private:
       request->fast_max_linear_speed,
       request->fast_max_angular_speed,
       request->fast_k_rho, request->fast_k_alpha, request->fast_k_beta,
-      request->constant_speed_linear_x);
+      request->constant_speed_linear_x,
+      request->planar_max_linear_x,
+      request->planar_max_linear_y);
 
     runtime_.applyControllerConfig();
     runtime_.syncControllerWaypoints();

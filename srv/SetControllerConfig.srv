@@ -10,6 +10,8 @@ float64 fast_k_rho
 float64 fast_k_alpha
 float64 fast_k_beta
 float64 constant_speed_linear_x
+float64 planar_max_linear_x
+float64 planar_max_linear_y
 ---
 bool success
 string message

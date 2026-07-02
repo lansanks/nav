@@ -41,6 +41,8 @@ void fillConfigRequest(
   request.fast_k_alpha = config.fast_k_alpha;
   request.fast_k_beta = config.fast_k_beta;
   request.constant_speed_linear_x = config.constant_speed_linear_x;
+  request.planar_max_linear_x = config.planar_max_linear_x;
+  request.planar_max_linear_y = config.planar_max_linear_y;
 }
 
 void fillStartConfigRequest(
@@ -59,6 +61,8 @@ void fillStartConfigRequest(
   request.fast_k_alpha = config.fast_k_alpha;
   request.fast_k_beta = config.fast_k_beta;
   request.constant_speed_linear_x = config.constant_speed_linear_x;
+  request.planar_max_linear_x = config.planar_max_linear_x;
+  request.planar_max_linear_y = config.planar_max_linear_y;
 }
 
 std::string normalizeRaceLogic(const std::string & race_logic)

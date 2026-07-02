@@ -74,6 +74,7 @@ private:
   bool saveParamsFile(const std::string & path);
   bool loadParamsFile(const std::string & path);
   void saveParamsAs(const std::string & path_or_name);
+  void selectController(const std::string & controller_name);
   void loadMapFile(const std::string & path_or_scene);
   void toggleRadarListener();
   void saveRadarPointAs(const std::string & path_or_name);

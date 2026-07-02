@@ -94,6 +94,24 @@ std::vector<ParamField> makeControllerParamFields(ControllerConfig & config)
   };
 }
 
+std::vector<ParamField> makeControllerParamFields(
+  ControllerConfig & config,
+  const std::string & controller_name)
+{
+  if (controller_name == "Planar Velocity") {
+    return {
+      {"waypoint_tolerance", &config.waypoint_tolerance, true},
+      {"planar_max_linear_x", &config.planar_max_linear_x, true},
+      {"planar_max_linear_y", &config.planar_max_linear_y, true},
+      {"max_angular_speed", &config.max_angular_speed, true},
+      {"k_rho", &config.k_rho, false},
+      {"k_alpha", &config.k_alpha, false},
+    };
+  }
+
+  return makeControllerParamFields(config);
+}
+
 RuntimeConfig declareRuntimeConfig(rclcpp::Node & node)
 {
   RuntimeConfig config;
@@ -129,6 +147,10 @@ RuntimeConfig declareRuntimeConfig(rclcpp::Node & node)
   controller_config.fast_k_beta = node.declare_parameter<double>("fast_k_beta", -0.70);
   controller_config.constant_speed_linear_x =
     positiveOrDefault(node.declare_parameter<double>("constant_speed_linear_x", 0.60), 0.60);
+  controller_config.planar_max_linear_x =
+    positiveOrDefault(node.declare_parameter<double>("planar_max_linear_x", 1.20), 1.20);
+  controller_config.planar_max_linear_y =
+    positiveOrDefault(node.declare_parameter<double>("planar_max_linear_y", 1.20), 1.20);
 
   config.ui_size = clampUiSize(node.declare_parameter<int>("ui_size", config.ui_size));
   config.map_width_px = node.declare_parameter<int>("map_width_px", config.map_width_px);

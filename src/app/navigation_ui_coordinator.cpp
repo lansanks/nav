@@ -1043,6 +1043,7 @@ void NavigationUiCoordinator::selectDropdownOption(int option_index)
   } else if (mode == navigation::ui::MapDropdownMode::ChooseMap) {
     loadMapFile(selected_path);
   } else if (mode == navigation::ui::MapDropdownMode::ChooseController) {
+    selectController(selected_path);
     runtime_.startNavigation(selected_path);
   } else if (mode == navigation::ui::MapDropdownMode::LoadParams) {
     loadParamsFile(selected_path);
@@ -2103,6 +2104,23 @@ void NavigationUiCoordinator::saveParamsAs(const std::string & path_or_name)
     path_or_name);
   if (saveParamsFile(path)) {
     context_.params_session.setActive(true);
+  }
+}
+
+void NavigationUiCoordinator::selectController(const std::string & controller_name)
+{
+  context_.selected_controller_name = controller_name;
+  context_.param_fields = navigation::params::makeControllerParamFields(
+    context_.controller_config,
+    context_.selected_controller_name);
+  context_.params_session.cancelEdit();
+
+  const auto default_params_path = navigation::params::resolveParamsFilePath(
+    navigation::maps::defaultPointsFilePath(),
+    context_.selected_controller_name,
+    "");
+  if (!loadParamsFile(default_params_path)) {
+    runtime_.applyControllerConfig();
   }
 }
 

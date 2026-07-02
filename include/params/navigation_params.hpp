@@ -47,6 +47,9 @@ struct ParamField
 };
 
 std::vector<ParamField> makeControllerParamFields(ControllerConfig & config);
+std::vector<ParamField> makeControllerParamFields(
+  ControllerConfig & config,
+  const std::string & controller_name);
 RuntimeConfig declareRuntimeConfig(rclcpp::Node & node);
 std::string defaultParamsName();
 std::string controllerParamDirName(const std::string & controller_name);
