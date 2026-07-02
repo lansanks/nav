@@ -15,6 +15,7 @@ namespace
 {
 
 constexpr double kPi = 3.14159265358979323846;
+constexpr double kPlanarForwardYaw = 0.5 * kPi;
 constexpr const char * kSequentialWaypointName = "Sequential Waypoint";
 constexpr const char * kPlanarVelocityName = "Planar Velocity";
 constexpr const char * kEndStartupExclusionPrefix = "@end_";
@@ -484,7 +485,7 @@ public:
     const double desired_world_y = config_.k_rho * error_y;
     const double cos_yaw = std::cos(state.yaw);
     const double sin_yaw = std::sin(state.yaw);
-    const double yaw_error = wrapAngle(0.0 - state.yaw);
+    const double yaw_error = wrapAngle(kPlanarForwardYaw - state.yaw);
     const double max_linear_x = positiveOrDefault(config_.planar_max_linear_x, 1.2);
     const double max_linear_y = positiveOrDefault(config_.planar_max_linear_y, 1.2);
     const double max_angular = positiveOrDefault(config_.max_angular_speed, 1.2);

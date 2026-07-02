@@ -2,7 +2,7 @@
 version: 1
 points_file: "/home/linkchen/black_mujoco/src/navigation/config/points/right/clear.yaml"
 current_map_file: "/home/linkchen/black_mujoco/install/navigation/share/navigation/config/maps/blackW/task.png"
-selected_controller_name: "Sequential Waypoint"
+selected_controller_name: "Planar Velocity"
 race_logic: "obstacle"
 panel_collapsed: false
 light_theme: true
