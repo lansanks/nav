@@ -91,6 +91,15 @@ struct Bounds
   }
 };
 
+struct ImageMapMetadata
+{
+  double pixels_per_meter{kImageMapPixelsPerMeter};
+  double origin_pixel_x{0.0};
+  double origin_pixel_y{0.0};
+  bool has_origin_x{false};
+  bool has_origin_y{false};
+};
+
 enum class MapGeomType
 {
   Box,
@@ -133,6 +142,78 @@ std::vector<double> parseDoubles(const char * text)
     cursor = end;
   }
   return values;
+}
+
+std::string trimAscii(std::string text)
+{
+  const auto first = text.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) {
+    return "";
+  }
+
+  const auto last = text.find_last_not_of(" \t\r\n");
+  return text.substr(first, last - first + 1);
+}
+
+bool parseImageMapScalar(const std::string & line, std::string & key, double & value)
+{
+  const auto comment = line.find('#');
+  const auto text = trimAscii(comment == std::string::npos ? line : line.substr(0, comment));
+  if (text.empty()) {
+    return false;
+  }
+
+  const auto sep = text.find(':');
+  if (sep == std::string::npos) {
+    return false;
+  }
+
+  key = trimAscii(text.substr(0, sep));
+  const auto value_text = trimAscii(text.substr(sep + 1));
+  if (key.empty() || value_text.empty()) {
+    return false;
+  }
+
+  try {
+    value = std::stod(value_text);
+    return true;
+  } catch (const std::exception &) {
+    return false;
+  }
+}
+
+ImageMapMetadata loadImageMapMetadata(const std::filesystem::path & image_path)
+{
+  ImageMapMetadata metadata;
+  const auto metadata_path = std::filesystem::path(image_path).replace_extension(".yaml");
+  std::ifstream input(metadata_path);
+  if (!input.is_open()) {
+    return metadata;
+  }
+
+  std::string line;
+  while (std::getline(input, line)) {
+    std::string key;
+    double value = 0.0;
+    if (!parseImageMapScalar(line, key, value)) {
+      continue;
+    }
+
+    if (key == "pixels_per_meter") {
+      metadata.pixels_per_meter = value;
+    } else if (key == "origin_pixel_x") {
+      metadata.origin_pixel_x = value;
+      metadata.has_origin_x = true;
+    } else if (key == "origin_pixel_y") {
+      metadata.origin_pixel_y = value;
+      metadata.has_origin_y = true;
+    }
+  }
+
+  if (!std::isfinite(metadata.pixels_per_meter) || metadata.pixels_per_meter <= 1e-9) {
+    metadata.pixels_per_meter = kImageMapPixelsPerMeter;
+  }
+  return metadata;
 }
 
 std::array<double, 3> readVec3(const tinyxml2::XMLElement & element, const char * attribute)
@@ -583,11 +664,24 @@ struct TopViewMap::Impl
     meshes.clear();
     geoms.clear();
     bounds = Bounds{};
-    bounds.include({0.0, 0.0});
-    bounds.include({
-      static_cast<double>(image_background.cols) / kImageMapPixelsPerMeter,
-      static_cast<double>(image_background.rows) / kImageMapPixelsPerMeter,
-    });
+    const auto metadata = loadImageMapMetadata(path);
+    const double pixels_per_meter = metadata.pixels_per_meter;
+    if (metadata.has_origin_x && metadata.has_origin_y) {
+      bounds.include({
+        -metadata.origin_pixel_x / pixels_per_meter,
+        (metadata.origin_pixel_y - static_cast<double>(image_background.rows)) / pixels_per_meter,
+      });
+      bounds.include({
+        (static_cast<double>(image_background.cols) - metadata.origin_pixel_x) / pixels_per_meter,
+        metadata.origin_pixel_y / pixels_per_meter,
+      });
+    } else {
+      bounds.include({0.0, 0.0});
+      bounds.include({
+        static_cast<double>(image_background.cols) / pixels_per_meter,
+        static_cast<double>(image_background.rows) / pixels_per_meter,
+      });
+    }
     computeScale();
   }
 

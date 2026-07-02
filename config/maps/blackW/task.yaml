@@ -1,0 +1,5 @@
+# Image-map coordinate metadata for task.png.
+# Pixel coordinates use the raw image frame: x right, y down.
+pixels_per_meter: 100.0
+origin_pixel_x: 202.0
+origin_pixel_y: 593.0

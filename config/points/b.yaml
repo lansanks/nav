@@ -1,0 +1,85 @@
+points:
+  - id: 1
+    x: -1.256129
+    y: 1.588039
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
+  - id: 2
+    x: -0.427163
+    y: 2.424587
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
+  - id: 3
+    x: 0.402104
+    y: 1.594242
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
+  - id: 4
+    x: 1.232752
+    y: 2.430678
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
+  - id: 5
+    x: 1.153131
+    y: 4.898534
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
+  - id: 6
+    x: -1.179901
+    y: 4.902661
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
