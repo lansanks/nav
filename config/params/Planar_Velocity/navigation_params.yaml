@@ -1,6 +1,6 @@
 waypoint_tolerance: 0.200000
-planar_max_linear_x: 1.200000
-planar_max_linear_y: 1.200000
+planar_max_linear_x: 1.000000
+planar_max_linear_y: 1.000000
 max_angular_speed: 1.200000
-k_rho: 4.000000
-k_alpha: 6.000000
+k_rho: 2.000000
+k_alpha: 3.000000

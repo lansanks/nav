@@ -730,12 +730,20 @@ void NavigationUiCoordinator::handleUiAction(navigation::ui::MapUiAction action)
         "Save point file as",
         std::filesystem::path(context_.points_file).filename().string());
       break;
+    case navigation::ui::MapUiAction::ChooseController:
+      clearDropdown();
+      if (runtime_.isNavigationActive()) {
+        context_.status_message = "Stop navigation before changing controller";
+      } else {
+        toggleDropdown(navigation::ui::MapDropdownMode::ChooseController);
+      }
+      break;
     case navigation::ui::MapUiAction::StartNavigation:
       clearDropdown();
       if (runtime_.isNavigationActive()) {
         runtime_.stopNavigation("Navigation stopped");
       } else {
-        toggleDropdown(navigation::ui::MapDropdownMode::ChooseController);
+        runtime_.startNavigation(context_.selected_controller_name);
       }
       break;
     case navigation::ui::MapUiAction::OnlineParams:
@@ -1044,7 +1052,6 @@ void NavigationUiCoordinator::selectDropdownOption(int option_index)
     loadMapFile(selected_path);
   } else if (mode == navigation::ui::MapDropdownMode::ChooseController) {
     selectController(selected_path);
-    runtime_.startNavigation(selected_path);
   } else if (mode == navigation::ui::MapDropdownMode::LoadParams) {
     loadParamsFile(selected_path);
     context_.params_session.setActive(true);

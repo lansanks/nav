@@ -363,6 +363,7 @@ std::vector<MapUiRenderer::UiButton> MapUiRenderer::uiButtons(
   add_button(
     MapUiAction::ToggleRaceLogic,
     ui_state.race_logic == "mission" ? "Race: Mission" : "Race: Obstacle");
+  add_button(MapUiAction::ChooseController, "Choose Controller");
   add_button(MapUiAction::StartNavigation, navigation_active ? "Stop Navigation" : "Start Navigation");
   add_button(MapUiAction::Settings, "Task Settings");
   add_button(MapUiAction::OnlineParams, "Online Params");
@@ -387,7 +388,7 @@ MapUiAction MapUiRenderer::dropdownAnchorAction(MapDropdownMode mode)
     return MapUiAction::ChooseMap;
   }
   if (mode == MapDropdownMode::ChooseController) {
-    return MapUiAction::StartNavigation;
+    return MapUiAction::ChooseController;
   }
   if (mode == MapDropdownMode::LoadParams) {
     return MapUiAction::OnlineParams;

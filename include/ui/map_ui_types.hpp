@@ -15,6 +15,7 @@ enum class MapUiAction
   NewPoints,
   ChooseMap,
   SavePointsAs,
+  ChooseController,
   StartNavigation,
   OnlineParams,
   Radar,
