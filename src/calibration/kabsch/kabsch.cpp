@@ -53,7 +53,8 @@ bool computeKabsch(
   const std::vector<navigation::maps::MapPoint> & radar_points,
   const std::vector<navigation::maps::MapPoint> & mujoco_points,
   KabschResult & result,
-  std::string * error_message)
+  std::string * error_message,
+  bool estimate_scale)
 {
   if (radar_points.size() != mujoco_points.size()) {
     setError(error_message, "point counts do not match");
@@ -79,6 +80,7 @@ bool computeKabsch(
   mujoco_center.y /= count;
 
   cv::Mat H = cv::Mat::zeros(2, 2, CV_64F);
+  double radar_variance = 0.0;
   for (std::size_t i = 0; i < radar_points.size(); ++i) {
     const double px = radar_points[i].x - radar_center.x;
     const double py = radar_points[i].y - radar_center.y;
@@ -88,6 +90,7 @@ bool computeKabsch(
     H.at<double>(0, 1) += px * qy;
     H.at<double>(1, 0) += py * qx;
     H.at<double>(1, 1) += py * qy;
+    radar_variance += px * px + py * py;
   }
 
   cv::SVD svd(H, cv::SVD::FULL_UV);
@@ -100,13 +103,38 @@ bool computeKabsch(
   }
 
   result = KabschResult{};
-  result.r00 = R.at<double>(0, 0);
-  result.r01 = R.at<double>(0, 1);
-  result.r10 = R.at<double>(1, 0);
-  result.r11 = R.at<double>(1, 1);
+  result.scale = 1.0;
+  result.scaled = estimate_scale;
+  if (estimate_scale) {
+    if (radar_variance <= 1e-12) {
+      setError(error_message, "radar points have near-zero variance");
+      return false;
+    }
+
+    double scale_numerator = 0.0;
+    for (std::size_t i = 0; i < radar_points.size(); ++i) {
+      const double px = radar_points[i].x - radar_center.x;
+      const double py = radar_points[i].y - radar_center.y;
+      const double qx = mujoco_points[i].x - mujoco_center.x;
+      const double qy = mujoco_points[i].y - mujoco_center.y;
+      const double rotated_x = R.at<double>(0, 0) * px + R.at<double>(0, 1) * py;
+      const double rotated_y = R.at<double>(1, 0) * px + R.at<double>(1, 1) * py;
+      scale_numerator += qx * rotated_x + qy * rotated_y;
+    }
+    result.scale = scale_numerator / radar_variance;
+    if (!std::isfinite(result.scale) || result.scale <= 1e-12) {
+      setError(error_message, "computed scale is invalid");
+      return false;
+    }
+  }
+
+  result.r00 = result.scale * R.at<double>(0, 0);
+  result.r01 = result.scale * R.at<double>(0, 1);
+  result.r10 = result.scale * R.at<double>(1, 0);
+  result.r11 = result.scale * R.at<double>(1, 1);
   result.tx = mujoco_center.x - (result.r00 * radar_center.x + result.r01 * radar_center.y);
   result.ty = mujoco_center.y - (result.r10 * radar_center.x + result.r11 * radar_center.y);
-  result.yaw_offset = std::atan2(result.r10, result.r00);
+  result.yaw_offset = std::atan2(R.at<double>(1, 0), R.at<double>(0, 0));
   result.unstable = centeredAreaScore(radar_points) < 1e-9 || centeredAreaScore(mujoco_points) < 1e-9;
   result.errors.reserve(radar_points.size());
 

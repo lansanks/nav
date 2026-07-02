@@ -191,6 +191,9 @@ MapUiHit MapUiRenderer::hitTest(int pixel_x, int pixel_y, const MapUiState & ui_
     }
 
     if (ui_state.radar_confirm_active) {
+      if (radarScaleToggleButtonRect(ui_state).contains(cv::Point(pixel_x, pixel_y))) {
+        return {MapUiAction::RadarToggleCalibrationScale, -1};
+      }
       if (radarAcceptButtonRect(ui_state).contains(cv::Point(pixel_x, pixel_y))) {
         return {MapUiAction::RadarAcceptCalibration, -1};
       }
@@ -637,13 +640,19 @@ cv::Rect MapUiRenderer::radarWindowCloseButtonRect(const MapUiState & ui_state) 
 cv::Rect MapUiRenderer::radarAcceptButtonRect(const MapUiState & ui_state) const
 {
   const auto popup = radarPopupRect(ui_state);
-  return cv::Rect(popup.x + popup.width - 300, popup.y + popup.height - 72, 124, 36);
+  return cv::Rect(popup.x + popup.width - 284, popup.y + popup.height - 72, 112, 36);
 }
 
 cv::Rect MapUiRenderer::radarRejectButtonRect(const MapUiState & ui_state) const
 {
   const auto popup = radarPopupRect(ui_state);
-  return cv::Rect(popup.x + popup.width - 152, popup.y + popup.height - 72, 104, 36);
+  return cv::Rect(popup.x + popup.width - 148, popup.y + popup.height - 72, 100, 36);
+}
+
+cv::Rect MapUiRenderer::radarScaleToggleButtonRect(const MapUiState & ui_state) const
+{
+  const auto popup = radarPopupRect(ui_state);
+  return cv::Rect(popup.x + popup.width - 464, popup.y + popup.height - 72, 156, 36);
 }
 
 std::vector<cv::Rect> MapUiRenderer::radarDropdownItemRects(const MapUiState & ui_state) const
@@ -1293,7 +1302,14 @@ void MapUiRenderer::drawRadarPopup(cv::Mat & canvas, const MapUiState & ui_state
     if (ui_state.radar_result_unstable) {
       putPanelText(canvas, "Warning: points are nearly collinear or overlapping.", cv::Point(popup.x + 24, popup.y + 212), 0.43, palette.text_muted);
     }
-    putPanelText(canvas, "Accept saves the calibration YAML.", cv::Point(popup.x + 24, popup.y + popup.height - 46), 0.42, palette.text_muted);
+    putPanelText(canvas, "Accept saves the selected calibration YAML.", cv::Point(popup.x + 24, popup.y + popup.height - 46), 0.42, palette.text_muted);
+    drawRadarButton(
+      canvas,
+      ui_state,
+      radarScaleToggleButtonRect(ui_state),
+      ui_state.radar_scaled_result_available ?
+      (ui_state.radar_result_scaled ? "Use Rigid" : "Use Scaled") :
+      "Scaled N/A");
     drawRadarButton(canvas, ui_state, radarAcceptButtonRect(ui_state), "Accept");
     drawRadarButton(canvas, ui_state, radarRejectButtonRect(ui_state), "Reject");
     return;

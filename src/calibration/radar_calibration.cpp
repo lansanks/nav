@@ -228,6 +228,8 @@ bool saveCalibrationParams(
   output << "translation:\n";
   output << "  x: " << result.tx << "\n";
   output << "  y: " << result.ty << "\n";
+  output << "scale: " << result.scale << "\n";
+  output << "scaled: " << (result.scaled ? "true" : "false") << "\n";
   output << "yaw_offset: " << result.yaw_offset << "\n";
   output << "yaw_measurement_offset: " << kDefaultYawMeasurementOffset << "\n";
   output << "mean_error: " << result.mean_error << "\n";

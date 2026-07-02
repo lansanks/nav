@@ -1,0 +1,29 @@
+radar_points_file: package://navigation/config/calibration/datas/right_task.yaml
+mujoco_points_file: package://navigation/config/points/b.yaml
+point_count: 6
+rotation:
+  - [-0.938246556, -0.034343727]
+  - [0.034343727, -0.938246556]
+translation:
+  x: 0.046298018
+  y: -0.259826263
+scale: 0.938874907
+scaled: true
+yaw_offset: 3.105004829
+yaw_measurement_offset: -1.570796327
+mean_error: 0.038854608
+max_error: 0.058559712
+unstable: false
+errors:
+  - id: 1
+    error: 0.040614997
+  - id: 2
+    error: 0.035679903
+  - id: 3
+    error: 0.008961025
+  - id: 4
+    error: 0.058559712
+  - id: 5
+    error: 0.044714499
+  - id: 6
+    error: 0.044597512

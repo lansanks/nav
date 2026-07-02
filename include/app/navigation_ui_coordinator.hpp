@@ -78,6 +78,7 @@ private:
   void toggleRadarListener();
   void saveRadarPointAs(const std::string & path_or_name);
   void runRadarRegistration();
+  void toggleRadarCalibrationScale();
   void acceptRadarCalibration();
   void rejectRadarCalibration();
   void closeRadarPopup();

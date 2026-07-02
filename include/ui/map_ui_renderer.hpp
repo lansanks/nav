@@ -63,6 +63,7 @@ private:
   cv::Rect radarWindowCloseButtonRect(const MapUiState & ui_state) const;
   cv::Rect radarAcceptButtonRect(const MapUiState & ui_state) const;
   cv::Rect radarRejectButtonRect(const MapUiState & ui_state) const;
+  cv::Rect radarScaleToggleButtonRect(const MapUiState & ui_state) const;
   std::vector<cv::Rect> radarDropdownItemRects(const MapUiState & ui_state) const;
   cv::Rect fullscreenToggleRect() const;
   cv::Rect themeToggleRect() const;

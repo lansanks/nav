@@ -771,6 +771,8 @@ void NavigationUiCoordinator::handleUiAction(navigation::ui::MapUiAction action)
       context_.segment_speed_field_editing = false;
       context_.radar_popup_active = true;
       context_.radar_result_pending = false;
+      context_.radar_pending_result_scaled = false;
+      context_.radar_pending_scaled_result_available = false;
       context_.status_message = "Radar calibration";
       break;
     case navigation::ui::MapUiAction::ParamSave:
@@ -822,6 +824,9 @@ void NavigationUiCoordinator::handleUiAction(navigation::ui::MapUiAction action)
       break;
     case navigation::ui::MapUiAction::RadarRejectCalibration:
       rejectRadarCalibration();
+      break;
+    case navigation::ui::MapUiAction::RadarToggleCalibrationScale:
+      toggleRadarCalibrationScale();
       break;
     case navigation::ui::MapUiAction::RadarClose:
       closeRadarPopup();
@@ -1550,6 +1555,8 @@ navigation::ui::MapUiState NavigationUiCoordinator::buildUiState()
   ui_state.radar_pose_valid = context_.radar_latest_state.valid;
   ui_state.radar_confirm_active = context_.radar_result_pending;
   ui_state.radar_result_unstable = context_.radar_pending_result.unstable;
+  ui_state.radar_result_scaled = context_.radar_pending_result_scaled;
+  ui_state.radar_scaled_result_available = context_.radar_pending_scaled_result_available;
   ui_state.light_theme = context_.light_theme;
   ui_state.radar_topic = context_.radar_topic;
   ui_state.radar_pose_text = formatRadarPoseText();
@@ -2186,17 +2193,52 @@ void NavigationUiCoordinator::runRadarRegistration()
   const auto radar_points = navigation::maps::loadPointsFile(context_.radar_data_file);
   const auto mujoco_points = navigation::maps::loadPointsFile(context_.radar_points_file);
   std::string error_message;
-  navigation::calibration::KabschResult result;
-  if (!navigation::calibration::computeKabsch(radar_points, mujoco_points, result, &error_message)) {
+  navigation::calibration::KabschResult rigid_result;
+  if (!navigation::calibration::computeKabsch(radar_points, mujoco_points, rigid_result, &error_message)) {
     context_.status_message = "Registration failed: " + error_message;
     RCLCPP_WARN(logger_, "%s", context_.status_message.c_str());
     return;
   }
 
-  context_.radar_pending_result = result;
+  navigation::calibration::KabschResult scaled_result;
+  const bool scaled_available = navigation::calibration::computeKabsch(
+      radar_points,
+      mujoco_points,
+      scaled_result,
+      &error_message,
+      true);
+  if (!scaled_available) {
+    scaled_result = rigid_result;
+    RCLCPP_WARN(logger_, "Scaled registration unavailable: %s", error_message.c_str());
+  }
+
+  context_.radar_pending_rigid_result = rigid_result;
+  context_.radar_pending_scaled_result = scaled_result;
+  context_.radar_pending_result = rigid_result;
+  context_.radar_pending_result_scaled = false;
+  context_.radar_pending_scaled_result_available = scaled_available;
   context_.radar_result_pending = true;
   clearDropdown();
-  context_.status_message = result.unstable ? "Registration unstable" : "Registration ready";
+  context_.status_message = rigid_result.unstable ? "Rigid registration unstable" : "Rigid registration ready";
+}
+
+void NavigationUiCoordinator::toggleRadarCalibrationScale()
+{
+  if (!context_.radar_result_pending) {
+    return;
+  }
+  if (!context_.radar_pending_scaled_result_available) {
+    context_.status_message = "Scaled calibration unavailable";
+    return;
+  }
+
+  context_.radar_pending_result_scaled = !context_.radar_pending_result_scaled;
+  context_.radar_pending_result = context_.radar_pending_result_scaled ?
+    context_.radar_pending_scaled_result :
+    context_.radar_pending_rigid_result;
+  context_.status_message = context_.radar_pending_result_scaled ?
+    "Scaled calibration selected" :
+    "Rigid calibration selected";
 }
 
 void NavigationUiCoordinator::acceptRadarCalibration()
@@ -2222,6 +2264,8 @@ void NavigationUiCoordinator::acceptRadarCalibration()
   }
 
   context_.radar_result_pending = false;
+  context_.radar_pending_result_scaled = false;
+  context_.radar_pending_scaled_result_available = false;
   context_.status_message = "Calibration saved";
   RCLCPP_INFO(logger_, "Saved radar calibration params: %s", path.c_str());
   runtime_.applyRadarCalibrationFile(path);
@@ -2230,6 +2274,8 @@ void NavigationUiCoordinator::acceptRadarCalibration()
 void NavigationUiCoordinator::rejectRadarCalibration()
 {
   context_.radar_result_pending = false;
+  context_.radar_pending_result_scaled = false;
+  context_.radar_pending_scaled_result_available = false;
   context_.status_message = "Calibration rejected";
 }
 
@@ -2238,6 +2284,8 @@ void NavigationUiCoordinator::closeRadarPopup()
   clearDropdown();
   context_.radar_popup_active = false;
   context_.radar_result_pending = false;
+  context_.radar_pending_result_scaled = false;
+  context_.radar_pending_scaled_result_available = false;
   context_.status_message = "Radar calibration closed";
 }
 
@@ -2273,7 +2321,8 @@ std::string NavigationUiCoordinator::formatRadarResultSummary() const
 
   std::ostringstream output;
   output << std::fixed << std::setprecision(4)
-         << "pairs=" << context_.radar_pending_result.errors.size()
+         << (context_.radar_pending_result.scaled ? "scaled" : "rigid")
+         << " pairs=" << context_.radar_pending_result.errors.size()
          << " mean=" << context_.radar_pending_result.mean_error
          << " max=" << context_.radar_pending_result.max_error
          << " yaw=" << context_.radar_pending_result.yaw_offset;
@@ -2288,7 +2337,8 @@ std::string NavigationUiCoordinator::formatRadarTransformText() const
 
   std::ostringstream output;
   output << std::fixed << std::setprecision(4)
-         << "t=(" << context_.radar_pending_result.tx
+         << "scale=" << context_.radar_pending_result.scale
+         << " t=(" << context_.radar_pending_result.tx
          << ", " << context_.radar_pending_result.ty
          << ") R=[[" << context_.radar_pending_result.r00
          << ", " << context_.radar_pending_result.r01

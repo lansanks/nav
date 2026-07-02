@@ -17,9 +17,11 @@ struct KabschResult
   double r11{1.0};
   double tx{0.0};
   double ty{0.0};
+  double scale{1.0};
   double yaw_offset{0.0};
   double mean_error{0.0};
   double max_error{0.0};
+  bool scaled{false};
   bool unstable{false};
   std::vector<double> errors;
 };
@@ -28,7 +30,8 @@ bool computeKabsch(
   const std::vector<navigation::maps::MapPoint> & radar_points,
   const std::vector<navigation::maps::MapPoint> & mujoco_points,
   KabschResult & result,
-  std::string * error_message);
+  std::string * error_message,
+  bool estimate_scale = false);
 
 }  // namespace navigation::calibration
 

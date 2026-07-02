@@ -78,6 +78,10 @@ struct NavigationNodeContext
   navigation::RobotNavigationState radar_latest_state;
   navigation::RobotNavigationState remote_latest_state;
   navigation::calibration::KabschResult radar_pending_result;
+  navigation::calibration::KabschResult radar_pending_rigid_result;
+  navigation::calibration::KabschResult radar_pending_scaled_result;
+  bool radar_pending_result_scaled{false};
+  bool radar_pending_scaled_result_available{false};
   bool show_window{true};
   std::unique_ptr<navigation::maps::TopViewMap> map;
   std::unique_ptr<navigation::NavigationInterface> interface;

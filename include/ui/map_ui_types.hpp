@@ -31,6 +31,7 @@ enum class MapUiAction
   RadarClose,
   RadarAcceptCalibration,
   RadarRejectCalibration,
+  RadarToggleCalibrationScale,
   ToggleTheme,
   ToggleFullscreen,
   ToggleMissionPlan,
@@ -101,6 +102,8 @@ struct MapUiState
   bool radar_pose_valid{false};
   bool radar_confirm_active{false};
   bool radar_result_unstable{false};
+  bool radar_result_scaled{false};
+  bool radar_scaled_result_available{false};
   bool light_theme{true};
   std::string radar_topic;
   std::string radar_pose_text;
