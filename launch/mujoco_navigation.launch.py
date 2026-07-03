@@ -14,6 +14,8 @@ def generate_launch_description():
     publish_rate_hz_arg = DeclareLaunchArgument("publish_rate_hz", default_value="500.0")
     show_window_arg = DeclareLaunchArgument("show_window", default_value="true")
     points_file_arg = DeclareLaunchArgument("points_file", default_value="")
+    task_points_file_arg = DeclareLaunchArgument("task_points_file", default_value="task_points")
+    task_points_topic_arg = DeclareLaunchArgument("task_points_topic", default_value="/navigation/task_points")
     cmd_vel_topic_arg = DeclareLaunchArgument("cmd_vel_topic", default_value="/cmd_vel")
     waypoint_tolerance_arg = DeclareLaunchArgument("waypoint_tolerance", default_value="0.20")
     max_linear_speed_arg = DeclareLaunchArgument("max_linear_speed", default_value="0.70")
@@ -63,6 +65,8 @@ def generate_launch_description():
     publish_rate_hz = LaunchConfiguration("publish_rate_hz")
     show_window = LaunchConfiguration("show_window")
     points_file = LaunchConfiguration("points_file")
+    task_points_file = LaunchConfiguration("task_points_file")
+    task_points_topic = LaunchConfiguration("task_points_topic")
     cmd_vel_topic = LaunchConfiguration("cmd_vel_topic")
     waypoint_tolerance = LaunchConfiguration("waypoint_tolerance")
     max_linear_speed = LaunchConfiguration("max_linear_speed")
@@ -138,6 +142,8 @@ def generate_launch_description():
                 "sim_odom_topic": "/odom",
                 "show_window": ParameterValue(show_window, value_type=bool),
                 "points_file": ParameterValue(points_file, value_type=str),
+                "task_points_file": ParameterValue(task_points_file, value_type=str),
+                "task_points_topic": ParameterValue(task_points_topic, value_type=str),
                 "cmd_vel_topic": ParameterValue(cmd_vel_topic, value_type=str),
                 "waypoint_tolerance": ParameterValue(waypoint_tolerance, value_type=float),
                 "max_linear_speed": ParameterValue(max_linear_speed, value_type=float),
@@ -186,6 +192,8 @@ def generate_launch_description():
             publish_rate_hz_arg,
             show_window_arg,
             points_file_arg,
+            task_points_file_arg,
+            task_points_topic_arg,
             cmd_vel_topic_arg,
             waypoint_tolerance_arg,
             max_linear_speed_arg,

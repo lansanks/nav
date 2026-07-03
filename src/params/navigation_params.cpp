@@ -127,6 +127,11 @@ RuntimeConfig declareRuntimeConfig(rclcpp::Node & node)
   }
   config.show_window = node.declare_parameter<bool>("show_window", config.show_window);
   config.cmd_vel_topic = node.declare_parameter<std::string>("cmd_vel_topic", config.cmd_vel_topic);
+  config.task_points_file =
+    navigation::maps::resolvePointsFilePath(
+    node.declare_parameter<std::string>("task_points_file", config.task_points_file));
+  config.task_points_topic =
+    node.declare_parameter<std::string>("task_points_topic", config.task_points_topic);
 
   auto & controller_config = config.controller_config;
   controller_config.waypoint_tolerance =

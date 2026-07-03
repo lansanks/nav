@@ -19,6 +19,8 @@ struct RuntimeConfig
   std::string points_file;
   bool show_window{true};
   std::string cmd_vel_topic{"/cmd_vel"};
+  std::string task_points_file{"task_points"};
+  std::string task_points_topic{"/navigation/task_points"};
   int ui_size{10};
   int map_width_px{0};
   int map_height_px{0};

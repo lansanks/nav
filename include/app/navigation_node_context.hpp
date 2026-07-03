@@ -33,6 +33,8 @@ struct NavigationNodeContext
   std::string robot_name;
   std::string current_map_file;
   std::string points_file;
+  std::string task_points_file;
+  std::string task_points_topic{"/navigation/task_points"};
   std::string ui_state_file;
   std::string cmd_vel_topic;
   std::string radar_topic{"/Odometry"};

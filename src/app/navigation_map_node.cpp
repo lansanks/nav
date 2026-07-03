@@ -39,6 +39,42 @@ double yawFromQuaternionWxyz(double w, double x, double y, double z)
   return std::atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z));
 }
 
+geometry_msgs::msg::Quaternion quaternionFromYaw(double yaw)
+{
+  geometry_msgs::msg::Quaternion q;
+  q.w = std::cos(yaw * 0.5);
+  q.z = std::sin(yaw * 0.5);
+  return q;
+}
+
+navigation::msg::MapPoint toMapPointMessage(const navigation::maps::MapPoint & point)
+{
+  navigation::msg::MapPoint msg;
+  msg.id = point.id;
+  msg.x = point.x;
+  msg.y = point.y;
+  msg.fast = point.fast;
+  msg.constant_speed = point.constant_speed;
+  msg.segment_custom_speed = point.segment_custom_speed;
+  msg.segment_constant_speed = point.segment_constant_speed;
+  msg.segment_speed_level = point.segment_speed_level;
+  msg.segment_linear_x = point.segment_linear_x;
+  msg.segment_max_angular_speed = point.segment_max_angular_speed;
+  msg.segment_k_alpha = point.segment_k_alpha;
+  msg.segment_k_beta = point.segment_k_beta;
+  msg.task_type = point.task_type;
+  msg.event_label = point.event_label;
+  return msg;
+}
+
+rclcpp::QoS staticMapQoS()
+{
+  auto qos = rclcpp::QoS(1);
+  qos.reliable();
+  qos.transient_local();
+  return qos;
+}
+
 std::unordered_map<std::string, std::string> parseStatusFields(const std::string & text)
 {
   std::unordered_map<std::string, std::string> fields;
@@ -335,6 +371,8 @@ NavigationMapNode::NavigationMapNode()
   const auto config = navigation::params::declareRuntimeConfig(*this);
   context_.robot_name = config.robot_name;
   context_.points_file = config.points_file;
+  context_.task_points_file = config.task_points_file;
+  context_.task_points_topic = config.task_points_topic;
   context_.ui_state_file = defaultUiStateFilePath(config.points_file).string();
   context_.show_window = config.show_window;
   context_.cmd_vel_topic = config.cmd_vel_topic;
@@ -485,6 +523,10 @@ NavigationMapNode::NavigationMapNode()
 
     context_.navigation_status = "Waiting for core";
   } else {
+    state_publisher_ = create_publisher<nav_msgs::msg::Odometry>(state_topic, rclcpp::SensorDataQoS());
+    task_points_publisher_ =
+      create_publisher<navigation::msg::MapPointArray>(context_.task_points_topic, staticMapQoS());
+    publishTaskPoints();
     cmd_vel_publisher_ =
       create_publisher<geometry_msgs::msg::Twist>(context_.cmd_vel_topic, rclcpp::QoS(10));
     rl_debug_key_publisher_ =
@@ -636,6 +678,53 @@ void NavigationMapNode::publishVelocity(const geometry_msgs::msg::Twist & comman
   }
 }
 
+void NavigationMapNode::publishState(const navigation::RobotNavigationState & state)
+{
+  if (context_.remote_control || state_publisher_ == nullptr) {
+    return;
+  }
+
+  nav_msgs::msg::Odometry msg;
+  const auto stamp = state.stamp.nanoseconds() == 0 ? now() : state.stamp;
+  const auto stamp_ns = stamp.nanoseconds();
+  msg.header.stamp.sec = static_cast<int32_t>(stamp_ns / 1000000000);
+  msg.header.stamp.nanosec = static_cast<uint32_t>(stamp_ns % 1000000000);
+  msg.header.frame_id = state.frame_id.empty() ? "map" : state.frame_id;
+  msg.child_frame_id = "base_link";
+  msg.pose.pose.position.x = state.x;
+  msg.pose.pose.position.y = state.y;
+  msg.pose.pose.position.z = state.z;
+  msg.pose.pose.orientation = quaternionFromYaw(state.yaw);
+  msg.twist.twist.linear.x = state.linear_x;
+  msg.twist.twist.linear.y = state.linear_y;
+  msg.twist.twist.linear.z = state.linear_z;
+  msg.twist.twist.angular.z = state.angular_z;
+  state_publisher_->publish(msg);
+}
+
+void NavigationMapNode::publishTaskPoints()
+{
+  if (task_points_publisher_ == nullptr) {
+    return;
+  }
+
+  const auto points = navigation::maps::loadPointsFile(context_.task_points_file);
+  navigation::msg::MapPointArray msg;
+  msg.header.stamp = now();
+  msg.header.frame_id = "map";
+  msg.points.reserve(points.size());
+  for (const auto & point : points) {
+    msg.points.push_back(toMapPointMessage(point));
+  }
+  task_points_publisher_->publish(msg);
+  RCLCPP_INFO(
+    get_logger(),
+    "Published %zu static task points from '%s' on '%s'.",
+    points.size(),
+    context_.task_points_file.c_str(),
+    context_.task_points_topic.c_str());
+}
+
 void NavigationMapNode::publishRlDebugKey(const std::string & command)
 {
   if (context_.remote_control || rl_debug_key_publisher_ == nullptr) {
@@ -698,7 +787,9 @@ void NavigationMapNode::handleRemoteStatus(const std_msgs::msg::String::SharedPt
   context_.remote_navigation_point_count = parseSize(fields, "points");
 
   const auto controller = fields.find("controller");
-  if (controller != fields.end() && !controller->second.empty()) {
+  if (controller != fields.end() && !controller->second.empty() &&
+    (context_.remote_navigation_active || context_.selected_controller_name.empty()))
+  {
     context_.selected_controller_name = controller->second;
   }
 
@@ -772,6 +863,9 @@ void NavigationMapNode::onTimer()
   } else {
     has_state = context_.interface != nullptr && context_.interface->getState(state);
     runtime_.updateNavigationController(has_state, state);
+    if (has_state) {
+      publishState(state);
+    }
   }
   const auto ui_state = ui_coordinator_.buildUiState();
 

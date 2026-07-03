@@ -26,6 +26,7 @@ pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
 # Generate ROS 2 interfaces (messages and services)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MapPoint.msg"
+  "msg/MapPointArray.msg"
   "srv/SetWaypoints.srv"
   "srv/SetControllerConfig.srv"
   "srv/StartNavigation.srv"

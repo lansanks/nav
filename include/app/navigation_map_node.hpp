@@ -11,6 +11,7 @@
 #include "app/navigation_ui_coordinator.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "navigation/msg/map_point_array.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "ui/window_scroll_controller.hpp"
@@ -32,6 +33,8 @@ private:
   void savePersistentUiStateIfChanged(bool force = false);
   void applyFullscreenIfNeeded(int frame_width, int frame_height);
   void publishVelocity(const geometry_msgs::msg::Twist & command);
+  void publishState(const navigation::RobotNavigationState & state);
+  void publishTaskPoints();
   void publishRlDebugKey(const std::string & command);
   void publishRlPolicyConfig(const std::string & policy_config);
   void recordCommandVelocity(const geometry_msgs::msg::Twist & command);
@@ -48,6 +51,8 @@ private:
   NavigationMouseController mouse_controller_;
   std::unique_ptr<navigation::ui::WindowScrollController> scroll_controller_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
+  rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr state_publisher_;
+  rclcpp::Publisher<navigation::msg::MapPointArray>::SharedPtr task_points_publisher_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr rl_debug_key_publisher_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr rl_policy_config_publisher_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;

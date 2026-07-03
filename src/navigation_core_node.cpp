@@ -16,6 +16,7 @@
 #include "maps/navigation_map_helpers.hpp"
 #include "maps/point_store.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "navigation/msg/map_point_array.hpp"
 #include "navigation/srv/set_waypoints.hpp"
 #include "navigation/srv/set_controller_config.hpp"
 #include "navigation/srv/start_navigation.hpp"
@@ -51,6 +52,34 @@ geometry_msgs::msg::Quaternion quaternionFromYaw(double yaw)
   q.w = std::cos(yaw * 0.5);
   q.z = std::sin(yaw * 0.5);
   return q;
+}
+
+navigation::msg::MapPoint toMapPointMessage(const navigation::maps::MapPoint & point)
+{
+  navigation::msg::MapPoint msg;
+  msg.id = point.id;
+  msg.x = point.x;
+  msg.y = point.y;
+  msg.fast = point.fast;
+  msg.constant_speed = point.constant_speed;
+  msg.segment_custom_speed = point.segment_custom_speed;
+  msg.segment_constant_speed = point.segment_constant_speed;
+  msg.segment_speed_level = point.segment_speed_level;
+  msg.segment_linear_x = point.segment_linear_x;
+  msg.segment_max_angular_speed = point.segment_max_angular_speed;
+  msg.segment_k_alpha = point.segment_k_alpha;
+  msg.segment_k_beta = point.segment_k_beta;
+  msg.task_type = point.task_type;
+  msg.event_label = point.event_label;
+  return msg;
+}
+
+rclcpp::QoS staticMapQoS()
+{
+  auto qos = rclcpp::QoS(1);
+  qos.reliable();
+  qos.transient_local();
+  return qos;
 }
 
 void applyConfigFromRequest(
@@ -123,6 +152,8 @@ public:
     const auto config = navigation::params::declareRuntimeConfig(*this);
     context_.robot_name = config.robot_name;
     context_.points_file = config.points_file;
+    context_.task_points_file = config.task_points_file;
+    context_.task_points_topic = config.task_points_topic;
     context_.show_window = false;
     context_.cmd_vel_topic = config.cmd_vel_topic;
     context_.controller_config = config.controller_config;
@@ -234,6 +265,9 @@ public:
 
     status_publisher_ = create_publisher<std_msgs::msg::String>(status_topic, remoteTelemetryQoS());
     state_publisher_ = create_publisher<nav_msgs::msg::Odometry>(state_topic, rclcpp::SensorDataQoS());
+    task_points_publisher_ =
+      create_publisher<navigation::msg::MapPointArray>(context_.task_points_topic, staticMapQoS());
+    publishTaskPoints();
 
     // Heartbeat publisher: sends a pulse every second so remote UI can detect disconnection
     heartbeat_publisher_ = create_publisher<std_msgs::msg::String>("/navigation/heartbeat", rclcpp::QoS(10));
@@ -254,9 +288,10 @@ public:
     RCLCPP_INFO(
       get_logger(),
       "Navigation core ready. services: /navigation/{set_waypoints,set_config,start,stop,set_radar_calibration}, "
-      "status: %s, state: %s, cmd_vel: %s",
+      "status: %s, state: %s, task_points: %s, cmd_vel: %s",
       status_topic.c_str(),
       state_topic.c_str(),
+      context_.task_points_topic.c_str(),
       context_.cmd_vel_topic.c_str());
   }
 
@@ -319,6 +354,29 @@ private:
     msg.twist.twist.linear.z = state.linear_z;
     msg.twist.twist.angular.z = state.angular_z;
     state_publisher_->publish(msg);
+  }
+
+  void publishTaskPoints()
+  {
+    if (task_points_publisher_ == nullptr) {
+      return;
+    }
+
+    const auto points = navigation::maps::loadPointsFile(context_.task_points_file);
+    navigation::msg::MapPointArray msg;
+    msg.header.stamp = now();
+    msg.header.frame_id = "map";
+    msg.points.reserve(points.size());
+    for (const auto & point : points) {
+      msg.points.push_back(toMapPointMessage(point));
+    }
+    task_points_publisher_->publish(msg);
+    RCLCPP_INFO(
+      get_logger(),
+      "Published %zu static task points from '%s' on '%s'.",
+      points.size(),
+      context_.task_points_file.c_str(),
+      context_.task_points_topic.c_str());
   }
 
   void publishStatus()
@@ -584,6 +642,7 @@ private:
   rclcpp::Service<navigation::srv::StringCommand>::SharedPtr arm_event_service_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_publisher_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr state_publisher_;
+  rclcpp::Publisher<navigation::msg::MapPointArray>::SharedPtr task_points_publisher_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr heartbeat_publisher_;
   rclcpp::TimerBase::SharedPtr heartbeat_timer_;
   rclcpp::TimerBase::SharedPtr timer_;
