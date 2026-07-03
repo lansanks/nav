@@ -105,6 +105,7 @@ struct NavigationNodeContext
   std::string mission_slot_categories_text;
   std::string mission_high_score_category_text{"-1"};
   std::string mission_high_score_priority_text{"0"};
+  std::string mission_max_steps_text{"0"};
   std::string mission_cost_budget_text{"999.0"};
   std::string mission_alpha_text{"1.0"};
   std::string mission_beta_text{"0.3"};

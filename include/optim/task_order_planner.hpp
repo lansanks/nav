@@ -22,6 +22,12 @@ struct PlanningStep
   int target_zone_id{0};
   int reward{0};
   Point2 box_position;
+  int startup_transition_id{0};
+  Point2 startup_transition_position;
+  int pickup_transition_id{0};
+  Point2 pickup_transition_position;
+  int pickup_stop_id{0};
+  Point2 pickup_stop_position;
   Point2 return_zone_position;
   double step_cost{0.0};
   double cumulative_cost{0.0};
@@ -58,7 +64,7 @@ struct PlanningRequest
   std::optional<int> high_score_category;
   bool high_score_priority{false};
   double cost_budget{0.0};
-  Point2 current_position{3.7, -9.45};
+  Point2 current_position{0.0, 0.0};
   double current_yaw{1.57079632679};
   std::vector<int> remaining_slots;
   double alpha{1.0};
@@ -66,6 +72,7 @@ struct PlanningRequest
   double eta{0.4};
   double g_pick_place{0.0};
   std::string geometry_path;
+  int max_steps{0};
 };
 
 PlanningResult planTaskOrder(const PlanningRequest & request);

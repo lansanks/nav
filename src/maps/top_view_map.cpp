@@ -401,6 +401,9 @@ std::string sceneFileFromAlias(const std::string & scene)
   if (scene == "robocon") {
     return "scene_robocon.xml";
   }
+  if (scene == "task") {
+    return "task.png";
+  }
   return scene;
 }
 
@@ -1172,6 +1175,78 @@ struct TopViewMap::Impl
         cv::LINE_AA);
     }
 
+    std::vector<cv::Rect> occupied_label_rects;
+    std::vector<cv::Rect> point_marker_rects;
+    point_marker_rects.reserve(points.size());
+    for (const auto & point : points) {
+      const auto center = worldToPixel({point.x, point.y});
+      point_marker_rects.emplace_back(center.x - 11, center.y - 11, 22, 22);
+    }
+
+    auto textRect = [](cv::Point origin, const cv::Size & size, int baseline) {
+        return cv::Rect(
+          origin.x - 3,
+          origin.y - size.height - 3,
+          size.width + 6,
+          size.height + baseline + 6);
+      };
+
+    auto rectOverlapsAny = [](const cv::Rect & rect, const std::vector<cv::Rect> & rects) {
+        for (const auto & occupied : rects) {
+          if ((rect & occupied).area() > 0) {
+            return true;
+          }
+        }
+        return false;
+      };
+
+    auto chooseLabelOrigin = [&](
+        cv::Point center,
+        const cv::Size & text_size,
+        int baseline,
+        std::size_t point_index,
+        const cv::Mat & image) {
+        const std::array<cv::Point, 8> offsets{
+          cv::Point{10, -8},
+          cv::Point{10, 20},
+          cv::Point{-text_size.width - 10, -8},
+          cv::Point{-text_size.width - 10, 20},
+          cv::Point{14, -26},
+          cv::Point{-text_size.width - 14, -26},
+          cv::Point{14, 38},
+          cv::Point{-text_size.width - 14, 38},
+        };
+
+        cv::Point fallback = center + offsets.front();
+        double fallback_penalty = std::numeric_limits<double>::infinity();
+        for (const auto & offset : offsets) {
+          const auto origin = center + offset;
+          const auto rect = textRect(origin, text_size, baseline);
+          const bool in_canvas =
+            rect.x >= 0 && rect.y >= 0 && rect.x + rect.width < image.cols &&
+            rect.y + rect.height < image.rows;
+          int overlap_count = rectOverlapsAny(rect, occupied_label_rects) ? 1 : 0;
+          for (std::size_t marker_index = 0; marker_index < point_marker_rects.size(); ++marker_index) {
+            if (marker_index == point_index) {
+              continue;
+            }
+            if ((rect & point_marker_rects[marker_index]).area() > 0) {
+              ++overlap_count;
+            }
+          }
+          if (in_canvas && overlap_count == 0) {
+            return origin;
+          }
+          const double penalty = static_cast<double>(overlap_count * 1000) +
+            (in_canvas ? 0.0 : 500.0) + std::hypot(offset.x, offset.y);
+          if (penalty < fallback_penalty) {
+            fallback_penalty = penalty;
+            fallback = origin;
+          }
+        }
+        return fallback;
+      };
+
     for (std::size_t i = 0; i < points.size(); ++i) {
       const auto & point = points[i];
       const auto center = worldToPixel({point.x, point.y});
@@ -1202,10 +1277,15 @@ struct TopViewMap::Impl
       cv::circle(canvas, center, 8, cv::Scalar(245, 245, 245), 1, cv::LINE_AA);
 
       const auto label = std::to_string(point.id);
+      int label_baseline = 0;
+      const auto label_size =
+        cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &label_baseline);
+      const auto label_origin = chooseLabelOrigin(center, label_size, label_baseline, i, canvas);
+      occupied_label_rects.push_back(textRect(label_origin, label_size, label_baseline));
       cv::putText(
         canvas,
         label,
-        cv::Point(center.x + 10, center.y - 8),
+        label_origin,
         cv::FONT_HERSHEY_SIMPLEX,
         0.5,
         cv::Scalar(245, 245, 245),
@@ -1214,7 +1294,7 @@ struct TopViewMap::Impl
       cv::putText(
         canvas,
         label,
-        cv::Point(center.x + 10, center.y - 8),
+        label_origin,
         cv::FONT_HERSHEY_SIMPLEX,
         0.5,
         cv::Scalar(20, 30, 35),
@@ -1225,10 +1305,15 @@ struct TopViewMap::Impl
         const auto event_color = isSpecialNavigationLabel(point.event_label) ?
           specialNavigationColor() :
           cv::Scalar(30, 85, 210);
+        int event_baseline = 0;
+        const auto event_size =
+          cv::getTextSize(event_text, cv::FONT_HERSHEY_SIMPLEX, 0.43, 1, &event_baseline);
+        const auto event_origin = cv::Point(label_origin.x, label_origin.y + label_size.height + 12);
+        occupied_label_rects.push_back(textRect(event_origin, event_size, event_baseline));
         cv::putText(
           canvas,
           event_text,
-          cv::Point(center.x + 10, center.y + 14),
+          event_origin,
           cv::FONT_HERSHEY_SIMPLEX,
           0.43,
           cv::Scalar(245, 245, 245),
@@ -1237,7 +1322,7 @@ struct TopViewMap::Impl
         cv::putText(
           canvas,
           event_text,
-          cv::Point(center.x + 10, center.y + 14),
+          event_origin,
           cv::FONT_HERSHEY_SIMPLEX,
           0.43,
           event_color,

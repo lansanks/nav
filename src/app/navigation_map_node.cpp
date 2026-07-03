@@ -304,6 +304,7 @@ std::string serializePersistentUiState(const NavigationNodeContext & context)
   output << "mission_slot_categories: " << quoteScalar(context.mission_slot_categories_text) << "\n";
   output << "mission_high_score_category: " << quoteScalar(context.mission_high_score_category_text) << "\n";
   output << "mission_high_score_priority: " << quoteScalar(context.mission_high_score_priority_text) << "\n";
+  output << "mission_max_steps: " << quoteScalar(context.mission_max_steps_text) << "\n";
   output << "mission_cost_budget: " << quoteScalar(context.mission_cost_budget_text) << "\n";
   output << "mission_alpha: " << quoteScalar(context.mission_alpha_text) << "\n";
   output << "mission_beta: " << quoteScalar(context.mission_beta_text) << "\n";
@@ -613,6 +614,7 @@ void NavigationMapNode::loadPersistentUiState()
   applyStringField(fields, "mission_slot_categories", context_.mission_slot_categories_text);
   applyStringField(fields, "mission_high_score_category", context_.mission_high_score_category_text);
   applyStringField(fields, "mission_high_score_priority", context_.mission_high_score_priority_text);
+  applyStringField(fields, "mission_max_steps", context_.mission_max_steps_text);
   applyStringField(fields, "mission_cost_budget", context_.mission_cost_budget_text);
   applyStringField(fields, "mission_alpha", context_.mission_alpha_text);
   applyStringField(fields, "mission_beta", context_.mission_beta_text);

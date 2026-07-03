@@ -12,7 +12,7 @@ def generate_launch_description():
     node_role_arg = DeclareLaunchArgument("node_role", default_value="standalone")
     source_arg = DeclareLaunchArgument("source", default_value="simulation")
     robot_name_arg = DeclareLaunchArgument("robot_name", default_value="blackW")
-    scene_arg = DeclareLaunchArgument("scene", default_value="terrain")
+    scene_arg = DeclareLaunchArgument("scene", default_value="task")
     sim_odom_topic_arg = DeclareLaunchArgument("sim_odom_topic", default_value="/odom")
     radar_odom_topic_arg = DeclareLaunchArgument("radar_odom_topic", default_value="/Odometry")
     radar_calibration_topic_arg = DeclareLaunchArgument("radar_calibration_topic", default_value="/Odometry")

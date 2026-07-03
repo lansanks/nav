@@ -14,7 +14,7 @@ struct RuntimeConfig
 {
   std::string source{"simulation"};
   std::string robot_name{"blackW"};
-  std::string scene{"terrain"};
+  std::string scene{"task"};
   std::string window_name{"blackW top view navigation"};
   std::string points_file;
   bool show_window{true};

@@ -7,12 +7,13 @@ race_logic: "mission"
 panel_collapsed: false
 light_theme: true
 fullscreen: false
-mission_plan_display_mode: "order_only"
+mission_plan_display_mode: "hidden"
 radar_data_file: "/home/linkchen/black_mujoco/src/navigation/config/calibration/datas/right_task.yaml"
 radar_points_file: "/home/linkchen/black_mujoco/src/navigation/config/points/b.yaml"
 mission_slot_categories: "01230123"
 mission_high_score_category: "-1"
 mission_high_score_priority: "0"
+mission_max_steps: "8"
 mission_cost_budget: "999.0"
 mission_alpha: "1.0"
 mission_beta: "0.3"

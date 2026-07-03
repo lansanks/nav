@@ -1045,7 +1045,7 @@ void MapUiRenderer::drawSettingsPopup(cv::Mat & canvas, const MapUiState & ui_st
   putPanelText(canvas, "Task Settings", cv::Point(popup.x + 24, popup.y + 38), 0.68, palette.title);
   putPanelText(
     canvas,
-    "Slot categories are slot 0..7 category ids: 0 food, 1 tool, 2 instrument, 3 medicine.",
+    "Slot categories are slot 0..7 category ids: 0 food, 1 tool, 2 instrument, 3 medicine. Box limit 0 = all.",
     cv::Point(popup.x + 24, popup.y + 62),
     0.36,
     palette.text_muted);

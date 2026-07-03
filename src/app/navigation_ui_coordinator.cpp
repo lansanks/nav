@@ -318,6 +318,23 @@ void appendMapPoint(
   route.push_back(map_point);
 }
 
+void appendDistinctMapPoint(
+  std::vector<navigation::maps::MapPoint> & route,
+  int & next_id,
+  OptimPoint point,
+  std::uint8_t task_type)
+{
+  if (!route.empty() && distance({route.back().x, route.back().y}, point) <= kMissionEps) {
+    if (task_type != navigation::maps::kTaskTypeNone) {
+      route.back().task_type = task_type;
+      route.back().fast = true;
+      route.back().constant_speed = false;
+    }
+    return;
+  }
+  appendMapPoint(route, next_id, point, task_type);
+}
+
 double candidateCost(
   OptimPoint previous,
   const std::vector<CandidatePoint> & candidate,
@@ -596,6 +613,53 @@ std::vector<navigation::maps::MapPoint> buildMissionNavigationRoute(
 {
   std::vector<navigation::maps::MapPoint> route;
   if (result.steps.empty()) {
+    return route;
+  }
+
+  const bool feature_point_route = std::all_of(
+    result.steps.begin(),
+    result.steps.end(),
+    [](const auto & step) {
+      return step.pickup_transition_id > 0 && step.pickup_stop_id > 0;
+    });
+  if (feature_point_route) {
+    int next_id = 1;
+    for (std::size_t i = 0; i < result.steps.size(); ++i) {
+      const auto & step = result.steps[i];
+      if (i == 0 && step.startup_transition_id > 0) {
+        appendDistinctMapPoint(
+          route,
+          next_id,
+          step.startup_transition_position,
+          navigation::maps::kTaskTypeNone);
+        appendDistinctMapPoint(
+          route,
+          next_id,
+          step.pickup_stop_position,
+          navigation::maps::kTaskTypePickup);
+      } else {
+        appendDistinctMapPoint(
+          route,
+          next_id,
+          step.pickup_transition_position,
+          navigation::maps::kTaskTypeNone);
+        appendDistinctMapPoint(
+          route,
+          next_id,
+          step.pickup_stop_position,
+          navigation::maps::kTaskTypePickup);
+      }
+      appendDistinctMapPoint(
+        route,
+        next_id,
+        step.pickup_transition_position,
+        navigation::maps::kTaskTypeNone);
+      appendDistinctMapPoint(
+        route,
+        next_id,
+        step.return_zone_position,
+        navigation::maps::kTaskTypePlace);
+    }
     return route;
   }
 
@@ -1634,6 +1698,7 @@ std::vector<std::string> NavigationUiCoordinator::settingsFieldNames() const
     "Slot categories",
     "High score category",
     "High score priority",
+    "Box limit",
     "Cost budget",
     "Alpha",
     "Beta",
@@ -1652,6 +1717,7 @@ std::vector<std::string> NavigationUiCoordinator::settingsFieldValues() const
     context_.mission_slot_categories_text,
     context_.mission_high_score_category_text,
     context_.mission_high_score_priority_text,
+    context_.mission_max_steps_text,
     context_.mission_cost_budget_text,
     context_.mission_alpha_text,
     context_.mission_beta_text,
@@ -1903,30 +1969,33 @@ void NavigationUiCoordinator::applySettingsEdit()
       context_.mission_high_score_priority_text = value;
       break;
     case 3:
-      context_.mission_cost_budget_text = value;
+      context_.mission_max_steps_text = value;
       break;
     case 4:
-      context_.mission_alpha_text = value;
+      context_.mission_cost_budget_text = value;
       break;
     case 5:
-      context_.mission_beta_text = value;
+      context_.mission_alpha_text = value;
       break;
     case 6:
-      context_.mission_eta_text = value;
+      context_.mission_beta_text = value;
       break;
     case 7:
-      context_.mission_g_pick_place_text = value;
+      context_.mission_eta_text = value;
       break;
     case 8:
-      context_.mission_storage_near_distance_text = value;
+      context_.mission_g_pick_place_text = value;
       break;
     case 9:
-      context_.mission_storage_far_distance_text = value;
+      context_.mission_storage_near_distance_text = value;
       break;
     case 10:
-      context_.mission_return_near_distance_text = value;
+      context_.mission_storage_far_distance_text = value;
       break;
     case 11:
+      context_.mission_return_near_distance_text = value;
+      break;
+    case 12:
       context_.mission_return_far_distance_text = value;
       break;
     default:
@@ -1963,6 +2032,16 @@ void NavigationUiCoordinator::applyMissionSettings()
   }
   if (high_score_priority != 0 && high_score_priority != 1) {
     context_.status_message = "High score priority must be 0 or 1";
+    return;
+  }
+
+  int max_steps = 0;
+  if (!parseIntField(context_.mission_max_steps_text, "Box limit", max_steps, error)) {
+    context_.status_message = error;
+    return;
+  }
+  if (max_steps < 0) {
+    context_.status_message = "Box limit must be >= 0";
     return;
   }
 
@@ -2029,6 +2108,7 @@ void NavigationUiCoordinator::applyMissionSettings()
     request.beta = beta;
     request.eta = eta;
     request.g_pick_place = g_pick_place;
+    request.max_steps = max_steps;
 
     const auto result = navigation::optim::planTaskOrder(request);
     const auto generated_points = buildMissionNavigationRoute(
@@ -2039,10 +2119,32 @@ void NavigationUiCoordinator::applyMissionSettings()
       return_far_distance);
     context_.mission_plan_points.clear();
     if (!result.order.empty()) {
-      context_.mission_plan_points.push_back({result.start_position.x, result.start_position.y, false});
-      for (const auto & step : result.steps) {
-        context_.mission_plan_points.push_back({step.box_position.x, step.box_position.y, false});
-        context_.mission_plan_points.push_back({step.return_zone_position.x, step.return_zone_position.y, true});
+      auto append_plan_point = [&](OptimPoint point, bool loaded_segment_to_here) {
+          if (!context_.mission_plan_points.empty()) {
+            const auto & previous = context_.mission_plan_points.back();
+            if (std::hypot(previous.x - point.x, previous.y - point.y) <= kMissionEps) {
+              context_.mission_plan_points.back().loaded_segment_to_here = loaded_segment_to_here;
+              return;
+            }
+          }
+          context_.mission_plan_points.push_back({point.x, point.y, loaded_segment_to_here});
+        };
+
+      append_plan_point(result.start_position, false);
+      for (std::size_t i = 0; i < result.steps.size(); ++i) {
+        const auto & step = result.steps[i];
+        if (step.pickup_stop_id > 0) {
+          if (i == 0 && step.startup_transition_id > 0) {
+            append_plan_point(step.startup_transition_position, false);
+          } else {
+            append_plan_point(step.pickup_transition_position, false);
+          }
+          append_plan_point(step.pickup_stop_position, false);
+          append_plan_point(step.pickup_transition_position, true);
+        } else {
+          append_plan_point(step.box_position, false);
+        }
+        append_plan_point(step.return_zone_position, true);
       }
     }
     if (!generated_points.empty()) {
@@ -2061,6 +2163,9 @@ void NavigationUiCoordinator::applyMissionSettings()
     }
     summary << "  score=" << result.best_score << "  cost=" << std::fixed << std::setprecision(2) <<
       result.best_cost << "/" << cost_budget;
+    if (max_steps > 0) {
+      summary << "  limit=" << max_steps;
+    }
     if (!generated_points.empty()) {
       summary << "  points=" << generated_points.size();
     }
