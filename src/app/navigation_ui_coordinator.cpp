@@ -223,7 +223,32 @@ struct CandidatePoint
 {
   OptimPoint point;
   std::uint8_t task_type{navigation::maps::kTaskTypeNone};
+  int mission_target_id{0};
 };
+
+int boxMissionTargetId(int slot_id)
+{
+  if (slot_id >= 0 && slot_id < 4) {
+    return slot_id + 1;
+  }
+  if (slot_id >= 4 && slot_id < 8) {
+    return 12 - slot_id;
+  }
+  return 0;
+}
+
+int returnMissionTargetId(int target_zone_id)
+{
+  if (target_zone_id >= 0 && target_zone_id < 4) {
+    return 12 - target_zone_id;
+  }
+  return 0;
+}
+
+std::string missionTargetLabel(int mission_target_id)
+{
+  return mission_target_id > 0 ? "@mission_target_" + std::to_string(mission_target_id) : "";
+}
 
 double distance(OptimPoint a, OptimPoint b)
 {
@@ -306,7 +331,8 @@ void appendMapPoint(
   std::vector<navigation::maps::MapPoint> & route,
   int & next_id,
   OptimPoint point,
-  std::uint8_t task_type)
+  std::uint8_t task_type,
+  int mission_target_id = 0)
 {
   navigation::maps::MapPoint map_point;
   map_point.id = next_id++;
@@ -315,6 +341,7 @@ void appendMapPoint(
   map_point.fast = task_type != navigation::maps::kTaskTypeNone;
   map_point.constant_speed = false;
   map_point.task_type = task_type;
+  map_point.event_label = missionTargetLabel(mission_target_id);
   route.push_back(map_point);
 }
 
@@ -322,17 +349,19 @@ void appendDistinctMapPoint(
   std::vector<navigation::maps::MapPoint> & route,
   int & next_id,
   OptimPoint point,
-  std::uint8_t task_type)
+  std::uint8_t task_type,
+  int mission_target_id = 0)
 {
   if (!route.empty() && distance({route.back().x, route.back().y}, point) <= kMissionEps) {
     if (task_type != navigation::maps::kTaskTypeNone) {
       route.back().task_type = task_type;
       route.back().fast = true;
       route.back().constant_speed = false;
+      route.back().event_label = missionTargetLabel(mission_target_id);
     }
     return;
   }
-  appendMapPoint(route, next_id, point, task_type);
+  appendMapPoint(route, next_id, point, task_type, mission_target_id);
 }
 
 double candidateCost(
@@ -414,6 +443,7 @@ std::vector<CandidatePoint> serviceCandidate(
   LaneSide red_lane,
   bool include_exit_lane,
   std::uint8_t task_type,
+  int mission_target_id,
   double near_distance,
   double far_distance)
 {
@@ -422,7 +452,7 @@ std::vector<CandidatePoint> serviceCandidate(
   points.push_back({
       lanePoint(center, side_direction, red_lane, far_distance),
       navigation::maps::kTaskTypeNone});
-  points.push_back({lanePoint(center, side_direction, red_lane, near_distance), task_type});
+  points.push_back({lanePoint(center, side_direction, red_lane, near_distance), task_type, mission_target_id});
   if (include_exit_lane) {
     points.push_back({
         lanePoint(center, side_direction, exit_lane, near_distance),
@@ -437,6 +467,7 @@ std::vector<CandidatePoint> chooseServiceCandidate(
   OptimPoint previous,
   const std::optional<OptimPoint> & next,
   std::uint8_t task_type,
+  int mission_target_id,
   double near_distance,
   double far_distance)
 {
@@ -452,6 +483,7 @@ std::vector<CandidatePoint> chooseServiceCandidate(
       lane,
       include_exit_lane,
       task_type,
+      mission_target_id,
       near_distance,
       far_distance);
     const int crossings = candidateCrossingCount(previous, candidate, next);
@@ -477,7 +509,7 @@ void appendCandidate(
   const std::vector<CandidatePoint> & candidate)
 {
   for (const auto & point : candidate) {
-    appendMapPoint(route, next_id, point.point, point.task_type);
+    appendMapPoint(route, next_id, point.point, point.task_type, point.mission_target_id);
   }
 }
 
@@ -575,7 +607,10 @@ std::vector<CandidatePoint> firstStartSidePickupCandidate(
   const OptimPoint side_direction{0.0, start_side_y};
   return {
     {lanePoint(step.box_position, side_direction, red_lane, far_distance), navigation::maps::kTaskTypeNone},
-    {lanePoint(step.box_position, side_direction, red_lane, near_distance), navigation::maps::kTaskTypePickup},
+    {
+      lanePoint(step.box_position, side_direction, red_lane, near_distance),
+      navigation::maps::kTaskTypePickup,
+      boxMissionTargetId(step.slot_id)},
   };
 }
 
@@ -636,7 +671,8 @@ std::vector<navigation::maps::MapPoint> buildMissionNavigationRoute(
           route,
           next_id,
           step.pickup_stop_position,
-          navigation::maps::kTaskTypePickup);
+          navigation::maps::kTaskTypePickup,
+          boxMissionTargetId(step.slot_id));
       } else {
         appendDistinctMapPoint(
           route,
@@ -647,7 +683,8 @@ std::vector<navigation::maps::MapPoint> buildMissionNavigationRoute(
           route,
           next_id,
           step.pickup_stop_position,
-          navigation::maps::kTaskTypePickup);
+          navigation::maps::kTaskTypePickup,
+          boxMissionTargetId(step.slot_id));
       }
       appendDistinctMapPoint(
         route,
@@ -658,7 +695,8 @@ std::vector<navigation::maps::MapPoint> buildMissionNavigationRoute(
         route,
         next_id,
         step.return_zone_position,
-        navigation::maps::kTaskTypePlace);
+        navigation::maps::kTaskTypePlace,
+        returnMissionTargetId(step.target_zone_id));
     }
     return route;
   }
@@ -713,6 +751,7 @@ std::vector<navigation::maps::MapPoint> buildMissionNavigationRoute(
           cursor,
           step.return_zone_position,
           navigation::maps::kTaskTypePickup,
+          boxMissionTargetId(step.slot_id),
           storage_near_distance,
           storage_far_distance));
       cursor = {route.back().x, route.back().y};
@@ -731,6 +770,7 @@ std::vector<navigation::maps::MapPoint> buildMissionNavigationRoute(
         cursor,
         next_box,
         navigation::maps::kTaskTypePlace,
+        returnMissionTargetId(step.target_zone_id),
         return_near_distance,
         return_far_distance));
     cursor = {route.back().x, route.back().y};

@@ -54,6 +54,7 @@ private:
     const std::string & event) const;
   bool maybePauseForMissionTask(const navigation::RobotNavigationState & state);
   void sendArrivedToArmIfDue();
+  void sendReadyForNextMissionTask(std::size_t completed_task_index);
   void resumeMissionNavigation(const std::string & reason);
   void sendSetWaypointsRequest(const std::vector<navigation::maps::MapPoint> & points);
   void sendSetConfigRequest(const navigation::ControllerConfig & config);

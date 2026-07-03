@@ -54,7 +54,7 @@ class MockArmNode(Node):
             f"x={request.x:.3f} y={request.y:.3f}"
         )
 
-        if action not in {"pickup", "place"}:
+        if action not in {"pickup", "place", "ready"}:
             response.success = False
             response.message = f"unsupported action: {request.action}"
             self.get_logger().warn(f"[{sequence}] 拒绝未知任务: {request.action}")
@@ -63,6 +63,9 @@ class MockArmNode(Node):
         response.success = True
         response.message = "received"
         self.get_logger().info(f"[{sequence}] 已经回复nav: success=true message=received")
+        if action == "ready":
+            self.get_logger().info(f"[{sequence}] 已收到预备目标: target_id={request.task_index}")
+            return response
         self.schedule_event("grabbed" if action == "pickup" else "placed", self.grabbed_delay_s, sequence)
         self.schedule_event("completed", self.grabbed_delay_s + self.completed_delay_s, sequence)
         return response

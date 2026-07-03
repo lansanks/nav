@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <memory>
 #include <sstream>
@@ -130,6 +131,29 @@ bool parsePositiveDoubleAfterPrefix(
     return true;
   } catch (const std::exception &) {
     return false;
+  }
+}
+
+int parseMissionTargetId(const std::string & event_label)
+{
+  constexpr const char * kMissionTargetPrefix = "@mission_target_";
+  std::string normalized = event_label;
+  std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  if (!startsWith(normalized, kMissionTargetPrefix) || normalized.size() <= std::strlen(kMissionTargetPrefix)) {
+    return 0;
+  }
+
+  try {
+    std::size_t consumed = 0;
+    const int parsed = std::stoi(normalized.substr(std::strlen(kMissionTargetPrefix)), &consumed);
+    if (consumed != normalized.size() - std::strlen(kMissionTargetPrefix) || parsed <= 0) {
+      return 0;
+    }
+    return parsed;
+  } catch (const std::exception &) {
+    return 0;
   }
 }
 
@@ -653,6 +677,7 @@ void NavigationRuntime::resetMissionTasks()
     task.point_index = i;
     task.point_id = points[i].id;
     task.task_type = task_type;
+    task.mission_target_id = parseMissionTargetId(points[i].event_label);
     context_.mission_tasks.push_back(task);
     ++task_index;
   }
@@ -747,6 +772,10 @@ bool NavigationRuntime::triggerNavigationEvent(
   });
 
   if (!normalized.empty() && normalized.front() == '@') {
+    if (startsWith(normalized, "@mission_target_")) {
+      return false;
+    }
+
     double value = 0.0;
     if (parsePositiveDoubleAfterPrefix(normalized, "@stop_", value)) {
       context_.navigation_event_wait_active = true;
@@ -980,6 +1009,70 @@ void NavigationRuntime::sendArrivedToArmIfDue()
     });
 }
 
+void NavigationRuntime::sendReadyForNextMissionTask(std::size_t completed_task_index)
+{
+  if (completed_task_index >= context_.mission_tasks.size()) {
+    return;
+  }
+
+  auto & completed_task = context_.mission_tasks[completed_task_index];
+  if (completed_task.ready_sent) {
+    return;
+  }
+
+  const std::size_t next_task_index = completed_task_index + 1;
+  if (next_task_index >= context_.mission_tasks.size()) {
+    return;
+  }
+  if (context_.map == nullptr) {
+    return;
+  }
+  const auto & points = context_.map->points();
+  const auto & next_task = context_.mission_tasks[next_task_index];
+  if (next_task.point_index >= points.size()) {
+    return;
+  }
+  if (next_task.mission_target_id <= 0) {
+    RCLCPP_WARN(
+      logger_,
+      "Skipping arm ready command for mission task %zu: missing mission target id.",
+      next_task_index);
+    return;
+  }
+  if (context_.arm_mission_client == nullptr || !context_.arm_mission_client->service_is_ready()) {
+    context_.status_message = "Arm service unavailable for ready";
+    RCLCPP_WARN(logger_, "Skipping arm ready command: arm service is not ready.");
+    return;
+  }
+
+  const auto & point = points[next_task.point_index];
+  auto request = std::make_shared<navigation::srv::MissionCommand::Request>();
+  request->task_index = static_cast<std::uint32_t>(next_task.mission_target_id);
+  request->point_id = next_task.point_id;
+  request->action = "ready";
+  request->x = point.x;
+  request->y = point.y;
+  completed_task.ready_sent = true;
+  RCLCPP_INFO(
+    logger_,
+    "Sending arm ready command for next mission target %d at point %d.",
+    next_task.mission_target_id,
+    next_task.point_id);
+  context_.arm_mission_client->async_send_request(
+    request,
+    [this, target_id = next_task.mission_target_id](
+      rclcpp::Client<navigation::srv::MissionCommand>::SharedFuture future) {
+      auto response = future.get();
+      if (!response->success) {
+        context_.status_message = "Arm rejected ready: " + response->message;
+        RCLCPP_WARN(logger_, "Arm ready target %d rejected: %s", target_id, response->message.c_str());
+        return;
+      }
+      context_.status_message = "Arm ready sent";
+      RCLCPP_INFO(logger_, "Arm acknowledged ready target %d.", target_id);
+    });
+}
+
 void NavigationRuntime::resumeMissionNavigation(const std::string & reason)
 {
   context_.mission_paused = false;
@@ -1054,6 +1147,9 @@ bool NavigationRuntime::handleArmEvent(const std::string & event, std::string * 
   }
   context_.status_message = "Arm event: " + event;
   RCLCPP_INFO(logger_, "Arm event '%s' received for mission point %d.", event.c_str(), task.point_id);
+  if (event == "completed") {
+    sendReadyForNextMissionTask(event_task_index);
+  }
   if (context_.mission_paused && event_task_index == context_.mission_current_task &&
     shouldResumeForEvent(task, event))
   {

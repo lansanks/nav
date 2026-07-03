@@ -40,6 +40,9 @@ Navigation core calls the arm node:
 - Default service name: `/arm/mission_event`
 - Service type: `navigation/srv/MissionCommand`
 - Request from navigation: `action=pickup` for lower storage-row task points, `action=place` for upper return-zone task points
+- After an arm `completed` callback, navigation sends one preview request with `action=ready`; in that request only,
+  `task_index` means the next target id: boxes are `1..8` clockwise from the upper-left storage slot, and return zones
+  are `9..12` from left to right
 - Expected response when received: `success: true`
 
 The arm node calls navigation core:
@@ -60,7 +63,8 @@ The arm node calls navigation core:
 6. For pickup tasks, the arm node later calls `/navigation/arm_event` with `grabbed`.
 7. For place tasks, the arm node later calls `/navigation/arm_event` with `placed`.
 8. The arm node calls `/navigation/arm_event` with `completed` after returning home.
-9. Navigation resumes according to the configured pickup/place resume event.
+9. Navigation sends `/arm/mission_event` with `action=ready` for the next box or return zone when a next task exists.
+10. Navigation resumes according to the configured pickup/place resume event.
 
 ## Tunable Parameters
 
@@ -91,7 +95,7 @@ Mock the arm-side service:
 ros2 run navigation mock_arm_node
 ```
 
-The mock node provides `/arm/mission_event`, immediately replies ack to the mission command, sends `grabbed` for pickup or `placed` for place after 1 second, then sends `completed` after another 1 second.
+The mock node provides `/arm/mission_event`, immediately replies ack to mission commands, sends `grabbed` for pickup or `placed` for place after 1 second, then sends `completed` after another 1 second. For `action=ready`, it only acknowledges the preview target.
 
 Send arm events back to navigation manually:
 

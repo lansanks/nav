@@ -168,11 +168,13 @@ struct NavigationNodeContext
     std::size_t point_index{0};
     int point_id{0};
     std::uint8_t task_type{navigation::maps::kTaskTypeNone};
+    int mission_target_id{0};
     bool triggered{false};
     bool ack{false};
     bool grabbed{false};
     bool placed{false};
     bool completed{false};
+    bool ready_sent{false};
   };
 
   std::vector<MissionTaskState> mission_tasks;
