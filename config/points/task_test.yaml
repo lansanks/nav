@@ -1,6 +1,6 @@
 points:
   - id: 1
-    x: 0.097647
+    x: -0.002353
     y: 1.594706
     fast: false
     constant_speed: false
@@ -14,8 +14,8 @@ points:
     task_type: none
     event_label: ""
   - id: 2
-    x: 0.109412
-    y: 3.082941
+    x: 0.009412
+    y: 3.282941
     fast: false
     constant_speed: false
     segment_custom_speed: false
@@ -56,8 +56,8 @@ points:
     task_type: none
     event_label: ""
   - id: 5
-    x: -0.855294
-    y: 2.841765
+    x: -0.878824
+    y: 3.288824
     fast: false
     constant_speed: false
     segment_custom_speed: false
@@ -70,8 +70,8 @@ points:
     task_type: none
     event_label: ""
   - id: 6
-    x: -0.863486
-    y: 2.489934
+    x: -0.884706
+    y: 2.694706
     fast: false
     constant_speed: false
     segment_custom_speed: false

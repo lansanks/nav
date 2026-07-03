@@ -950,7 +950,7 @@ points:
     segment_k_alpha: 0.000000
     segment_k_beta: 0.000000
     task_type: none
-    event_label: "_test1"
+    event_label: "_stair"
   - id: 69
     x: 6.225037
     y: 1.161920
@@ -966,19 +966,19 @@ points:
     task_type: none
     event_label: ""
   - id: 70
-    x: 5.742254
+    x: 5.782254
     y: 1.088840
     fast: false
     constant_speed: false
     segment_custom_speed: true
     segment_constant_speed: true
     segment_speed_level: 3
-    segment_linear_x: 0.450000
+    segment_linear_x: 0.240000
     segment_max_angular_speed: 0.900000
     segment_k_alpha: 2.400000
     segment_k_beta: -0.600000
     task_type: none
-    event_label: "@stop_0.5"
+    event_label: ""
   - id: 71
     x: 5.406985
     y: 1.033605
@@ -992,10 +992,24 @@ points:
     segment_k_alpha: 2.400000
     segment_k_beta: -0.600000
     task_type: none
-    event_label: "@stop_0.75"
+    event_label: "@stop_0.5"
   - id: 72
+    x: 5.356078
+    y: 1.014212
+    fast: false
+    constant_speed: false
+    segment_custom_speed: true
+    segment_constant_speed: true
+    segment_speed_level: 3
+    segment_linear_x: 0.600000
+    segment_max_angular_speed: 0.900000
+    segment_k_alpha: 2.400000
+    segment_k_beta: -0.600000
+    task_type: none
+    event_label: ""
+  - id: 73
     x: 5.298705
-    y: 1.036433
+    y: 1.016433
     fast: false
     constant_speed: false
     segment_custom_speed: true
@@ -1007,7 +1021,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
-  - id: 73
+  - id: 74
     x: 4.811751
     y: 1.107892
     fast: false
@@ -1021,21 +1035,21 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
-  - id: 74
+  - id: 75
     x: 4.416214
     y: 1.189546
     fast: false
     constant_speed: false
     segment_custom_speed: true
-    segment_constant_speed: true
+    segment_constant_speed: false
     segment_speed_level: 1
-    segment_linear_x: 0.450000
+    segment_linear_x: 0.200000
     segment_max_angular_speed: 0.900000
     segment_k_alpha: 2.400000
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
-  - id: 75
+  - id: 76
     x: 4.173533
     y: 1.188823
     fast: false
