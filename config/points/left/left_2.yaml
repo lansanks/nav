@@ -378,8 +378,8 @@ points:
     task_type: none
     event_label: ""
   - id: 28
-    x: 6.735423
-    y: 1.111206
+    x: 6.702999
+    y: 1.102787
     fast: false
     constant_speed: false
     segment_custom_speed: false
@@ -392,6 +392,34 @@ points:
     task_type: none
     event_label: ""
   - id: 29
+    x: 8.865718
+    y: 1.092844
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
+  - id: 30
+    x: 8.980068
+    y: 1.112731
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
+  - id: 31
     x: 9.367914
     y: 1.088614
     fast: true
@@ -405,7 +433,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: "low"
-  - id: 30
+  - id: 32
     x: 10.644677
     y: 1.088614
     fast: true
@@ -419,7 +447,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 31
+  - id: 33
     x: 11.027094
     y: 1.077534
     fast: false
@@ -433,7 +461,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: "stand"
-  - id: 32
+  - id: 34
     x: 11.290615
     y: 1.078596
     fast: false
@@ -447,7 +475,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: "_obstacle"
-  - id: 33
+  - id: 35
     x: 12.066615
     y: 1.082478
     fast: true
@@ -461,7 +489,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
-  - id: 34
+  - id: 36
     x: 12.385122
     y: 1.088609
     fast: true
@@ -475,7 +503,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 35
+  - id: 37
     x: 12.651538
     y: 1.093054
     fast: false
@@ -489,7 +517,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 36
+  - id: 38
     x: 12.748211
     y: 1.092255
     fast: true
@@ -503,7 +531,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
-  - id: 37
+  - id: 39
     x: 12.824911
     y: 1.113827
     fast: true
@@ -517,7 +545,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 38
+  - id: 40
     x: 12.891181
     y: 1.178777
     fast: true
@@ -531,7 +559,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 39
+  - id: 41
     x: 13.096686
     y: 1.544421
     fast: true
@@ -545,10 +573,10 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 40
+  - id: 42
     x: 13.103053
     y: 1.586038
-    fast: true
+    fast: false
     constant_speed: false
     segment_custom_speed: false
     segment_constant_speed: true
@@ -559,10 +587,10 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 41
+  - id: 43
     x: 13.095219
     y: 1.625196
-    fast: true
+    fast: false
     constant_speed: false
     segment_custom_speed: false
     segment_constant_speed: true
@@ -573,7 +601,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 42
+  - id: 44
     x: 13.079433
     y: 1.808210
     fast: false
@@ -587,7 +615,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 43
+  - id: 45
     x: 13.118164
     y: 3.127921
     fast: false
@@ -601,7 +629,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: "@stop_0.7"
-  - id: 44
+  - id: 46
     x: 13.118164
     y: 3.210160
     fast: false
@@ -615,7 +643,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: "_flat"
-  - id: 45
+  - id: 47
     x: 13.085372
     y: 3.280089
     fast: false
@@ -629,7 +657,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: "_flat"
-  - id: 46
+  - id: 48
     x: 12.495995
     y: 3.542010
     fast: false
@@ -643,7 +671,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 47
+  - id: 49
     x: 12.310046
     y: 3.749664
     fast: false
@@ -657,7 +685,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: "_flat"
-  - id: 48
+  - id: 50
     x: 12.226003
     y: 3.954827
     fast: false
@@ -671,7 +699,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 49
+  - id: 51
     x: 12.305102
     y: 4.117969
     fast: false
@@ -685,7 +713,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 50
+  - id: 52
     x: 12.491726
     y: 4.275673
     fast: false
@@ -699,7 +727,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 51
+  - id: 53
     x: 13.620881
     y: 4.747870
     fast: false
@@ -713,7 +741,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 52
+  - id: 54
     x: 13.700475
     y: 4.864418
     fast: false
@@ -727,7 +755,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 53
+  - id: 55
     x: 13.677734
     y: 4.986651
     fast: false
@@ -741,7 +769,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 54
+  - id: 56
     x: 13.436111
     y: 5.364720
     fast: false
@@ -755,7 +783,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 55
+  - id: 57
     x: 12.790835
     y: 5.452841
     fast: false
@@ -769,7 +797,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 56
+  - id: 58
     x: 12.662917
     y: 5.415887
     fast: false
@@ -783,7 +811,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 57
+  - id: 59
     x: 12.540684
     y: 5.270913
     fast: false
@@ -797,7 +825,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 58
+  - id: 60
     x: 12.178708
     y: 4.378131
     fast: false
@@ -811,7 +839,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 59
+  - id: 61
     x: 12.056475
     y: 4.301380
     fast: false
@@ -825,7 +853,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 60
+  - id: 62
     x: 11.894445
     y: 4.244528
     fast: false
@@ -839,7 +867,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 61
+  - id: 63
     x: 11.723888
     y: 4.261583
     fast: false
@@ -853,7 +881,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 62
+  - id: 64
     x: 11.498834
     y: 4.428209
     fast: false
@@ -867,7 +895,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 63
+  - id: 65
     x: 11.271286
     y: 5.407263
     fast: false
@@ -881,7 +909,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 64
+  - id: 66
     x: 11.120911
     y: 5.528216
     fast: false
@@ -895,7 +923,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 65
+  - id: 67
     x: 10.937846
     y: 5.564175
     fast: false
@@ -909,7 +937,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 66
+  - id: 68
     x: 10.140206
     y: 4.877682
     fast: false
@@ -923,7 +951,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 67
+  - id: 69
     x: 8.871795
     y: 4.955892
     fast: false
@@ -937,7 +965,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: "_obstacle"
-  - id: 68
+  - id: 70
     x: 6.631263
     y: 4.927624
     fast: false
@@ -951,7 +979,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
-  - id: 69
+  - id: 71
     x: 6.306715
     y: 4.833781
     fast: false
@@ -965,7 +993,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: "_test1"
-  - id: 70
+  - id: 72
     x: 6.225037
     y: 4.838080
     fast: false
@@ -979,7 +1007,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
-  - id: 71
+  - id: 73
     x: 5.742254
     y: 4.911160
     fast: false
@@ -993,7 +1021,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: "@stop_0.5"
-  - id: 72
+  - id: 74
     x: 5.406985
     y: 4.966395
     fast: false
@@ -1007,7 +1035,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: "@stop_0.75"
-  - id: 73
+  - id: 75
     x: 5.298705
     y: 4.963567
     fast: false
@@ -1021,7 +1049,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
-  - id: 74
+  - id: 76
     x: 4.811751
     y: 4.892108
     fast: false
@@ -1035,7 +1063,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
-  - id: 75
+  - id: 77
     x: 4.416214
     y: 4.810454
     fast: false
@@ -1049,7 +1077,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
-  - id: 76
+  - id: 78
     x: 4.173533
     y: 4.811177
     fast: false

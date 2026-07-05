@@ -39,10 +39,10 @@ Navigation core calls the arm node:
 - Service name parameter: `arm_mission_service`
 - Default service name: `/arm/mission_event`
 - Service type: `navigation/srv/MissionCommand`
-- Request from navigation: `action=pickup` for lower storage-row task points, `action=place` for upper return-zone task points
-- After an arm `completed` callback, navigation sends one preview request with `action=ready`; in that request only,
-  `task_index` means the next target id: boxes are `1..8` clockwise from the upper-left storage slot, and return zones
-  are `9..12` from left to right
+- Request from navigation: `action=pickup` for storage-row task points, `action=place` for return-zone task points
+- `task_index` is the target id for `pickup`, `place`, and `ready`: boxes are `1..8` clockwise from the
+  upper-left storage slot, and return zones are `9..12` from left to right
+- When navigation starts, and after each arm `completed` callback, navigation sends one preview request with `action=ready`
 - Expected response when received: `success: true`
 
 The arm node calls navigation core:
@@ -57,14 +57,15 @@ The arm node calls navigation core:
 
 1. UI switches race logic to `mission`.
 2. The mission planner generates alternating pickup and place task points.
-3. When the robot enters a task point's `mission_task_radius` area, navigation publishes zero velocity and pauses.
-4. Navigation calls `/arm/mission_event` with `action=pickup` or `action=place`.
-5. The arm node returns `success=true` after receiving the command.
-6. For pickup tasks, the arm node later calls `/navigation/arm_event` with `grabbed`.
-7. For place tasks, the arm node later calls `/navigation/arm_event` with `placed`.
-8. The arm node calls `/navigation/arm_event` with `completed` after returning home.
-9. Navigation sends `/arm/mission_event` with `action=ready` for the next box or return zone when a next task exists.
-10. Navigation resumes according to the configured pickup/place resume event.
+3. Navigation starts and calls `/arm/mission_event` with `action=ready` for the first box or return zone.
+4. When the robot enters a task point's `mission_task_radius` area, navigation publishes zero velocity and pauses.
+5. Navigation calls `/arm/mission_event` with `action=pickup` or `action=place`.
+6. The arm node returns `success=true` after receiving the command.
+7. For pickup tasks, the arm node later calls `/navigation/arm_event` with `grabbed`.
+8. For place tasks, the arm node later calls `/navigation/arm_event` with `placed`.
+9. The arm node calls `/navigation/arm_event` with `completed` after returning home.
+10. Navigation sends `/arm/mission_event` with `action=ready` for the next box or return zone when a next task exists.
+11. Navigation resumes according to the configured pickup/place resume event.
 
 ## Tunable Parameters
 

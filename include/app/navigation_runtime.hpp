@@ -36,6 +36,7 @@ public:
   void syncControllerWaypoints();
   void syncNavigationStartProgress(std::size_t start_index);
   void startNavigation(const std::string & controller_name);
+  void sendReadyForFirstPendingMissionTask();
   void applyRadarCalibrationFile(const std::string & path);
   void updateNavigationController(bool has_state, const navigation::RobotNavigationState & state);
   bool handleArmEvent(const std::string & event, std::string * response_message);
@@ -54,6 +55,7 @@ private:
     const std::string & event) const;
   bool maybePauseForMissionTask(const navigation::RobotNavigationState & state);
   void sendArrivedToArmIfDue();
+  void sendReadyForMissionTask(std::size_t task_index);
   void sendReadyForNextMissionTask(std::size_t completed_task_index);
   void resumeMissionNavigation(const std::string & reason);
   void sendSetWaypointsRequest(const std::vector<navigation::maps::MapPoint> & points);

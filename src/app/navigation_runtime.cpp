@@ -352,9 +352,23 @@ void NavigationRuntime::startNavigation(const std::string & controller_name)
 
   context_.controller = std::move(next_controller);
   syncNavigationStartProgress(context_.controller->status().target_index);
+  sendReadyForFirstPendingMissionTask();
   context_.navigation_status = context_.controller->status().message;
   context_.status_message = "Navigation started";
   RCLCPP_INFO(logger_, "Navigation started with controller '%s'.", context_.selected_controller_name.c_str());
+}
+
+void NavigationRuntime::sendReadyForFirstPendingMissionTask()
+{
+  if (context_.race_logic != "mission") {
+    return;
+  }
+  for (std::size_t i = 0; i < context_.mission_tasks.size(); ++i) {
+    if (!context_.mission_tasks[i].completed) {
+      sendReadyForMissionTask(i);
+      return;
+    }
+  }
 }
 
 void NavigationRuntime::applyRadarCalibrationFile(const std::string & path)
@@ -967,16 +981,24 @@ void NavigationRuntime::sendArrivedToArmIfDue()
 
   const auto & point = context_.map->points()[task.point_index];
   auto request = std::make_shared<navigation::srv::MissionCommand::Request>();
-  request->task_index = static_cast<std::uint32_t>(context_.mission_current_task);
+  if (task.mission_target_id <= 0) {
+    RCLCPP_WARN(
+      logger_,
+      "Mission %s point %d is missing mission target id; sending task_index=0.",
+      taskActionText(task.task_type),
+      task.point_id);
+  }
+  request->task_index = static_cast<std::uint32_t>(std::max(task.mission_target_id, 0));
   request->point_id = task.point_id;
   request->action = taskActionText(task.task_type);
   request->x = point.x;
   request->y = point.y;
   RCLCPP_INFO(
     logger_,
-    "Sending mission %s command to arm service '%s' for point %d.",
+    "Sending mission %s command to arm service '%s' for target %u at point %d.",
     request->action.c_str(),
     context_.arm_mission_service.c_str(),
+    request->task_index,
     task.point_id);
   context_.mission_arrived_request_pending = true;
   context_.mission_last_arrived_send = now;
@@ -1009,34 +1031,27 @@ void NavigationRuntime::sendArrivedToArmIfDue()
     });
 }
 
-void NavigationRuntime::sendReadyForNextMissionTask(std::size_t completed_task_index)
+void NavigationRuntime::sendReadyForMissionTask(std::size_t task_index)
 {
-  if (completed_task_index >= context_.mission_tasks.size()) {
-    return;
-  }
-
-  auto & completed_task = context_.mission_tasks[completed_task_index];
-  if (completed_task.ready_sent) {
-    return;
-  }
-
-  const std::size_t next_task_index = completed_task_index + 1;
-  if (next_task_index >= context_.mission_tasks.size()) {
+  if (task_index >= context_.mission_tasks.size()) {
     return;
   }
   if (context_.map == nullptr) {
     return;
   }
   const auto & points = context_.map->points();
-  const auto & next_task = context_.mission_tasks[next_task_index];
-  if (next_task.point_index >= points.size()) {
+  auto & task = context_.mission_tasks[task_index];
+  if (task.ready_sent) {
     return;
   }
-  if (next_task.mission_target_id <= 0) {
+  if (task.point_index >= points.size()) {
+    return;
+  }
+  if (task.mission_target_id <= 0) {
     RCLCPP_WARN(
       logger_,
       "Skipping arm ready command for mission task %zu: missing mission target id.",
-      next_task_index);
+      task_index);
     return;
   }
   if (context_.arm_mission_client == nullptr || !context_.arm_mission_client->service_is_ready()) {
@@ -1045,22 +1060,22 @@ void NavigationRuntime::sendReadyForNextMissionTask(std::size_t completed_task_i
     return;
   }
 
-  const auto & point = points[next_task.point_index];
+  const auto & point = points[task.point_index];
   auto request = std::make_shared<navigation::srv::MissionCommand::Request>();
-  request->task_index = static_cast<std::uint32_t>(next_task.mission_target_id);
-  request->point_id = next_task.point_id;
+  request->task_index = static_cast<std::uint32_t>(task.mission_target_id);
+  request->point_id = task.point_id;
   request->action = "ready";
   request->x = point.x;
   request->y = point.y;
-  completed_task.ready_sent = true;
+  task.ready_sent = true;
   RCLCPP_INFO(
     logger_,
     "Sending arm ready command for next mission target %d at point %d.",
-    next_task.mission_target_id,
-    next_task.point_id);
+    task.mission_target_id,
+    task.point_id);
   context_.arm_mission_client->async_send_request(
     request,
-    [this, target_id = next_task.mission_target_id](
+    [this, target_id = task.mission_target_id](
       rclcpp::Client<navigation::srv::MissionCommand>::SharedFuture future) {
       auto response = future.get();
       if (!response->success) {
@@ -1071,6 +1086,19 @@ void NavigationRuntime::sendReadyForNextMissionTask(std::size_t completed_task_i
       context_.status_message = "Arm ready sent";
       RCLCPP_INFO(logger_, "Arm acknowledged ready target %d.", target_id);
     });
+}
+
+void NavigationRuntime::sendReadyForNextMissionTask(std::size_t completed_task_index)
+{
+  if (completed_task_index >= context_.mission_tasks.size()) {
+    return;
+  }
+
+  const std::size_t next_task_index = completed_task_index + 1;
+  if (next_task_index >= context_.mission_tasks.size()) {
+    return;
+  }
+  sendReadyForMissionTask(next_task_index);
 }
 
 void NavigationRuntime::resumeMissionNavigation(const std::string & reason)

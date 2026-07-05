@@ -570,6 +570,7 @@ private:
 
     context_.controller = std::move(next_controller);
     runtime_.syncNavigationStartProgress(context_.controller->status().target_index);
+    runtime_.sendReadyForFirstPendingMissionTask();
     context_.navigation_status = context_.controller->status().message;
 
     response->success = true;
