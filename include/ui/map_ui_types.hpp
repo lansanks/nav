@@ -90,6 +90,7 @@ struct MapUiState
   std::string navigation_status;
   std::string race_logic{"obstacle"};
   std::string message;
+  std::string mission_arm_status;
   std::string input_label;
   std::string input_text;
   std::vector<std::string> param_names;
@@ -125,6 +126,7 @@ struct MapUiState
   bool fullscreen{false};
   MapPlanDisplayMode mission_plan_display_mode{MapPlanDisplayMode::Full};
   bool core_connected{true};
+  bool remote_control{false};
   bool cmd_vel_valid{false};
   double cmd_vel_linear_x{0.0};
   double cmd_vel_linear_y{0.0};

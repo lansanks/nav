@@ -1644,6 +1644,7 @@ navigation::ui::MapUiState NavigationUiCoordinator::buildUiState()
   ui_state.controller_name = context_.selected_controller_name;
   ui_state.navigation_status = context_.navigation_status;
   ui_state.race_logic = context_.race_logic;
+  ui_state.mission_arm_status = context_.mission_arm_status;
   if (context_.controller != nullptr) {
     const auto controller_status = context_.controller->status();
     ui_state.navigation_active = controller_status.active;
@@ -1689,6 +1690,7 @@ navigation::ui::MapUiState NavigationUiCoordinator::buildUiState()
   ui_state.fullscreen = context_.fullscreen;
   ui_state.mission_plan_display_mode = context_.mission_plan_display_mode;
   ui_state.core_connected = !context_.remote_control || context_.core_connected;
+  ui_state.remote_control = context_.remote_control;
   ui_state.cmd_vel_valid = context_.cmd_vel_valid;
   ui_state.cmd_vel_linear_x = context_.cmd_vel_linear_x;
   ui_state.cmd_vel_linear_y = context_.cmd_vel_linear_y;

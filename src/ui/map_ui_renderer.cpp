@@ -754,6 +754,7 @@ void MapUiRenderer::drawUiPanel(cv::Mat & canvas, const MapUiState & ui_state, s
   drawFullscreenToggle(canvas, ui_state);
   drawThemeToggle(canvas, ui_state);
   drawMissionPlanToggle(canvas, ui_state);
+  drawMissionArmStatus(canvas, ui_state);
 
   if (!ui_state.message.empty()) {
     constexpr int margin = 12;
@@ -872,6 +873,44 @@ void MapUiRenderer::drawUiPanel(cv::Mat & canvas, const MapUiState & ui_state, s
   if (ui_state.radar_active) {
     drawRadarPopup(canvas, ui_state);
   }
+}
+
+void MapUiRenderer::drawMissionArmStatus(cv::Mat & canvas, const MapUiState & ui_state) const
+{
+  if (!ui_state.remote_control) {
+    return;
+  }
+
+  const auto palette = paletteFor(ui_state.light_theme);
+  constexpr int margin = 12;
+  constexpr int padding_x = 12;
+  constexpr int status_height = 34;
+  const int max_text_width = std::max(60, std::min(width_ - margin * 2 - padding_x * 2, 440));
+  const std::string raw_status = ui_state.mission_arm_status.empty() ?
+    std::string("watting...") :
+    ui_state.mission_arm_status;
+  const std::string status_text = fitTextToWidth(raw_status, max_text_width, 0.45);
+  int baseline = 0;
+  const auto text_size = cv::getTextSize(
+    status_text,
+    cv::FONT_HERSHEY_SIMPLEX,
+    0.45,
+    1,
+    &baseline);
+  const int status_width = std::min(width_ - margin * 2, text_size.width + padding_x * 2);
+  const cv::Rect status_rect(
+    std::max(margin, width_ - status_width - margin),
+    margin,
+    status_width,
+    status_height);
+  cv::rectangle(canvas, status_rect, palette.surface_alt, cv::FILLED);
+  cv::rectangle(canvas, status_rect, palette.button_border, 1, cv::LINE_AA);
+  putPanelText(
+    canvas,
+    status_text,
+    cv::Point(status_rect.x + padding_x, status_rect.y + 23),
+    0.45,
+    palette.text);
 }
 
 void MapUiRenderer::drawPanelToggle(cv::Mat & canvas, const MapUiState & ui_state) const

@@ -407,7 +407,8 @@ private:
       ";points=" + std::to_string(point_count) +
       ";controller=" + sanitizeField(context_.selected_controller_name) +
       ";race=" + sanitizeField(context_.race_logic) +
-      ";status=" + sanitizeField(status);
+      ";status=" + sanitizeField(status) +
+      ";arm_status=" + sanitizeField(context_.mission_arm_status);
     status_publisher_->publish(msg);
   }
 

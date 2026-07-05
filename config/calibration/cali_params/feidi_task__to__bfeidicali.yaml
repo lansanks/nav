@@ -1,0 +1,25 @@
+radar_points_file: package://navigation/config/calibration/datas/feidi_task.yaml
+mujoco_points_file: package://navigation/config/points/bfeidicali.yaml
+point_count: 4
+rotation:
+  - [-0.999333928, -0.036492482]
+  - [0.036492482, -0.999333928]
+translation:
+  x: -0.011461200
+  y: -0.138745776
+scale: 1.000000000
+scaled: false
+yaw_offset: 3.105092067
+yaw_measurement_offset: -1.570796327
+mean_error: 0.010278909
+max_error: 0.017509634
+unstable: false
+errors:
+  - id: 1
+    error: 0.004194670
+  - id: 2
+    error: 0.017509634
+  - id: 3
+    error: 0.013986096
+  - id: 4
+    error: 0.005425236

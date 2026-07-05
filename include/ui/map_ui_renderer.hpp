@@ -78,6 +78,7 @@ private:
     cv::Scalar color = cv::Scalar(226, 232, 238));
 
   void drawUiPanel(cv::Mat & canvas, const MapUiState & ui_state, std::size_t point_count) const;
+  void drawMissionArmStatus(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawPanelToggle(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawFullscreenToggle(cv::Mat & canvas, const MapUiState & ui_state) const;
   void drawThemeToggle(cv::Mat & canvas, const MapUiState & ui_state) const;

@@ -804,6 +804,11 @@ void NavigationMapNode::handleRemoteStatus(const std_msgs::msg::String::SharedPt
   if (status != fields.end()) {
     context_.navigation_status = status->second;
   }
+
+  const auto arm_status = fields.find("arm_status");
+  if (arm_status != fields.end()) {
+    context_.mission_arm_status = arm_status->second;
+  }
 }
 
 void NavigationMapNode::handleArmEvent(

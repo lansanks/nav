@@ -8,8 +8,8 @@ panel_collapsed: false
 light_theme: true
 fullscreen: false
 mission_plan_display_mode: "hidden"
-radar_data_file: "/home/linkchen/black_mujoco/src/navigation/config/calibration/datas/right_task.yaml"
-radar_points_file: "/home/linkchen/black_mujoco/src/navigation/config/points/b.yaml"
+radar_data_file: "/home/linkchen/black_mujoco/src/navigation/config/calibration/datas/feidi_task.yaml"
+radar_points_file: "/home/linkchen/black_mujoco/src/navigation/config/points/bfeidicali.yaml"
 mission_slot_categories: "01230123"
 mission_high_score_category: "-1"
 mission_high_score_priority: "0"
@@ -25,7 +25,7 @@ mission_return_near_distance: "0.40"
 mission_return_far_distance: "0.50"
 controller_waypoint_tolerance: 0.200000
 controller_planar_max_linear_x: 0.800000
-controller_planar_max_linear_y: 0.800000
+controller_planar_max_linear_y: 0.600000
 controller_max_angular_speed: 1.200000
 controller_k_rho: 2.000000
 controller_k_alpha: 3.000000

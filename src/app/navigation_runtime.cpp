@@ -993,6 +993,8 @@ void NavigationRuntime::sendArrivedToArmIfDue()
   request->action = taskActionText(task.task_type);
   request->x = point.x;
   request->y = point.y;
+  context_.mission_arm_status = "Mission " + std::to_string(request->task_index) + " " +
+    request->action + " arrived";
   RCLCPP_INFO(
     logger_,
     "Sending mission %s command to arm service '%s' for target %u at point %d.",
@@ -1004,7 +1006,8 @@ void NavigationRuntime::sendArrivedToArmIfDue()
   context_.mission_last_arrived_send = now;
   context_.arm_mission_client->async_send_request(
     request,
-    [this](rclcpp::Client<navigation::srv::MissionCommand>::SharedFuture future) {
+    [this, task_index = request->task_index, action = request->action](
+      rclcpp::Client<navigation::srv::MissionCommand>::SharedFuture future) {
       context_.mission_arrived_request_pending = false;
       if (!context_.mission_paused || context_.mission_current_task >= context_.mission_tasks.size()) {
         return;
@@ -1019,6 +1022,8 @@ void NavigationRuntime::sendArrivedToArmIfDue()
 
       auto & current_task = context_.mission_tasks[context_.mission_current_task];
       current_task.ack = true;
+      context_.mission_arm_status = "Mission " + std::to_string(task_index) + " " +
+        action + " ack received";
       context_.status_message = "Arm ack received";
       RCLCPP_INFO(
         logger_,
@@ -1068,6 +1073,7 @@ void NavigationRuntime::sendReadyForMissionTask(std::size_t task_index)
   request->x = point.x;
   request->y = point.y;
   task.ready_sent = true;
+  context_.mission_arm_status = "Mission " + std::to_string(request->task_index) + " ready sent";
   RCLCPP_INFO(
     logger_,
     "Sending arm ready command for next mission target %d at point %d.",
@@ -1075,7 +1081,7 @@ void NavigationRuntime::sendReadyForMissionTask(std::size_t task_index)
     task.point_id);
   context_.arm_mission_client->async_send_request(
     request,
-    [this, target_id = task.mission_target_id](
+    [this, target_id = task.mission_target_id, task_index = request->task_index](
       rclcpp::Client<navigation::srv::MissionCommand>::SharedFuture future) {
       auto response = future.get();
       if (!response->success) {
@@ -1083,6 +1089,7 @@ void NavigationRuntime::sendReadyForMissionTask(std::size_t task_index)
         RCLCPP_WARN(logger_, "Arm ready target %d rejected: %s", target_id, response->message.c_str());
         return;
       }
+      context_.mission_arm_status = "Mission " + std::to_string(task_index) + " ready ack received";
       context_.status_message = "Arm ready sent";
       RCLCPP_INFO(logger_, "Arm acknowledged ready target %d.", target_id);
     });
@@ -1173,6 +1180,8 @@ bool NavigationRuntime::handleArmEvent(const std::string & event, std::string * 
   if (response_message != nullptr) {
     *response_message = "received";
   }
+  context_.mission_arm_status = "Mission " + std::to_string(std::max(task.mission_target_id, 0)) +
+    " " + taskActionText(task.task_type) + " " + event;
   context_.status_message = "Arm event: " + event;
   RCLCPP_INFO(logger_, "Arm event '%s' received for mission point %d.", event.c_str(), task.point_id);
   if (event == "completed") {

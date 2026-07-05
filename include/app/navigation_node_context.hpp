@@ -41,6 +41,7 @@ struct NavigationNodeContext
   std::string selected_controller_name;
   std::string navigation_status;
   std::string status_message;
+  std::string mission_arm_status;
   std::string input_label;
   std::string input_text;
   navigation::keyboards::TextInputMode input_mode{navigation::keyboards::TextInputMode::None};
