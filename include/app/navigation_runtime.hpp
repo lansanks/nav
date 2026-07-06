@@ -46,6 +46,7 @@ private:
   void resetMissionTasks();
   void clearMissionPause();
   void resetNavigationEventState();
+  void resetNavigationProgressFrom(std::size_t start_index);
   bool handleArrivedNavigationEvents(std::size_t begin_index, std::size_t end_index);
   bool maybeHoldForNavigationEvent();
   bool triggerNavigationEvent(std::size_t point_index, const navigation::maps::MapPoint & point);

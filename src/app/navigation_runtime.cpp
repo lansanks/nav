@@ -644,6 +644,16 @@ void NavigationRuntime::updateNavigationController(
   const auto before_status = context_.controller->status();
   const auto command = context_.controller->update(state);
   const auto after_status = context_.controller->status();
+  if (after_status.target_index < before_status.target_index) {
+    resetNavigationProgressFrom(after_status.target_index);
+    context_.status_message = "Navigation retry from point " +
+      std::to_string(after_status.target_index + 1);
+    RCLCPP_INFO(
+      logger_,
+      "Navigation retry marker rewound route from target %zu to %zu.",
+      before_status.target_index + 1,
+      after_status.target_index + 1);
+  }
   if (handleArrivedNavigationEvents(before_status.target_index, after_status.target_index)) {
     publishZeroVelocity();
     return;
@@ -713,6 +723,34 @@ void NavigationRuntime::resetNavigationEventState()
   context_.navigation_event_wait_until = std::chrono::steady_clock::time_point{};
   context_.navigation_event_back_active = false;
   context_.navigation_event_back_linear_x = 0.0;
+}
+
+void NavigationRuntime::resetNavigationProgressFrom(std::size_t start_index)
+{
+  const std::size_t point_count = context_.map != nullptr ? context_.map->points().size() : 0;
+  const auto clamped_start = std::min(start_index, point_count);
+  if (context_.navigation_event_triggered.size() < point_count) {
+    context_.navigation_event_triggered.resize(point_count, false);
+  }
+  for (std::size_t i = clamped_start; i < context_.navigation_event_triggered.size(); ++i) {
+    context_.navigation_event_triggered[i] = false;
+  }
+
+  if (context_.race_logic == "mission") {
+    for (auto & task : context_.mission_tasks) {
+      if (task.point_index < clamped_start) {
+        continue;
+      }
+      task.triggered = false;
+      task.ack = false;
+      task.grabbed = false;
+      task.placed = false;
+      task.completed = false;
+      task.ready_sent = false;
+    }
+    clearMissionPause();
+    sendReadyForFirstPendingMissionTask();
+  }
 }
 
 bool NavigationRuntime::maybeHoldForNavigationEvent()

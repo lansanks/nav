@@ -441,7 +441,7 @@ points:
     segment_custom_speed: true
     segment_constant_speed: true
     segment_speed_level: 1
-    segment_linear_x: 0.300000
+    segment_linear_x: 0.250000
     segment_max_angular_speed: 1.800000
     segment_k_alpha: 2.400000
     segment_k_beta: -0.600000
@@ -925,7 +925,7 @@ points:
     event_label: "_obstacle"
   - id: 67
     x: 6.631263
-    y: 4.927624
+    y: 4.827624
     fast: false
     constant_speed: false
     segment_custom_speed: true
@@ -939,7 +939,7 @@ points:
     event_label: ""
   - id: 68
     x: 6.306715
-    y: 4.833781
+    y: 4.753781
     fast: false
     constant_speed: false
     segment_custom_speed: false
@@ -950,10 +950,10 @@ points:
     segment_k_alpha: 0.000000
     segment_k_beta: 0.000000
     task_type: none
-    event_label: "_test1"
+    event_label: "_obstacle"
   - id: 69
     x: 6.225037
-    y: 4.838080
+    y: 4.758080
     fast: false
     constant_speed: false
     segment_custom_speed: true
@@ -967,7 +967,7 @@ points:
     event_label: ""
   - id: 70
     x: 5.742254
-    y: 4.911160
+    y: 4.791160
     fast: false
     constant_speed: false
     segment_custom_speed: true
@@ -981,7 +981,7 @@ points:
     event_label: "@stop_0.5"
   - id: 71
     x: 5.406985
-    y: 4.966395
+    y: 4.946395
     fast: false
     constant_speed: false
     segment_custom_speed: true
@@ -995,49 +995,49 @@ points:
     event_label: "@stop_0.75"
   - id: 72
     x: 5.298705
-    y: 4.963567
+    y: 4.943567
     fast: false
     constant_speed: false
     segment_custom_speed: true
     segment_constant_speed: false
-    segment_speed_level: 1
-    segment_linear_x: 0.200000
-    segment_max_angular_speed: 0.900000
+    segment_speed_level: 2
+    segment_linear_x: 0.450000
+    segment_max_angular_speed: 1.800000
     segment_k_alpha: 2.400000
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
   - id: 73
     x: 4.811751
-    y: 4.892108
+    y: 4.812108
     fast: false
     constant_speed: false
     segment_custom_speed: true
     segment_constant_speed: false
-    segment_speed_level: 1
-    segment_linear_x: 0.200000
-    segment_max_angular_speed: 0.900000
+    segment_speed_level: 2
+    segment_linear_x: 0.450000
+    segment_max_angular_speed: 1.800000
     segment_k_alpha: 2.400000
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
   - id: 74
     x: 4.416214
-    y: 4.810454
+    y: 4.750454
     fast: false
     constant_speed: false
     segment_custom_speed: true
     segment_constant_speed: true
-    segment_speed_level: 1
+    segment_speed_level: 2
     segment_linear_x: 0.450000
-    segment_max_angular_speed: 0.900000
+    segment_max_angular_speed: 1.800000
     segment_k_alpha: 2.400000
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
   - id: 75
     x: 4.173533
-    y: 4.811177
+    y: 4.751177
     fast: false
     constant_speed: false
     segment_custom_speed: false

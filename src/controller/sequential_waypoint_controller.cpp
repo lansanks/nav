@@ -5,6 +5,7 @@
 #include <charconv>
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -19,6 +20,7 @@ constexpr double kPlanarForwardYaw = 0.5 * kPi;
 constexpr const char * kSequentialWaypointName = "Sequential Waypoint";
 constexpr const char * kPlanarVelocityName = "Planar Velocity";
 constexpr const char * kEndStartupExclusionPrefix = "@end_";
+constexpr const char * kRetryNavigationLabel = "$$";
 
 double wrapAngle(double angle)
 {
@@ -44,6 +46,27 @@ std::string lowerCopy(std::string text)
   return text;
 }
 
+std::string trimCopy(const std::string & text)
+{
+  const auto first = std::find_if(text.begin(), text.end(), [](unsigned char ch) {
+    return !std::isspace(ch);
+  });
+  if (first == text.end()) {
+    return {};
+  }
+
+  const auto last = std::find_if(text.rbegin(), text.rend(), [](unsigned char ch) {
+    return !std::isspace(ch);
+  }).base();
+  return std::string(first, last);
+}
+
+bool isRetryNavigationLabel(const std::string & event_label)
+{
+  const auto trimmed = trimCopy(event_label);
+  return trimmed == kRetryNavigationLabel || trimmed == "@$$";
+}
+
 bool parseEndStartupExclusionCount(const std::string & event_label, std::size_t & count)
 {
   const auto normalized = lowerCopy(event_label);
@@ -62,6 +85,75 @@ bool parseEndStartupExclusionCount(const std::string & event_label, std::size_t 
 
   count = parsed;
   return true;
+}
+
+void resizeRetryMarkerState(
+  const std::vector<maps::MapPoint> & waypoints,
+  std::vector<bool> & retry_marker_near)
+{
+  if (retry_marker_near.size() != waypoints.size()) {
+    retry_marker_near.assign(waypoints.size(), false);
+  }
+}
+
+void syncRetryMarkerState(
+  const std::vector<maps::MapPoint> & waypoints,
+  const ControllerConfig & config,
+  const RobotNavigationState & state,
+  std::vector<bool> & retry_marker_near)
+{
+  resizeRetryMarkerState(waypoints, retry_marker_near);
+  const double enter_radius = std::max(0.0, config.waypoint_tolerance);
+  for (std::size_t i = 0; i < waypoints.size(); ++i) {
+    if (!isRetryNavigationLabel(waypoints[i].event_label)) {
+      retry_marker_near[i] = false;
+      continue;
+    }
+
+    const double distance = std::hypot(waypoints[i].x - state.x, waypoints[i].y - state.y);
+    retry_marker_near[i] = distance < enter_radius;
+  }
+}
+
+std::optional<std::size_t> retryStartIndexForState(
+  const std::vector<maps::MapPoint> & waypoints,
+  const ControllerConfig & config,
+  const RobotNavigationState & state,
+  std::size_t target_index,
+  std::vector<bool> & retry_marker_near)
+{
+  resizeRetryMarkerState(waypoints, retry_marker_near);
+  if (!state.valid || waypoints.empty() || target_index == 0) {
+    return std::nullopt;
+  }
+
+  const double enter_radius = std::max(0.0, config.waypoint_tolerance);
+  const double leave_radius = std::max(enter_radius * 1.5, enter_radius + 0.05);
+  std::optional<std::size_t> best_index;
+  double best_distance = enter_radius;
+
+  for (std::size_t i = 0; i < waypoints.size(); ++i) {
+    if (!isRetryNavigationLabel(waypoints[i].event_label)) {
+      retry_marker_near[i] = false;
+      continue;
+    }
+
+    const double distance = std::hypot(waypoints[i].x - state.x, waypoints[i].y - state.y);
+    const bool was_near = retry_marker_near[i];
+    if (was_near && distance > leave_radius) {
+      retry_marker_near[i] = false;
+    }
+
+    if (!was_near && distance < enter_radius) {
+      retry_marker_near[i] = true;
+      if (i < target_index && distance < best_distance) {
+        best_index = i;
+        best_distance = distance;
+      }
+    }
+  }
+
+  return best_index;
 }
 
 class SequentialWaypointController final : public NavigationController
@@ -85,6 +177,7 @@ public:
   void setWaypoints(const std::vector<maps::MapPoint> & points) override
   {
     waypoints_ = points;
+    retry_marker_near_.assign(waypoints_.size(), false);
     if (target_index_ >= waypoints_.size()) {
       target_index_ = 0;
     }
@@ -110,6 +203,11 @@ public:
     active_ = true;
     complete_ = false;
     target_index_ = startIndexForState(initial_state);
+    if (initial_state != nullptr && initial_state->valid) {
+      syncRetryMarkerState(waypoints_, config_, *initial_state, retry_marker_near_);
+    } else {
+      retry_marker_near_.assign(waypoints_.size(), false);
+    }
     updateMessage();
     return true;
   }
@@ -123,6 +221,15 @@ public:
   geometry_msgs::msg::Twist update(const RobotNavigationState & state) override
   {
     if (!active_ || waypoints_.empty() || !state.valid) {
+      return zeroTwist();
+    }
+
+    if (const auto retry_index =
+      retryStartIndexForState(waypoints_, config_, state, target_index_, retry_marker_near_))
+    {
+      target_index_ = *retry_index;
+      complete_ = false;
+      message_ = "Retry from point " + std::to_string(waypoints_[target_index_].id);
       return zeroTwist();
     }
 
@@ -408,6 +515,7 @@ private:
   bool active_{false};
   bool complete_{false};
   std::size_t target_index_{0};
+  std::vector<bool> retry_marker_near_;
   std::string message_{"No waypoints"};
 };
 
@@ -432,6 +540,7 @@ public:
   void setWaypoints(const std::vector<maps::MapPoint> & points) override
   {
     waypoints_ = points;
+    retry_marker_near_.assign(waypoints_.size(), false);
     if (target_index_ >= waypoints_.size()) {
       target_index_ = 0;
     }
@@ -457,6 +566,11 @@ public:
     active_ = true;
     complete_ = false;
     target_index_ = startIndexForState(initial_state);
+    if (initial_state != nullptr && initial_state->valid) {
+      syncRetryMarkerState(waypoints_, config_, *initial_state, retry_marker_near_);
+    } else {
+      retry_marker_near_.assign(waypoints_.size(), false);
+    }
     updateMessage();
     return true;
   }
@@ -470,6 +584,15 @@ public:
   geometry_msgs::msg::Twist update(const RobotNavigationState & state) override
   {
     if (!active_ || waypoints_.empty() || !state.valid) {
+      return zeroTwist();
+    }
+
+    if (const auto retry_index =
+      retryStartIndexForState(waypoints_, config_, state, target_index_, retry_marker_near_))
+    {
+      target_index_ = *retry_index;
+      complete_ = false;
+      message_ = "Retry from point " + std::to_string(waypoints_[target_index_].id);
       return zeroTwist();
     }
 
@@ -590,6 +713,7 @@ private:
   bool active_{false};
   bool complete_{false};
   std::size_t target_index_{0};
+  std::vector<bool> retry_marker_near_;
   std::string message_{"No waypoints"};
 };
 
