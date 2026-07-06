@@ -1,4 +1,4 @@
-waypoint_tolerance: 0.200000
+waypoint_tolerance: 0.150000
 planar_max_linear_x: 0.800000
 planar_max_linear_y: 0.600000
 max_angular_speed: 1.200000

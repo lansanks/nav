@@ -1,1 +1,15 @@
 points:
+  - id: 1
+    x: -0.394264
+    y: 4.481205
+    fast: true
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: place
+    event_label: "@mission_target_10"
