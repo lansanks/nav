@@ -1036,8 +1036,8 @@ points:
     task_type: none
     event_label: ""
   - id: 75
-    x: 4.173533
-    y: 4.751177
+    x: 4.190378
+    y: 4.795081
     fast: false
     constant_speed: false
     segment_custom_speed: false
