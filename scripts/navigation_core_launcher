@@ -44,6 +44,7 @@ SELF_CHECK_MARKER = "__NAVIGATION_CORE_SELF_CHECK__:"
 MID360_DEFAULT_PREFIX_LEN = 24
 MID360_NETWORK_COMMAND_TIMEOUT = 8
 MID360_DISCOVERY_TIMEOUT = 8
+MID360_NETWORK_DEVICE = os.environ.get("NAVIGATION_MID360_NETWORK_DEVICE", "enx00e04c1e1db0")
 
 
 def detect_workspace_setup() -> tuple[Path | None, Path]:
@@ -706,9 +707,14 @@ class NavigationCoreLauncher(tk.Tk):
         if lidar_ip:
             self.append_log(f"[network] MID360 config lidar_ip: {lidar_ip}\n")
 
-        self._ensure_host_ipv4(host_ip, MID360_DEFAULT_PREFIX_LEN)
+        self._ensure_host_ipv4(host_ip, MID360_DEFAULT_PREFIX_LEN, MID360_NETWORK_DEVICE)
 
-        detected_lidar_ip = self._detect_mid360_lidar_ip(host_ip, MID360_DEFAULT_PREFIX_LEN, lidar_ip)
+        detected_lidar_ip = self._detect_mid360_lidar_ip(
+            host_ip,
+            MID360_DEFAULT_PREFIX_LEN,
+            lidar_ip,
+            MID360_NETWORK_DEVICE,
+        )
         if detected_lidar_ip is None:
             self.append_log("[network] 未自动发现 MID360 实际 IP，沿用当前 Livox 配置。\n")
             return
@@ -776,42 +782,47 @@ class NavigationCoreLauncher(tk.Tk):
             return False
         return True
 
-    def _ensure_host_ipv4(self, host_ip: str, prefix_len: int) -> None:
-        if host_ip in self._local_ipv4_addresses():
-            self.append_log(f"[network] 本机已配置 {host_ip}/{prefix_len}。\n")
+    def _ensure_host_ipv4(self, host_ip: str, prefix_len: int, device: str) -> None:
+        if host_ip in self._local_ipv4_addresses(device):
+            self.append_log(f"[network] 雷达网卡 {device} 已配置 {host_ip}/{prefix_len}。\n")
             return
 
-        device_connection = self._active_ethernet_connection()
+        device_connection = self._ethernet_connection_for_device(device)
         if device_connection is None:
             raise ValueError(
-                "MID360 host IP 不在本机网卡上，且没有找到已连接的有线网卡。\n"
-                "请确认雷达网线已插好、有线网卡已连接。"
+                f"MID360 host IP 不在指定雷达网卡 {device} 上，且没有找到该网卡的有线连接。\n"
+                "请确认雷达网线已插好、该网卡已连接。"
             )
         device, connection = device_connection
         address = f"{host_ip}/{prefix_len}"
-        self.append_log(f"[network] 本机缺少 {address}，尝试修复 {device} ({connection})。\n")
+        self.append_log(f"[network] 雷达网卡 {device} 缺少 {address}，尝试修复连接 {connection}。\n")
 
         if not self._connection_has_ipv4(connection, address):
             self._run_checked_command(
                 ["nmcli", "connection", "modify", connection, "+ipv4.addresses", address],
-                f"给有线连接追加 {address} 失败",
+                f"给雷达网卡连接 {connection} 追加 {address} 失败",
             )
         self._run_checked_command(
-            ["nmcli", "connection", "up", connection],
-            f"重新激活有线连接 {connection} 失败",
+            ["nmcli", "connection", "up", connection, "ifname", device],
+            f"重新激活雷达网卡连接 {connection} 失败",
             timeout=15,
         )
 
         for _ in range(12):
-            if host_ip in self._local_ipv4_addresses():
+            if host_ip in self._local_ipv4_addresses(device):
                 self.append_log(f"[network] 已修复本机 MID360 host IP: {address}\n")
                 return
             time.sleep(0.5)
 
-        raise ValueError(f"已尝试修复有线网卡，但本机仍未出现 {address}。")
+        raise ValueError(f"已尝试修复雷达网卡 {device}，但该网卡仍未出现 {address}。")
 
-    def _local_ipv4_addresses(self) -> set[str]:
-        output = self._run_checked_command(["ip", "-o", "-4", "addr", "show"], "读取本机 IPv4 地址失败")
+    def _local_ipv4_addresses(self, device: str | None = None) -> set[str]:
+        args = ["ip", "-o", "-4", "addr", "show"]
+        error_message = "读取本机 IPv4 地址失败"
+        if device is not None:
+            args.extend(["dev", device])
+            error_message = f"读取网卡 {device} 的 IPv4 地址失败"
+        output = self._run_checked_command(args, error_message)
         addresses: set[str] = set()
         for line in output.splitlines():
             parts = line.split()
@@ -823,24 +834,30 @@ class NavigationCoreLauncher(tk.Tk):
             addresses.add(parts[inet_index + 1].split("/", 1)[0])
         return addresses
 
-    def _active_ethernet_connection(self) -> tuple[str, str] | None:
+    def _ethernet_connection_for_device(self, target_device: str) -> tuple[str, str] | None:
         output = self._run_checked_command(
             ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status"],
             "读取 NetworkManager 有线连接失败",
         )
-        fallback: tuple[str, str] | None = None
+        found_device = False
         for line in output.splitlines():
             parts = line.split(":", 3)
             if len(parts) != 4:
                 continue
             device, device_type, state, connection = parts
-            if device_type != "ethernet" or not connection:
+            if device != target_device:
                 continue
-            if fallback is None:
-                fallback = (device, connection)
-            if state == "connected":
-                return device, connection
-        return fallback
+            found_device = True
+            if device_type != "ethernet":
+                raise ValueError(f"指定的 MID360 雷达网卡 {target_device} 不是有线网卡。")
+            if not connection or connection == "--":
+                return None
+            if state != "connected":
+                self.append_log(f"[network] 指定雷达网卡 {target_device} 当前状态为 {state}。\n")
+            return device, connection
+        if not found_device:
+            raise ValueError(f"找不到指定的 MID360 雷达网卡 {target_device}。")
+        return None
 
     def _connection_has_ipv4(self, connection: str, address: str) -> bool:
         output = self._run_checked_command(
@@ -860,10 +877,11 @@ class NavigationCoreLauncher(tk.Tk):
         host_ip: str,
         prefix_len: int,
         configured_lidar_ip: str | None,
+        device: str,
     ) -> str | None:
         network = ipaddress.ip_network(f"{host_ip}/{prefix_len}", strict=False)
-        self._refresh_neighbor_cache(network)
-        candidates = self._neighbor_ipv4_candidates(network, host_ip)
+        self._refresh_neighbor_cache(network, device)
+        candidates = self._neighbor_ipv4_candidates(network, host_ip, device)
 
         if configured_lidar_ip and configured_lidar_ip in candidates:
             return configured_lidar_ip
@@ -879,16 +897,16 @@ class NavigationCoreLauncher(tk.Tk):
 
         return self._probe_mid360_lidar_ip_with_driver()
 
-    def _refresh_neighbor_cache(self, network: ipaddress.IPv4Network) -> None:
+    def _refresh_neighbor_cache(self, network: ipaddress.IPv4Network, device: str) -> None:
         ping = self._run_command(
-            ["ping", "-c", "1", "-W", "1", "-b", str(network.broadcast_address)],
+            ["ping", "-I", device, "-c", "1", "-W", "1", "-b", str(network.broadcast_address)],
             timeout=3,
         )
         if ping.returncode != 0:
-            self.append_log("[network] 广播探测未收到响应，继续检查邻居表。\n")
+            self.append_log(f"[network] 雷达网卡 {device} 广播探测未收到响应，继续检查邻居表。\n")
 
-    def _neighbor_ipv4_candidates(self, network: ipaddress.IPv4Network, host_ip: str) -> set[str]:
-        output = self._run_checked_command(["ip", "-o", "neigh", "show"], "读取邻居表失败")
+    def _neighbor_ipv4_candidates(self, network: ipaddress.IPv4Network, host_ip: str, device: str) -> set[str]:
+        output = self._run_checked_command(["ip", "-o", "neigh", "show", "dev", device], "读取雷达网卡邻居表失败")
         candidates: set[str] = set()
         bad_states = {"FAILED", "INCOMPLETE"}
         for line in output.splitlines():
