@@ -1,38 +1,41 @@
 points:
   - id: 1
-    x: 6.350052
-    y: 4.804148
+    x: 6.631027
+    y: 4.899475
     fast: false
     constant_speed: false
     segment_custom_speed: false
+    segment_constant_speed: true
     segment_speed_level: 0
     segment_linear_x: 0.000000
     segment_max_angular_speed: 0.000000
     segment_k_alpha: 0.000000
     segment_k_beta: 0.000000
     task_type: none
-    event_label: "_obstacle"
+    event_label: "_test2"
   - id: 2
-    x: 5.366567
-    y: 4.957312
+    x: 4.895338
+    y: 4.909755
     fast: false
     constant_speed: false
     segment_custom_speed: true
-    segment_speed_level: 2
-    segment_linear_x: 0.450000
+    segment_constant_speed: true
+    segment_speed_level: 3
+    segment_linear_x: 0.650000
     segment_max_angular_speed: 1.800000
     segment_k_alpha: 2.400000
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
   - id: 3
-    x: 4.362815
-    y: 4.791900
+    x: 4.220907
+    y: 4.916785
     fast: false
     constant_speed: false
     segment_custom_speed: true
-    segment_speed_level: 2
-    segment_linear_x: 0.450000
+    segment_constant_speed: true
+    segment_speed_level: 3
+    segment_linear_x: 0.500000
     segment_max_angular_speed: 1.800000
     segment_k_alpha: 2.400000
     segment_k_beta: -0.600000

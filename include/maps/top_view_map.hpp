@@ -17,9 +17,11 @@ namespace navigation::maps
 constexpr std::uint8_t kTaskTypeNone = 0;
 constexpr std::uint8_t kTaskTypePickup = 1;
 constexpr std::uint8_t kTaskTypePlace = 2;
+constexpr double kRetryNavigationRadius = 0.40;
 
 std::string resolveScenePath(const std::string & robot_name, const std::string & scene);
 std::vector<std::string> listSceneFiles(const std::string & robot_name);
+bool isRetryNavigationLabel(const std::string & event_label);
 
 struct MapPoint
 {

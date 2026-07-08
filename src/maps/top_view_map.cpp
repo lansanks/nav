@@ -32,6 +32,7 @@ namespace
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kImageMapPixelsPerMeter = 100.0;
+constexpr const char * kRetryNavigationLabel = "$$";
 
 struct Vec2
 {
@@ -493,6 +494,11 @@ std::string displayEventLabel(const std::string & event_label)
 cv::Scalar specialNavigationColor()
 {
   return cv::Scalar(48, 170, 48);
+}
+
+cv::Scalar retryNavigationColor()
+{
+  return cv::Scalar(40, 185, 70);
 }
 
 cv::Scalar customSpeedColor()
@@ -1183,6 +1189,16 @@ struct TopViewMap::Impl
       point_marker_rects.emplace_back(center.x - 11, center.y - 11, 22, 22);
     }
 
+    const int retry_radius_px =
+      std::max(2, static_cast<int>(std::lround(kRetryNavigationRadius * scale)));
+    for (const auto & point : points) {
+      if (!isRetryNavigationLabel(point.event_label)) {
+        continue;
+      }
+      const auto center = worldToPixel({point.x, point.y});
+      cv::circle(canvas, center, retry_radius_px, retryNavigationColor(), 2, cv::LINE_AA);
+    }
+
     auto textRect = [](cv::Point origin, const cv::Size & size, int baseline) {
         return cv::Rect(
           origin.x - 3,
@@ -1807,6 +1823,22 @@ bool TopViewMap::setPointEventLabel(std::size_t index, const std::string & event
 
   impl_->points[index].event_label = event_label;
   return true;
+}
+
+bool isRetryNavigationLabel(const std::string & event_label)
+{
+  const auto first = std::find_if(event_label.begin(), event_label.end(), [](unsigned char ch) {
+    return !std::isspace(ch);
+  });
+  if (first == event_label.end()) {
+    return false;
+  }
+
+  const auto last = std::find_if(event_label.rbegin(), event_label.rend(), [](unsigned char ch) {
+    return !std::isspace(ch);
+  }).base();
+  const std::string trimmed(first, last);
+  return trimmed == kRetryNavigationLabel || trimmed == "@$$";
 }
 
 bool TopViewMap::togglePointFast(std::size_t index)

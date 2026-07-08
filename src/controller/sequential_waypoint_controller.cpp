@@ -20,7 +20,6 @@ constexpr double kPlanarForwardYaw = 0.5 * kPi;
 constexpr const char * kSequentialWaypointName = "Sequential Waypoint";
 constexpr const char * kPlanarVelocityName = "Planar Velocity";
 constexpr const char * kEndStartupExclusionPrefix = "@end_";
-constexpr const char * kRetryNavigationLabel = "$$";
 
 double wrapAngle(double angle)
 {
@@ -44,27 +43,6 @@ std::string lowerCopy(std::string text)
     return static_cast<char>(std::tolower(ch));
   });
   return text;
-}
-
-std::string trimCopy(const std::string & text)
-{
-  const auto first = std::find_if(text.begin(), text.end(), [](unsigned char ch) {
-    return !std::isspace(ch);
-  });
-  if (first == text.end()) {
-    return {};
-  }
-
-  const auto last = std::find_if(text.rbegin(), text.rend(), [](unsigned char ch) {
-    return !std::isspace(ch);
-  }).base();
-  return std::string(first, last);
-}
-
-bool isRetryNavigationLabel(const std::string & event_label)
-{
-  const auto trimmed = trimCopy(event_label);
-  return trimmed == kRetryNavigationLabel || trimmed == "@$$";
 }
 
 bool parseEndStartupExclusionCount(const std::string & event_label, std::size_t & count)
@@ -98,14 +76,13 @@ void resizeRetryMarkerState(
 
 void syncRetryMarkerState(
   const std::vector<maps::MapPoint> & waypoints,
-  const ControllerConfig & config,
   const RobotNavigationState & state,
   std::vector<bool> & retry_marker_near)
 {
   resizeRetryMarkerState(waypoints, retry_marker_near);
-  const double enter_radius = std::max(0.0, config.waypoint_tolerance);
+  const double enter_radius = maps::kRetryNavigationRadius;
   for (std::size_t i = 0; i < waypoints.size(); ++i) {
-    if (!isRetryNavigationLabel(waypoints[i].event_label)) {
+    if (!maps::isRetryNavigationLabel(waypoints[i].event_label)) {
       retry_marker_near[i] = false;
       continue;
     }
@@ -117,7 +94,6 @@ void syncRetryMarkerState(
 
 std::optional<std::size_t> retryStartIndexForState(
   const std::vector<maps::MapPoint> & waypoints,
-  const ControllerConfig & config,
   const RobotNavigationState & state,
   std::size_t target_index,
   std::vector<bool> & retry_marker_near)
@@ -127,20 +103,19 @@ std::optional<std::size_t> retryStartIndexForState(
     return std::nullopt;
   }
 
-  const double enter_radius = std::max(0.0, config.waypoint_tolerance);
-  const double leave_radius = std::max(enter_radius * 1.5, enter_radius + 0.05);
+  const double enter_radius = maps::kRetryNavigationRadius;
   std::optional<std::size_t> best_index;
   double best_distance = enter_radius;
 
   for (std::size_t i = 0; i < waypoints.size(); ++i) {
-    if (!isRetryNavigationLabel(waypoints[i].event_label)) {
+    if (!maps::isRetryNavigationLabel(waypoints[i].event_label)) {
       retry_marker_near[i] = false;
       continue;
     }
 
     const double distance = std::hypot(waypoints[i].x - state.x, waypoints[i].y - state.y);
     const bool was_near = retry_marker_near[i];
-    if (was_near && distance > leave_radius) {
+    if (was_near && distance >= enter_radius) {
       retry_marker_near[i] = false;
     }
 
@@ -204,7 +179,7 @@ public:
     complete_ = false;
     target_index_ = startIndexForState(initial_state);
     if (initial_state != nullptr && initial_state->valid) {
-      syncRetryMarkerState(waypoints_, config_, *initial_state, retry_marker_near_);
+      syncRetryMarkerState(waypoints_, *initial_state, retry_marker_near_);
     } else {
       retry_marker_near_.assign(waypoints_.size(), false);
     }
@@ -225,7 +200,7 @@ public:
     }
 
     if (const auto retry_index =
-      retryStartIndexForState(waypoints_, config_, state, target_index_, retry_marker_near_))
+      retryStartIndexForState(waypoints_, state, target_index_, retry_marker_near_))
     {
       target_index_ = *retry_index;
       complete_ = false;
@@ -567,7 +542,7 @@ public:
     complete_ = false;
     target_index_ = startIndexForState(initial_state);
     if (initial_state != nullptr && initial_state->valid) {
-      syncRetryMarkerState(waypoints_, config_, *initial_state, retry_marker_near_);
+      syncRetryMarkerState(waypoints_, *initial_state, retry_marker_near_);
     } else {
       retry_marker_near_.assign(waypoints_.size(), false);
     }
@@ -588,7 +563,7 @@ public:
     }
 
     if (const auto retry_index =
-      retryStartIndexForState(waypoints_, config_, state, target_index_, retry_marker_near_))
+      retryStartIndexForState(waypoints_, state, target_index_, retry_marker_near_))
     {
       target_index_ = *retry_index;
       complete_ = false;
