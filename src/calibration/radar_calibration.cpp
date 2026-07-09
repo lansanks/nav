@@ -17,7 +17,7 @@ namespace navigation::calibration
 namespace
 {
 
-constexpr double kDefaultYawMeasurementOffset = -1.570796327;
+constexpr double kDefaultYawMeasurementOffset = 0.0;
 
 void setError(std::string * error_message, const std::string & message)
 {
