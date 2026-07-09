@@ -966,8 +966,8 @@ points:
     task_type: none
     event_label: ""
   - id: 70
-    x: 10.234566
-    y: 0.741196
+    x: 10.374566
+    y: 0.781196
     fast: false
     constant_speed: false
     segment_custom_speed: false
@@ -980,8 +980,8 @@ points:
     task_type: none
     event_label: ""
   - id: 71
-    x: 10.095470
-    y: 0.951721
+    x: 10.235470
+    y: 1.031721
     fast: false
     constant_speed: false
     segment_custom_speed: false
@@ -994,8 +994,8 @@ points:
     task_type: none
     event_label: ""
   - id: 72
-    x: 9.926298
-    y: 1.019390
+    x: 10.059302
+    y: 1.102236
     fast: false
     constant_speed: false
     segment_custom_speed: false
@@ -1008,6 +1008,20 @@ points:
     task_type: none
     event_label: ""
   - id: 73
+    x: 9.118393
+    y: 1.008429
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: "@$$"
+  - id: 74
     x: 8.994611
     y: 1.009074
     fast: true
@@ -1021,7 +1035,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: "_obstacle"
-  - id: 74
+  - id: 75
     x: 8.910568
     y: 1.118286
     fast: true
@@ -1035,7 +1049,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 75
+  - id: 76
     x: 8.796863
     y: 1.060983
     fast: false
@@ -1049,7 +1063,7 @@ points:
     segment_k_beta: 0.000000
     task_type: none
     event_label: ""
-  - id: 76
+  - id: 77
     x: 7.628762
     y: 1.072718
     fast: false
@@ -1062,8 +1076,8 @@ points:
     segment_k_alpha: 2.000000
     segment_k_beta: -0.600000
     task_type: none
-    event_label: ""
-  - id: 77
+    event_label: "@$$"
+  - id: 78
     x: 6.581074
     y: 1.049641
     fast: false
@@ -1077,7 +1091,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: "_stair"
-  - id: 78
+  - id: 79
     x: 4.895338
     y: 1.090245
     fast: false
@@ -1091,7 +1105,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
-  - id: 79
+  - id: 80
     x: 4.220907
     y: 1.083215
     fast: false
