@@ -785,7 +785,7 @@ points:
     event_label: ""
   - id: 57
     x: 13.436111
-    y: 5.364720
+    y: 5.424720
     fast: false
     constant_speed: false
     segment_custom_speed: false
@@ -968,7 +968,7 @@ points:
   - id: 70
     x: 8.994611
     y: 4.990926
-    fast: false
+    fast: true
     constant_speed: false
     segment_custom_speed: false
     segment_constant_speed: true
@@ -981,8 +981,8 @@ points:
     event_label: "_obstacle"
   - id: 71
     x: 8.910568
-    y: 4.921714
-    fast: false
+    y: 4.881714
+    fast: true
     constant_speed: false
     segment_custom_speed: false
     segment_constant_speed: true
@@ -992,7 +992,7 @@ points:
     segment_k_alpha: 0.000000
     segment_k_beta: 0.000000
     task_type: none
-    event_label: "@$$"
+    event_label: ""
   - id: 72
     x: 8.796863
     y: 4.939017
@@ -1008,20 +1008,34 @@ points:
     task_type: none
     event_label: ""
   - id: 73
-    x: 6.631027
-    y: 4.899475
+    x: 7.628762
+    y: 4.927282
     fast: false
     constant_speed: false
     segment_custom_speed: true
     segment_constant_speed: true
     segment_speed_level: 3
-    segment_linear_x: 0.450000
+    segment_linear_x: 0.300000
+    segment_max_angular_speed: 1.200000
+    segment_k_alpha: 2.000000
+    segment_k_beta: -0.600000
+    task_type: none
+    event_label: ""
+  - id: 74
+    x: 6.581074
+    y: 4.950359
+    fast: false
+    constant_speed: false
+    segment_custom_speed: true
+    segment_constant_speed: true
+    segment_speed_level: 3
+    segment_linear_x: 0.600000
     segment_max_angular_speed: 1.800000
     segment_k_alpha: 2.400000
     segment_k_beta: -0.600000
     task_type: none
-    event_label: "_test2"
-  - id: 74
+    event_label: "_stair"
+  - id: 75
     x: 4.895338
     y: 4.909755
     fast: false
@@ -1035,7 +1049,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
-  - id: 75
+  - id: 76
     x: 4.220907
     y: 4.916785
     fast: false

@@ -44,7 +44,7 @@ SELF_CHECK_MARKER = "__NAVIGATION_CORE_SELF_CHECK__:"
 MID360_DEFAULT_PREFIX_LEN = 24
 MID360_NETWORK_COMMAND_TIMEOUT = 8
 MID360_DISCOVERY_TIMEOUT = 8
-MID360_NETWORK_DEVICE = os.environ.get("NAVIGATION_MID360_NETWORK_DEVICE", "enx00e04c1e1db0")
+MID360_NETWORK_DEVICE = os.environ.get("NAVIGATION_MID360_NETWORK_DEVICE", "").strip()
 
 
 def detect_workspace_setup() -> tuple[Path | None, Path]:
@@ -606,12 +606,12 @@ class NavigationCoreLauncher(tk.Tk):
         commands.extend(
             [
                 f"echo {shlex.quote('[self-check] 雷达输入正常，启动 FastLIO...')}",
-                f"{{ (source {lio_source_path} && ros2 launch fast_lio mapping.launch.py "
+                f"{{ (source {lidar_source_path} && source {lio_source_path} && ros2 launch fast_lio mapping.launch.py "
                 f"config_path:={shlex.quote(str(fast_lio_config_dir))} "
                 f"config_file:={shlex.quote(fast_lio_config_file)} "
                 f"rviz:={'true' if rviz else 'false'}) & sleep {FAST_LIO_INIT_DELAY}; }}",
                 f"echo {shlex.quote(f'[self-check] 等待 FastLIO 输出: {FAST_LIO_ODOM_TOPIC}')}",
-                f"if ! {self._topic_echo_once_command(lio_setup, FAST_LIO_ODOM_TOPIC, FAST_LIO_TOPIC_TIMEOUT)}; "
+                f"if ! {self._topic_echo_once_command([lidar_setup, lio_setup], FAST_LIO_ODOM_TOPIC, FAST_LIO_TOPIC_TIMEOUT)}; "
                 f"then echo {shlex.quote(self._self_check_marker('FAIL', f'FastLIO 自检失败：{FAST_LIO_ODOM_TOPIC} 在 {FAST_LIO_TOPIC_TIMEOUT}s 内没有收到消息'))}; "
                 "exit 1; fi",
                 f"echo {shlex.quote(self._self_check_marker('OK', '雷达和 FastLIO 自检通过'))}",
@@ -707,13 +707,14 @@ class NavigationCoreLauncher(tk.Tk):
         if lidar_ip:
             self.append_log(f"[network] MID360 config lidar_ip: {lidar_ip}\n")
 
-        self._ensure_host_ipv4(host_ip, MID360_DEFAULT_PREFIX_LEN, MID360_NETWORK_DEVICE)
+        network_device = self._resolve_mid360_network_device()
+        self._ensure_host_ipv4(host_ip, MID360_DEFAULT_PREFIX_LEN, network_device)
 
         detected_lidar_ip = self._detect_mid360_lidar_ip(
             host_ip,
             MID360_DEFAULT_PREFIX_LEN,
             lidar_ip,
-            MID360_NETWORK_DEVICE,
+            network_device,
         )
         if detected_lidar_ip is None:
             self.append_log("[network] 未自动发现 MID360 实际 IP，沿用当前 Livox 配置。\n")
@@ -781,6 +782,52 @@ class NavigationCoreLauncher(tk.Tk):
         except ipaddress.AddressValueError:
             return False
         return True
+
+    def _resolve_mid360_network_device(self) -> str:
+        if MID360_NETWORK_DEVICE:
+            self.append_log(f"[network] 使用指定 MID360 雷达网卡: {MID360_NETWORK_DEVICE}\n")
+            return MID360_NETWORK_DEVICE
+
+        output = self._run_checked_command(
+            ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status"],
+            "自动检测 MID360 雷达有线网卡失败",
+        )
+        ethernet_devices: list[tuple[str, str, str]] = []
+        for line in output.splitlines():
+            parts = line.split(":", 3)
+            if len(parts) != 4:
+                continue
+            device, device_type, state, connection = parts
+            if device_type != "ethernet":
+                continue
+            ethernet_devices.append((device, state, connection))
+
+        if not ethernet_devices:
+            raise ValueError(
+                "找不到可用于 MID360 的有线网卡。\n"
+                "请确认雷达网线/USB 网卡已插入，或设置环境变量 NAVIGATION_MID360_NETWORK_DEVICE。"
+            )
+
+        connected = [item for item in ethernet_devices if item[1].startswith("connected")]
+        if connected:
+            device, state, connection = connected[0]
+            self.append_log(f"[network] 自动选择 MID360 雷达网卡: {device} ({state}, {connection or '--'})\n")
+            return device
+
+        if len(ethernet_devices) == 1:
+            device, state, connection = ethernet_devices[0]
+            self.append_log(f"[network] 自动选择唯一有线网卡: {device} ({state}, {connection or '--'})\n")
+            return device
+
+        summary = "\n".join(
+            f"  - {device}: {state}, {connection or '--'}"
+            for device, state, connection in ethernet_devices
+        )
+        raise ValueError(
+            "发现多个有线网卡，但没有已连接的 MID360 雷达网卡:\n"
+            f"{summary}\n"
+            "请插好雷达网线，或设置环境变量 NAVIGATION_MID360_NETWORK_DEVICE 指定网卡。"
+        )
 
     def _ensure_host_ipv4(self, host_ip: str, prefix_len: int, device: str) -> None:
         if host_ip in self._local_ipv4_addresses(device):
@@ -1081,9 +1128,11 @@ class NavigationCoreLauncher(tk.Tk):
         return f"{SELF_CHECK_MARKER}{status}:{message}"
 
     @staticmethod
-    def _topic_echo_once_command(setup_file: Path, topic: str, timeout_seconds: int) -> str:
+    def _topic_echo_once_command(setup_file: Path | list[Path], topic: str, timeout_seconds: int) -> str:
+        setup_files = setup_file if isinstance(setup_file, list) else [setup_file]
+        source_parts = " && ".join(f"source {shlex.quote(str(path))}" for path in setup_files)
         inner = (
-            f"source {shlex.quote(str(setup_file))} && "
+            f"{source_parts} && "
             f"timeout {timeout_seconds}s ros2 topic echo "
             "--no-daemon --spin-time 5 "
             "--qos-profile sensor_data --qos-reliability best_effort "
