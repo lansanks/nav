@@ -131,6 +131,7 @@ install(PROGRAMS
   scripts/navigation_launcher
   scripts/navigation_core_launcher
   scripts/navigation_ui_launcher
+  scripts/navigation_start_launcher
   scripts/mock_arm_node
   DESTINATION lib/${PROJECT_NAME}
 )

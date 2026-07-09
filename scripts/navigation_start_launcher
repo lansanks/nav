@@ -1,0 +1,507 @@
+#!/usr/bin/env python3
+"""Onboard launcher that starts navigation through the core start service."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import threading
+from pathlib import Path
+import tkinter as tk
+from tkinter import messagebox, ttk
+
+import yaml
+from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
+
+
+STATE_DIR = Path.home() / ".config" / "navigation_launcher"
+STATE_FILE = STATE_DIR / "start_launcher_state.json"
+
+CONTROLLER_NAME = "Sequential Waypoint"
+RACE_LOGIC = "obstacle"
+START_SERVICE = "/navigation/start"
+STOP_SERVICE = "/navigation/stop"
+
+CONTROLLER_DEFAULTS = {
+    "waypoint_tolerance": 0.20,
+    "max_linear_speed": 0.70,
+    "max_angular_speed": 1.80,
+    "k_rho": 1.20,
+    "k_alpha": 2.40,
+    "k_beta": -0.60,
+    "fast_max_linear_speed": 1.20,
+    "fast_max_angular_speed": 2.20,
+    "fast_k_rho": 1.60,
+    "fast_k_alpha": 2.80,
+    "fast_k_beta": -0.70,
+    "constant_speed_linear_x": 0.60,
+    "planar_max_linear_x": 1.20,
+    "planar_max_linear_y": 1.20,
+}
+
+POINT_CANDIDATES = {
+    "right": ("right/you.yaml",),
+    "left": ("left/zuo.yaml",),
+}
+
+
+class StartLauncherError(RuntimeError):
+    pass
+
+
+def source_package_path_from_share(share_path: Path) -> Path | None:
+    for parent in share_path.parents:
+        candidates = [
+            parent / "src" / "navigation",
+            parent.parent / "src" / "navigation" if parent.name == "install" else None,
+        ]
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            if (candidate / "CMakeLists.txt").exists() and (candidate / "config" / "points").exists():
+                return candidate
+    return None
+
+
+def package_config_dir() -> Path:
+    try:
+        share_path = Path(get_package_share_directory("navigation"))
+    except PackageNotFoundError as exc:
+        raise StartLauncherError("找不到 navigation 包。请先 source 工作空间 setup.bash。") from exc
+
+    source_path = source_package_path_from_share(share_path)
+    if source_path is not None:
+        return source_path / "config"
+    return share_path / "config"
+
+
+def resolve_points_file(side: str, config_dir: Path | None = None) -> Path:
+    if side not in POINT_CANDIDATES:
+        raise StartLauncherError(f"未知路线选择: {side}")
+
+    points_dir = (config_dir or package_config_dir()) / "points"
+    checked: list[Path] = []
+    for relative in POINT_CANDIDATES[side]:
+        candidate = points_dir / relative
+        checked.append(candidate)
+        if candidate.exists():
+            return candidate
+
+    checked_text = "\n".join(f"  - {path}" for path in checked)
+    raise StartLauncherError(
+        f"找不到 {side} 侧点位文件。已检查:\n{checked_text}\n"
+        "请把对应点位文件放到 config/points/left/ 或 config/points/right/ 下。"
+    )
+
+
+def controller_params_file(config_dir: Path | None = None) -> Path:
+    return (config_dir or package_config_dir()) / "params" / "Sequential_Waypoint" / "navigation_params.yaml"
+
+
+def load_yaml_mapping(path: Path) -> dict:
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise StartLauncherError(f"读取文件失败: {path}: {exc}") from exc
+    except yaml.YAMLError as exc:
+        raise StartLauncherError(f"解析 YAML 失败: {path}: {exc}") from exc
+
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise StartLauncherError(f"YAML 顶层必须是 mapping: {path}")
+    return data
+
+
+def load_controller_config(config_dir: Path | None = None) -> dict[str, float]:
+    params = dict(CONTROLLER_DEFAULTS)
+    path = controller_params_file(config_dir)
+    if not path.exists():
+        raise StartLauncherError(f"找不到控制器参数文件: {path}")
+
+    data = load_yaml_mapping(path)
+    for key in params:
+        value = data.get(key)
+        if value is None:
+            continue
+        try:
+            params[key] = float(value)
+        except (TypeError, ValueError) as exc:
+            raise StartLauncherError(f"控制器参数 {key} 不是数字: {value!r}") from exc
+    return params
+
+
+def task_type_value(value: object) -> int:
+    text = str(value or "none").strip().lower()
+    if text in {"pickup", "1"}:
+        return 1
+    if text in {"place", "placed", "2"}:
+        return 2
+    return 0
+
+
+def bool_value(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"true", "1", "yes", "on"}
+
+
+def load_points_data(path: Path) -> list[dict[str, object]]:
+    data = load_yaml_mapping(path)
+    raw_points = data.get("points", [])
+    if raw_points is None:
+        raw_points = []
+    if not isinstance(raw_points, list):
+        raise StartLauncherError(f"points 字段必须是列表: {path}")
+    if not raw_points:
+        raise StartLauncherError(f"点位文件为空: {path}")
+
+    points: list[dict[str, object]] = []
+    for index, raw_point in enumerate(raw_points, start=1):
+        if not isinstance(raw_point, dict):
+            raise StartLauncherError(f"第 {index} 个点位不是 mapping: {path}")
+        try:
+            point = {
+                "id": index,
+                "x": float(raw_point.get("x", 0.0)),
+                "y": float(raw_point.get("y", 0.0)),
+                "fast": bool_value(raw_point.get("fast", False)),
+                "constant_speed": bool_value(raw_point.get("constant_speed", False)),
+                "segment_custom_speed": bool_value(raw_point.get("segment_custom_speed", False)),
+                "segment_constant_speed": bool_value(raw_point.get("segment_constant_speed", False)),
+                "segment_speed_level": max(0, min(7, int(raw_point.get("segment_speed_level", 0) or 0))),
+                "segment_linear_x": float(raw_point.get("segment_linear_x", 0.0) or 0.0),
+                "segment_max_angular_speed": float(raw_point.get("segment_max_angular_speed", 0.0) or 0.0),
+                "segment_k_alpha": float(raw_point.get("segment_k_alpha", 0.0) or 0.0),
+                "segment_k_beta": float(raw_point.get("segment_k_beta", 0.0) or 0.0),
+                "task_type": task_type_value(raw_point.get("task_type", "none")),
+                "event_label": str(raw_point.get("event_label", "") or ""),
+            }
+        except (TypeError, ValueError) as exc:
+            raise StartLauncherError(f"第 {index} 个点位字段类型错误: {path}") from exc
+        points.append(point)
+    return points
+
+
+def send_start_request(
+    side: str,
+    *,
+    service_timeout: float,
+    response_timeout: float,
+) -> str:
+    import rclpy
+    from navigation.msg import MapPoint
+    from navigation.srv import StartNavigation
+
+    config_dir = package_config_dir()
+    points_path = resolve_points_file(side, config_dir)
+    point_data = load_points_data(points_path)
+    controller_config = load_controller_config(config_dir)
+
+    rclpy.init(args=None)
+    node = rclpy.create_node("navigation_start_launcher")
+    try:
+        client = node.create_client(StartNavigation, START_SERVICE)
+        if not client.wait_for_service(timeout_sec=service_timeout):
+            raise StartLauncherError(f"{START_SERVICE} 服务未就绪。请先启动 navigation_core。")
+
+        request = StartNavigation.Request()
+        request.race_logic = RACE_LOGIC
+        request.controller_name = CONTROLLER_NAME
+        for key, value in controller_config.items():
+            setattr(request, key, value)
+
+        for point in point_data:
+            msg = MapPoint()
+            for key, value in point.items():
+                setattr(msg, key, value)
+            request.points.append(msg)
+
+        future = client.call_async(request)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=response_timeout)
+        if not future.done():
+            raise StartLauncherError(f"{START_SERVICE} 响应超时。")
+
+        response = future.result()
+        if response is None:
+            raise StartLauncherError(f"{START_SERVICE} 调用失败。")
+        if not response.success:
+            raise StartLauncherError(f"core 拒绝启动: {response.message}")
+
+        return (
+            f"已启动: side={side}, points={points_path}, "
+            f"count={len(point_data)}, controller={CONTROLLER_NAME}, race={RACE_LOGIC}, "
+            f"message={response.message}"
+        )
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+def send_stop_request(
+    *,
+    reason: str,
+    service_timeout: float,
+    response_timeout: float,
+) -> str:
+    import rclpy
+    from navigation.srv import StopNavigation
+
+    rclpy.init(args=None)
+    node = rclpy.create_node("navigation_stop_launcher")
+    try:
+        client = node.create_client(StopNavigation, STOP_SERVICE)
+        if not client.wait_for_service(timeout_sec=service_timeout):
+            raise StartLauncherError(f"{STOP_SERVICE} 服务未就绪。请先启动 navigation_core。")
+
+        request = StopNavigation.Request()
+        request.reason = reason
+
+        future = client.call_async(request)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=response_timeout)
+        if not future.done():
+            raise StartLauncherError(f"{STOP_SERVICE} 响应超时。")
+
+        response = future.result()
+        if response is None:
+            raise StartLauncherError(f"{STOP_SERVICE} 调用失败。")
+        if not response.success:
+            raise StartLauncherError(f"core 拒绝停止: {response.message}")
+
+        return f"已停止: reason={reason}, message={response.message}"
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+class NavigationStartLauncher(tk.Tk):
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("Navigation Start Launcher")
+        self.geometry("680x360")
+        self.minsize(620, 320)
+
+        self.side_var = tk.StringVar(value="right")
+        self.status_var = tk.StringVar(value="未启动")
+        self.points_path_var = tk.StringVar(value="")
+        self.operation_thread: threading.Thread | None = None
+        self._load_state()
+
+        self._build_ui()
+        self._refresh_selected_path()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _build_ui(self) -> None:
+        root = ttk.Frame(self, padding=8)
+        root.grid(row=0, column=0, sticky="nsew")
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        root.columnconfigure(0, weight=1)
+        root.rowconfigure(3, weight=1)
+
+        route_frame = ttk.LabelFrame(root, text="点位文件")
+        route_frame.grid(row=0, column=0, sticky="ew")
+        route_frame.columnconfigure(2, weight=1)
+
+        ttk.Radiobutton(
+            route_frame,
+            text="right/you.yaml",
+            variable=self.side_var,
+            value="right",
+            command=self._refresh_selected_path,
+        ).grid(row=0, column=0, sticky="w", padx=6, pady=6)
+        ttk.Radiobutton(
+            route_frame,
+            text="left/zuo.yaml",
+            variable=self.side_var,
+            value="left",
+            command=self._refresh_selected_path,
+        ).grid(row=0, column=1, sticky="w", padx=6, pady=6)
+        ttk.Label(route_frame, textvariable=self.points_path_var).grid(
+            row=1,
+            column=0,
+            columnspan=3,
+            sticky="ew",
+            padx=6,
+            pady=(0, 6),
+        )
+
+        fixed_frame = ttk.LabelFrame(root, text="固定配置")
+        fixed_frame.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        fixed_frame.columnconfigure(1, weight=1)
+        ttk.Label(fixed_frame, text="赛事逻辑:").grid(row=0, column=0, sticky="w", padx=6, pady=4)
+        ttk.Label(fixed_frame, text=RACE_LOGIC).grid(row=0, column=1, sticky="w", padx=6, pady=4)
+        ttk.Label(fixed_frame, text="控制器:").grid(row=1, column=0, sticky="w", padx=6, pady=4)
+        ttk.Label(fixed_frame, text=CONTROLLER_NAME).grid(row=1, column=1, sticky="w", padx=6, pady=4)
+        ttk.Label(fixed_frame, text="参数文件:").grid(row=2, column=0, sticky="w", padx=6, pady=4)
+        ttk.Label(fixed_frame, text=str(controller_params_file())).grid(
+            row=2,
+            column=1,
+            sticky="ew",
+            padx=6,
+            pady=4,
+        )
+
+        action_frame = ttk.Frame(root)
+        action_frame.grid(row=2, column=0, sticky="ew", pady=(8, 4))
+        action_frame.columnconfigure(3, weight=1)
+        self.start_button = ttk.Button(action_frame, text="启动导航", command=self.start_navigation)
+        self.start_button.grid(row=0, column=0, padx=(0, 8))
+        self.stop_button = ttk.Button(action_frame, text="停止导航", command=self.stop_navigation)
+        self.stop_button.grid(row=0, column=1, padx=(0, 8))
+        ttk.Button(action_frame, text="刷新", command=self._refresh_selected_path).grid(row=0, column=2)
+        ttk.Label(action_frame, textvariable=self.status_var).grid(row=0, column=3, sticky="e")
+
+        log_frame = ttk.LabelFrame(root, text="日志")
+        log_frame.grid(row=3, column=0, sticky="nsew")
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
+        self.log_text = tk.Text(log_frame, height=6, wrap="word", state=tk.DISABLED)
+        self.log_text.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.log_text.configure(yscrollcommand=scrollbar.set)
+
+    def _load_state(self) -> None:
+        try:
+            data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        side = data.get("side")
+        if side in POINT_CANDIDATES:
+            self.side_var.set(side)
+
+    def _save_state(self) -> None:
+        try:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            STATE_FILE.write_text(
+                json.dumps({"side": self.side_var.get()}, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            self.append_log(f"[state] 保存失败: {exc}\n")
+
+    def append_log(self, line: str) -> None:
+        self.log_text.configure(state=tk.NORMAL)
+        self.log_text.insert(tk.END, line)
+        self.log_text.see(tk.END)
+        self.log_text.configure(state=tk.DISABLED)
+
+    def _refresh_selected_path(self) -> None:
+        try:
+            path = resolve_points_file(self.side_var.get())
+            count = len(load_points_data(path))
+            self.points_path_var.set(f"实际文件: {path} ({count} points)")
+            self.status_var.set("就绪")
+        except StartLauncherError as exc:
+            self.points_path_var.set(str(exc))
+            self.status_var.set("点位文件不可用")
+
+    def start_navigation(self) -> None:
+        if self.operation_thread is not None and self.operation_thread.is_alive():
+            return
+        self._save_state()
+        self._set_operation_buttons(tk.DISABLED)
+        self.status_var.set("正在启动")
+        self.append_log(f"[start] side={self.side_var.get()}\n")
+        self.operation_thread = threading.Thread(target=self._start_worker, daemon=True)
+        self.operation_thread.start()
+
+    def stop_navigation(self) -> None:
+        if self.operation_thread is not None and self.operation_thread.is_alive():
+            return
+        self._set_operation_buttons(tk.DISABLED)
+        self.status_var.set("正在停止")
+        self.append_log("[stop]\n")
+        self.operation_thread = threading.Thread(target=self._stop_worker, daemon=True)
+        self.operation_thread.start()
+
+    def _start_worker(self) -> None:
+        try:
+            message = send_start_request(
+                self.side_var.get(),
+                service_timeout=5.0,
+                response_timeout=10.0,
+            )
+        except Exception as exc:  # noqa: BLE001 - show operational errors in the launcher UI.
+            self.after(0, self._operation_finished, False, "启动失败", str(exc))
+            return
+        self.after(0, self._operation_finished, True, "已启动", message)
+
+    def _stop_worker(self) -> None:
+        try:
+            message = send_stop_request(
+                reason="Stopped from onboard start launcher",
+                service_timeout=5.0,
+                response_timeout=10.0,
+            )
+        except Exception as exc:  # noqa: BLE001 - show operational errors in the launcher UI.
+            self.after(0, self._operation_finished, False, "停止失败", str(exc))
+            return
+        self.after(0, self._operation_finished, True, "已停止", message)
+
+    def _operation_finished(self, success: bool, status: str, message: str) -> None:
+        self.append_log(message + "\n")
+        self.status_var.set(status)
+        self._set_operation_buttons(tk.NORMAL)
+        if not success:
+            messagebox.showerror("Navigation Start Launcher", message, parent=self)
+
+    def _set_operation_buttons(self, state: str) -> None:
+        self.start_button.configure(state=state)
+        self.stop_button.configure(state=state)
+
+    def _on_close(self) -> None:
+        self._save_state()
+        self.destroy()
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--side", choices=("right", "left"), default="right")
+    parser.add_argument("--start-now", action="store_true", help="start once without opening the GUI")
+    parser.add_argument("--stop-now", action="store_true", help="stop once without opening the GUI")
+    parser.add_argument("--service-timeout", type=float, default=5.0)
+    parser.add_argument("--response-timeout", type=float, default=10.0)
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    if args.start_now and args.stop_now:
+        print("启动失败: --start-now 和 --stop-now 不能同时使用")
+        return 2
+    if args.start_now:
+        try:
+            print(
+                send_start_request(
+                    args.side,
+                    service_timeout=args.service_timeout,
+                    response_timeout=args.response_timeout,
+                )
+            )
+        except StartLauncherError as exc:
+            print(f"启动失败: {exc}")
+            return 1
+        return 0
+    if args.stop_now:
+        try:
+            print(
+                send_stop_request(
+                    reason="Stopped from onboard start launcher",
+                    service_timeout=args.service_timeout,
+                    response_timeout=args.response_timeout,
+                )
+            )
+        except StartLauncherError as exc:
+            print(f"停止失败: {exc}")
+            return 1
+        return 0
+
+    app = NavigationStartLauncher()
+    app.mainloop()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
