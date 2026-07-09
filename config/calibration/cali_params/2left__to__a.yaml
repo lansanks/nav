@@ -10,7 +10,7 @@ translation:
 scale: 1.000000000
 scaled: false
 yaw_offset: 0.038071444
-yaw_measurement_offset: -1.570796327
+yaw_measurement_offset: 0
 mean_error: 0.055245503
 max_error: 0.131207338
 unstable: false
