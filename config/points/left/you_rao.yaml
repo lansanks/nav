@@ -1006,10 +1006,10 @@ points:
     segment_k_alpha: 0.000000
     segment_k_beta: 0.000000
     task_type: none
-    event_label: ""
+    event_label: "@$$"
   - id: 73
-    x: 9.118393
-    y: 4.991571
+    x: 9.156353
+    y: 4.672635
     fast: false
     constant_speed: false
     segment_custom_speed: false
@@ -1020,11 +1020,11 @@ points:
     segment_k_alpha: 0.000000
     segment_k_beta: 0.000000
     task_type: none
-    event_label: "@$$"
+    event_label: ""
   - id: 74
-    x: 8.994611
-    y: 4.990926
-    fast: true
+    x: 8.561016
+    y: 3.949632
+    fast: false
     constant_speed: false
     segment_custom_speed: false
     segment_constant_speed: true
@@ -1034,11 +1034,11 @@ points:
     segment_k_alpha: 0.000000
     segment_k_beta: 0.000000
     task_type: none
-    event_label: "_obstacle"
+    event_label: ""
   - id: 75
-    x: 8.910568
-    y: 4.881714
-    fast: true
+    x: 7.748346
+    y: 3.840631
+    fast: false
     constant_speed: false
     segment_custom_speed: false
     segment_constant_speed: true
@@ -1050,8 +1050,8 @@ points:
     task_type: none
     event_label: ""
   - id: 76
-    x: 8.796863
-    y: 4.939017
+    x: 7.145675
+    y: 4.360634
     fast: false
     constant_speed: false
     segment_custom_speed: false
@@ -1064,20 +1064,34 @@ points:
     task_type: none
     event_label: ""
   - id: 77
-    x: 7.628762
-    y: 4.927282
+    x: 6.937674
+    y: 4.893637
     fast: false
     constant_speed: false
-    segment_custom_speed: true
+    segment_custom_speed: false
     segment_constant_speed: true
-    segment_speed_level: 3
-    segment_linear_x: 0.300000
-    segment_max_angular_speed: 1.200000
-    segment_k_alpha: 2.000000
-    segment_k_beta: -0.600000
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
     task_type: none
     event_label: "@$$"
   - id: 78
+    x: 6.812007
+    y: 4.945637
+    fast: false
+    constant_speed: false
+    segment_custom_speed: false
+    segment_constant_speed: true
+    segment_speed_level: 0
+    segment_linear_x: 0.000000
+    segment_max_angular_speed: 0.000000
+    segment_k_alpha: 0.000000
+    segment_k_beta: 0.000000
+    task_type: none
+    event_label: ""
+  - id: 79
     x: 6.581074
     y: 4.950359
     fast: false
@@ -1091,7 +1105,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: "_stair"
-  - id: 79
+  - id: 80
     x: 4.895338
     y: 4.909755
     fast: false
@@ -1105,7 +1119,7 @@ points:
     segment_k_beta: -0.600000
     task_type: none
     event_label: ""
-  - id: 80
+  - id: 81
     x: 4.220907
     y: 4.916785
     fast: false
