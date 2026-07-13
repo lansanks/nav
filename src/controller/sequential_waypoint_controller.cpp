@@ -131,6 +131,35 @@ std::optional<std::size_t> retryStartIndexForState(
   return best_index;
 }
 
+std::optional<std::size_t> retryStartIndexForInitialState(
+  const std::vector<maps::MapPoint> & waypoints,
+  const RobotNavigationState & state)
+{
+  if (!state.valid || waypoints.empty()) {
+    return std::nullopt;
+  }
+
+  const std::size_t candidate_count =
+    waypoints.size() > 1 ? waypoints.size() - 1 : waypoints.size();
+  const double enter_radius = maps::kRetryNavigationRadius;
+  std::optional<std::size_t> best_index;
+  double best_distance = enter_radius;
+
+  for (std::size_t i = 0; i < candidate_count; ++i) {
+    if (!maps::isRetryNavigationLabel(waypoints[i].event_label)) {
+      continue;
+    }
+
+    const double distance = std::hypot(waypoints[i].x - state.x, waypoints[i].y - state.y);
+    if (distance < best_distance) {
+      best_index = i;
+      best_distance = distance;
+    }
+  }
+
+  return best_index;
+}
+
 class SequentialWaypointController final : public NavigationController
 {
 public:
@@ -311,6 +340,10 @@ private:
   {
     if (state == nullptr || !state->valid) {
       return 0;
+    }
+
+    if (const auto retry_index = retryStartIndexForInitialState(waypoints_, *state)) {
+      return *retry_index;
     }
 
     std::size_t best_index = 0;
@@ -637,6 +670,10 @@ private:
   {
     if (state == nullptr || !state->valid) {
       return 0;
+    }
+
+    if (const auto retry_index = retryStartIndexForInitialState(waypoints_, *state)) {
+      return *retry_index;
     }
 
     std::size_t best_index = 0;

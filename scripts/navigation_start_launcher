@@ -44,6 +44,11 @@ POINT_CANDIDATES = {
     "left": ("left/zuo.yaml",),
 }
 
+DETOUR_POINT_CANDIDATES = {
+    "right": ("right/you_rao.yaml",),
+    "left": ("left/zuo_rao.yaml", "left/you_rao.yaml"),
+}
+
 
 class StartLauncherError(RuntimeError):
     pass
@@ -75,21 +80,28 @@ def package_config_dir() -> Path:
     return share_path / "config"
 
 
-def resolve_points_file(side: str, config_dir: Path | None = None) -> Path:
+def resolve_points_file(
+    side: str,
+    config_dir: Path | None = None,
+    *,
+    detour: bool = False,
+) -> Path:
     if side not in POINT_CANDIDATES:
         raise StartLauncherError(f"未知路线选择: {side}")
 
+    candidates = DETOUR_POINT_CANDIDATES[side] if detour else POINT_CANDIDATES[side]
     points_dir = (config_dir or package_config_dir()) / "points"
     checked: list[Path] = []
-    for relative in POINT_CANDIDATES[side]:
+    for relative in candidates:
         candidate = points_dir / relative
         checked.append(candidate)
         if candidate.exists():
             return candidate
 
     checked_text = "\n".join(f"  - {path}" for path in checked)
+    route_name = "绕路" if detour else side
     raise StartLauncherError(
-        f"找不到 {side} 侧点位文件。已检查:\n{checked_text}\n"
+        f"找不到 {route_name} 点位文件。已检查:\n{checked_text}\n"
         "请把对应点位文件放到 config/points/left/ 或 config/points/right/ 下。"
     )
 
@@ -186,6 +198,7 @@ def load_points_data(path: Path) -> list[dict[str, object]]:
 def send_start_request(
     side: str,
     *,
+    detour: bool = False,
     service_timeout: float,
     response_timeout: float,
 ) -> str:
@@ -194,7 +207,7 @@ def send_start_request(
     from navigation.srv import StartNavigation
 
     config_dir = package_config_dir()
-    points_path = resolve_points_file(side, config_dir)
+    points_path = resolve_points_file(side, config_dir, detour=detour)
     point_data = load_points_data(points_path)
     controller_config = load_controller_config(config_dir)
 
@@ -229,7 +242,7 @@ def send_start_request(
             raise StartLauncherError(f"core 拒绝启动: {response.message}")
 
         return (
-            f"已启动: side={side}, points={points_path}, "
+            f"已启动: side={side}, detour={int(detour)}, points={points_path}, "
             f"count={len(point_data)}, controller={CONTROLLER_NAME}, race={RACE_LOGIC}, "
             f"message={response.message}"
         )
@@ -344,13 +357,15 @@ class NavigationStartLauncher(tk.Tk):
 
         action_frame = ttk.Frame(root)
         action_frame.grid(row=2, column=0, sticky="ew", pady=(8, 4))
-        action_frame.columnconfigure(3, weight=1)
+        action_frame.columnconfigure(4, weight=1)
         self.start_button = ttk.Button(action_frame, text="启动导航", command=self.start_navigation)
         self.start_button.grid(row=0, column=0, padx=(0, 8))
+        self.detour_button = ttk.Button(action_frame, text="绕路", command=self.start_detour_navigation)
+        self.detour_button.grid(row=0, column=1, padx=(0, 8))
         self.stop_button = ttk.Button(action_frame, text="停止导航", command=self.stop_navigation)
-        self.stop_button.grid(row=0, column=1, padx=(0, 8))
-        ttk.Button(action_frame, text="刷新", command=self._refresh_selected_path).grid(row=0, column=2)
-        ttk.Label(action_frame, textvariable=self.status_var).grid(row=0, column=3, sticky="e")
+        self.stop_button.grid(row=0, column=2, padx=(0, 8))
+        ttk.Button(action_frame, text="刷新", command=self._refresh_selected_path).grid(row=0, column=3)
+        ttk.Label(action_frame, textvariable=self.status_var).grid(row=0, column=4, sticky="e")
 
         log_frame = ttk.LabelFrame(root, text="日志")
         log_frame.grid(row=3, column=0, sticky="nsew")
@@ -390,21 +405,35 @@ class NavigationStartLauncher(tk.Tk):
     def _refresh_selected_path(self) -> None:
         try:
             path = resolve_points_file(self.side_var.get())
+            detour_path = resolve_points_file(self.side_var.get(), detour=True)
             count = len(load_points_data(path))
-            self.points_path_var.set(f"实际文件: {path} ({count} points)")
+            detour_count = len(load_points_data(detour_path))
+            self.points_path_var.set(
+                f"实际文件: {path} ({count} points)    绕路: {detour_path} ({detour_count} points)"
+            )
             self.status_var.set("就绪")
         except StartLauncherError as exc:
             self.points_path_var.set(str(exc))
             self.status_var.set("点位文件不可用")
 
     def start_navigation(self) -> None:
+        self._start_route(detour=False)
+
+    def start_detour_navigation(self) -> None:
+        self._start_route(detour=True)
+
+    def _start_route(self, *, detour: bool) -> None:
         if self.operation_thread is not None and self.operation_thread.is_alive():
             return
         self._save_state()
         self._set_operation_buttons(tk.DISABLED)
-        self.status_var.set("正在启动")
-        self.append_log(f"[start] side={self.side_var.get()}\n")
-        self.operation_thread = threading.Thread(target=self._start_worker, daemon=True)
+        self.status_var.set("正在切换绕路" if detour else "正在启动")
+        self.append_log(f"[start] side={self.side_var.get()} detour={int(detour)}\n")
+        self.operation_thread = threading.Thread(
+            target=self._start_worker,
+            kwargs={"detour": detour},
+            daemon=True,
+        )
         self.operation_thread.start()
 
     def stop_navigation(self) -> None:
@@ -416,10 +445,11 @@ class NavigationStartLauncher(tk.Tk):
         self.operation_thread = threading.Thread(target=self._stop_worker, daemon=True)
         self.operation_thread.start()
 
-    def _start_worker(self) -> None:
+    def _start_worker(self, *, detour: bool) -> None:
         try:
             message = send_start_request(
                 self.side_var.get(),
+                detour=detour,
                 service_timeout=5.0,
                 response_timeout=10.0,
             )
@@ -449,6 +479,7 @@ class NavigationStartLauncher(tk.Tk):
 
     def _set_operation_buttons(self, state: str) -> None:
         self.start_button.configure(state=state)
+        self.detour_button.configure(state=state)
         self.stop_button.configure(state=state)
 
     def _on_close(self) -> None:
@@ -460,6 +491,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--side", choices=("right", "left"), default="right")
     parser.add_argument("--start-now", action="store_true", help="start once without opening the GUI")
+    parser.add_argument("--detour", action="store_true", help="use the detour waypoint file when starting")
     parser.add_argument("--stop-now", action="store_true", help="stop once without opening the GUI")
     parser.add_argument("--service-timeout", type=float, default=5.0)
     parser.add_argument("--response-timeout", type=float, default=10.0)
@@ -476,6 +508,7 @@ def main() -> int:
             print(
                 send_start_request(
                     args.side,
+                    detour=args.detour,
                     service_timeout=args.service_timeout,
                     response_timeout=args.response_timeout,
                 )
