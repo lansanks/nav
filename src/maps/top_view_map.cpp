@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cmath>
 #include <cstddef>
 #include <cctype>
@@ -33,6 +34,7 @@ namespace
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kImageMapPixelsPerMeter = 100.0;
 constexpr const char * kRetryNavigationLabel = "$$";
+constexpr const char * kRetryNavigationLabelWithAt = "@$$";
 
 struct Vec2
 {
@@ -1189,12 +1191,13 @@ struct TopViewMap::Impl
       point_marker_rects.emplace_back(center.x - 11, center.y - 11, 22, 22);
     }
 
-    const int retry_radius_px =
-      std::max(2, static_cast<int>(std::lround(kRetryNavigationRadius * scale)));
     for (const auto & point : points) {
       if (!isRetryNavigationLabel(point.event_label)) {
         continue;
       }
+      const int retry_radius_px = std::max(
+        2,
+        static_cast<int>(std::lround(retryNavigationRadiusForLabel(point.event_label) * scale)));
       const auto center = worldToPixel({point.x, point.y});
       cv::circle(canvas, center, retry_radius_px, retryNavigationColor(), 2, cv::LINE_AA);
     }
@@ -1838,7 +1841,54 @@ bool isRetryNavigationLabel(const std::string & event_label)
     return !std::isspace(ch);
   }).base();
   const std::string trimmed(first, last);
-  return trimmed == kRetryNavigationLabel || trimmed == "@$$";
+  return trimmed == kRetryNavigationLabel ||
+    trimmed == kRetryNavigationLabelWithAt ||
+    trimmed.rfind(std::string(kRetryNavigationLabel) + ":", 0) == 0 ||
+    trimmed.rfind(std::string(kRetryNavigationLabelWithAt) + ":", 0) == 0;
+}
+
+double retryNavigationRadiusForLabel(const std::string & event_label)
+{
+  const auto first = std::find_if(event_label.begin(), event_label.end(), [](unsigned char ch) {
+      return !std::isspace(ch);
+    });
+  if (first == event_label.end()) {
+    return kRetryNavigationRadius;
+  }
+
+  const auto last = std::find_if(event_label.rbegin(), event_label.rend(), [](unsigned char ch) {
+      return !std::isspace(ch);
+    }).base();
+  const std::string trimmed(first, last);
+  const auto sep = trimmed.find(':');
+  if (sep == std::string::npos) {
+    return kRetryNavigationRadius;
+  }
+
+  const auto marker = trimmed.substr(0, sep);
+  if (marker != kRetryNavigationLabel && marker != kRetryNavigationLabelWithAt) {
+    return kRetryNavigationRadius;
+  }
+
+  const auto value = trimmed.substr(sep + 1);
+  if (value.empty()) {
+    return kRetryNavigationRadius;
+  }
+
+  errno = 0;
+  char * end = nullptr;
+  const double parsed = std::strtod(value.c_str(), &end);
+  if (end == value.c_str() || errno == ERANGE || parsed <= 0.0) {
+    return kRetryNavigationRadius;
+  }
+
+  while (end != nullptr && *end != '\0') {
+    if (!std::isspace(static_cast<unsigned char>(*end))) {
+      return kRetryNavigationRadius;
+    }
+    ++end;
+  }
+  return parsed;
 }
 
 bool TopViewMap::togglePointFast(std::size_t index)

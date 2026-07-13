@@ -1006,7 +1006,7 @@ points:
     segment_k_alpha: 0.000000
     segment_k_beta: 0.000000
     task_type: none
-    event_label: ""
+    event_label: "@$$"
   - id: 73
     x: 9.118393
     y: 4.991571
@@ -1071,7 +1071,7 @@ points:
     segment_custom_speed: true
     segment_constant_speed: true
     segment_speed_level: 3
-    segment_linear_x: 0.300000
+    segment_linear_x: 0.150000
     segment_max_angular_speed: 1.200000
     segment_k_alpha: 2.000000
     segment_k_beta: -0.600000

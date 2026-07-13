@@ -4,6 +4,7 @@
 #include <cctype>
 #include <charconv>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -80,13 +81,13 @@ void syncRetryMarkerState(
   std::vector<bool> & retry_marker_near)
 {
   resizeRetryMarkerState(waypoints, retry_marker_near);
-  const double enter_radius = maps::kRetryNavigationRadius;
   for (std::size_t i = 0; i < waypoints.size(); ++i) {
     if (!maps::isRetryNavigationLabel(waypoints[i].event_label)) {
       retry_marker_near[i] = false;
       continue;
     }
 
+    const double enter_radius = maps::retryNavigationRadiusForLabel(waypoints[i].event_label);
     const double distance = std::hypot(waypoints[i].x - state.x, waypoints[i].y - state.y);
     retry_marker_near[i] = distance < enter_radius;
   }
@@ -103,9 +104,8 @@ std::optional<std::size_t> retryStartIndexForState(
     return std::nullopt;
   }
 
-  const double enter_radius = maps::kRetryNavigationRadius;
   std::optional<std::size_t> best_index;
-  double best_distance = enter_radius;
+  double best_distance = std::numeric_limits<double>::infinity();
 
   for (std::size_t i = 0; i < waypoints.size(); ++i) {
     if (!maps::isRetryNavigationLabel(waypoints[i].event_label)) {
@@ -113,6 +113,7 @@ std::optional<std::size_t> retryStartIndexForState(
       continue;
     }
 
+    const double enter_radius = maps::retryNavigationRadiusForLabel(waypoints[i].event_label);
     const double distance = std::hypot(waypoints[i].x - state.x, waypoints[i].y - state.y);
     const bool was_near = retry_marker_near[i];
     if (was_near && distance >= enter_radius) {
@@ -141,17 +142,17 @@ std::optional<std::size_t> retryStartIndexForInitialState(
 
   const std::size_t candidate_count =
     waypoints.size() > 1 ? waypoints.size() - 1 : waypoints.size();
-  const double enter_radius = maps::kRetryNavigationRadius;
   std::optional<std::size_t> best_index;
-  double best_distance = enter_radius;
+  double best_distance = std::numeric_limits<double>::infinity();
 
   for (std::size_t i = 0; i < candidate_count; ++i) {
     if (!maps::isRetryNavigationLabel(waypoints[i].event_label)) {
       continue;
     }
 
+    const double enter_radius = maps::retryNavigationRadiusForLabel(waypoints[i].event_label);
     const double distance = std::hypot(waypoints[i].x - state.x, waypoints[i].y - state.y);
-    if (distance < best_distance) {
+    if (distance < enter_radius && distance < best_distance) {
       best_index = i;
       best_distance = distance;
     }

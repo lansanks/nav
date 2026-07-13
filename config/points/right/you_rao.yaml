@@ -1006,7 +1006,7 @@ points:
     segment_k_alpha: 0.000000
     segment_k_beta: 0.000000
     task_type: none
-    event_label: "@$$"
+    event_label: "@$$:0.55"
   - id: 73
     x: 9.156353
     y: 1.327365

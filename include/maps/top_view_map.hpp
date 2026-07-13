@@ -22,6 +22,7 @@ constexpr double kRetryNavigationRadius = 0.40;
 std::string resolveScenePath(const std::string & robot_name, const std::string & scene);
 std::vector<std::string> listSceneFiles(const std::string & robot_name);
 bool isRetryNavigationLabel(const std::string & event_label);
+double retryNavigationRadiusForLabel(const std::string & event_label);
 
 struct MapPoint
 {
