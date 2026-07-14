@@ -1057,7 +1057,7 @@ points:
     segment_custom_speed: true
     segment_constant_speed: false
     segment_speed_level: 3
-    segment_linear_x: 0.400000
+    segment_linear_x: 0.300000
     segment_max_angular_speed: 1.800000
     segment_k_alpha: 2.400000
     segment_k_beta: -0.600000
