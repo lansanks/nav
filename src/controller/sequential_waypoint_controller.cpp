@@ -25,7 +25,7 @@ constexpr const char * kEndStartupExclusionPrefix = "@end_";
 constexpr const char * kAntiStuckStartLabel = "@ks";
 constexpr const char * kAntiStuckEndLabel = "@ke";
 constexpr double kAntiStuckBoostPeriodSeconds = 3.0;
-constexpr double kAntiStuckMaxLinearSpeed = 2.0;
+constexpr double kAntiStuckMaxLinearSpeed = 1.4;
 
 double wrapAngle(double angle)
 {
