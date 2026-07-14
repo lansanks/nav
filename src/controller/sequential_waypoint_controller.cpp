@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -21,6 +22,10 @@ constexpr double kPlanarForwardYaw = 0.5 * kPi;
 constexpr const char * kSequentialWaypointName = "Sequential Waypoint";
 constexpr const char * kPlanarVelocityName = "Planar Velocity";
 constexpr const char * kEndStartupExclusionPrefix = "@end_";
+constexpr const char * kAntiStuckStartLabel = "@ks";
+constexpr const char * kAntiStuckEndLabel = "@ke";
+constexpr double kAntiStuckBoostPeriodSeconds = 3.0;
+constexpr double kAntiStuckMaxLinearSpeed = 2.0;
 
 double wrapAngle(double angle)
 {
@@ -187,6 +192,7 @@ public:
       target_index_ = 0;
     }
     complete_ = false;
+    resetAntiStuckState();
     updateMessage();
   }
 
@@ -208,6 +214,7 @@ public:
     active_ = true;
     complete_ = false;
     target_index_ = startIndexForState(initial_state);
+    resetAntiStuckState();
     if (initial_state != nullptr && initial_state->valid) {
       syncRetryMarkerState(waypoints_, *initial_state, retry_marker_near_);
     } else {
@@ -220,6 +227,7 @@ public:
   void stop() override
   {
     active_ = false;
+    resetAntiStuckState();
     updateMessage();
   }
 
@@ -234,6 +242,7 @@ public:
     {
       target_index_ = *retry_index;
       complete_ = false;
+      resetAntiStuckState();
       message_ = "Retry from point " + std::to_string(waypoints_[target_index_].id);
       return zeroTwist();
     }
@@ -244,6 +253,10 @@ public:
     }
 
     const auto & target = waypoints_[target_index_];
+    const bool anti_stuck_segment = isAntiStuckSegment(target_index_);
+    syncAntiStuckSegmentTimer(target_index_, anti_stuck_segment);
+    const int anti_stuck_boost_steps = antiStuckBoostSteps();
+
     if (isFixedSpeedSegment(target_index_)) {
       const double dx = target.x - state.x;
       const double dy = target.y - state.y;
@@ -252,9 +265,11 @@ public:
       const double alpha = wrapAngle(gamma - state.yaw);
       const double beta = wrapAngle(theta_g - gamma);
       const bool custom_speed_segment = isCustomSpeedSegment(target_index_);
-      const double linear_x = custom_speed_segment ?
+      const double base_linear_x = custom_speed_segment ?
         positiveOrDefault(target.segment_linear_x, config_.constant_speed_linear_x) :
         config_.constant_speed_linear_x;
+      const double linear_x =
+        antiStuckLinearLimit(base_linear_x, target, anti_stuck_boost_steps);
       const double max_angular = custom_speed_segment ?
         positiveOrDefault(target.segment_max_angular_speed, config_.max_angular_speed) :
         config_.max_angular_speed;
@@ -284,9 +299,11 @@ public:
     const double beta = wrapAngle(theta_g - gamma);
     const bool custom_p_segment = isCustomPControlSegment(target_index_);
     const bool fast_segment = !custom_p_segment && isFastSegment(target_index_);
-    const double max_linear = custom_p_segment ?
+    const double base_max_linear = custom_p_segment ?
       positiveOrDefault(target.segment_linear_x, config_.max_linear_speed) :
       (fast_segment ? config_.fast_max_linear_speed : config_.max_linear_speed);
+    const double max_linear =
+      antiStuckLinearLimit(base_max_linear, target, anti_stuck_boost_steps);
     const double max_angular = custom_p_segment ?
       positiveOrDefault(target.segment_max_angular_speed, config_.max_angular_speed) :
       (fast_segment ? config_.fast_max_angular_speed : config_.max_angular_speed);
@@ -388,6 +405,113 @@ private:
       }
     }
     return excluded;
+  }
+
+  void resetAntiStuckState()
+  {
+    anti_stuck_segment_active_ = false;
+    anti_stuck_target_index_ = std::numeric_limits<std::size_t>::max();
+    anti_stuck_segment_started_at_ = std::chrono::steady_clock::time_point{};
+  }
+
+  bool isAntiStuckSegment(std::size_t target_index) const
+  {
+    if (target_index == 0 || target_index >= waypoints_.size()) {
+      return false;
+    }
+
+    bool armed = false;
+    for (std::size_t i = 0; i < target_index; ++i) {
+      const auto label = lowerCopy(waypoints_[i].event_label);
+      if (label == kAntiStuckStartLabel) {
+        armed = true;
+      } else if (label == kAntiStuckEndLabel) {
+        armed = false;
+      }
+    }
+    return armed;
+  }
+
+  void syncAntiStuckSegmentTimer(std::size_t target_index, bool active_segment)
+  {
+    if (!active_segment) {
+      anti_stuck_segment_active_ = false;
+      anti_stuck_target_index_ = target_index;
+      anti_stuck_segment_started_at_ = std::chrono::steady_clock::time_point{};
+      return;
+    }
+
+    if (!anti_stuck_segment_active_ || anti_stuck_target_index_ != target_index) {
+      anti_stuck_segment_active_ = true;
+      anti_stuck_target_index_ = target_index;
+      anti_stuck_segment_started_at_ = std::chrono::steady_clock::now();
+    }
+  }
+
+  int antiStuckBoostSteps() const
+  {
+    if (!anti_stuck_segment_active_ ||
+      anti_stuck_segment_started_at_ == std::chrono::steady_clock::time_point{})
+    {
+      return 0;
+    }
+
+    const auto elapsed = std::chrono::duration<double>(
+      std::chrono::steady_clock::now() - anti_stuck_segment_started_at_).count();
+    if (elapsed < kAntiStuckBoostPeriodSeconds) {
+      return 0;
+    }
+    return static_cast<int>(std::floor(elapsed / kAntiStuckBoostPeriodSeconds));
+  }
+
+  double antiStuckLinearSpeedForLevel(int level) const
+  {
+    const int clamped_level = std::max(1, level);
+    const double factor = 0.50 + 0.25 * static_cast<double>(clamped_level - 1);
+    return std::min(
+      kAntiStuckMaxLinearSpeed,
+      positiveOrDefault(config_.constant_speed_linear_x, 0.60) * factor);
+  }
+
+  int antiStuckLevelAtOrBelow(double linear_speed) const
+  {
+    int level = 1;
+    for (int candidate = 1; candidate < 64; ++candidate) {
+      const double candidate_speed = antiStuckLinearSpeedForLevel(candidate);
+      if (candidate_speed <= linear_speed + 1e-9) {
+        level = candidate;
+      }
+      if (candidate_speed >= kAntiStuckMaxLinearSpeed - 1e-9) {
+        break;
+      }
+    }
+    return level;
+  }
+
+  double antiStuckLinearLimit(
+    double base_linear_speed,
+    const maps::MapPoint & target,
+    int boost_steps) const
+  {
+    if (boost_steps <= 0 || base_linear_speed >= kAntiStuckMaxLinearSpeed) {
+      return base_linear_speed;
+    }
+
+    int base_level = antiStuckLevelAtOrBelow(base_linear_speed);
+    if (target.segment_speed_level >= 1) {
+      base_level = std::max(base_level, static_cast<int>(target.segment_speed_level));
+    }
+
+    int boosted_level = base_level + boost_steps;
+    double boosted_speed = antiStuckLinearSpeedForLevel(boosted_level);
+    while (boosted_speed <= base_linear_speed + 1e-9 &&
+      boosted_speed < kAntiStuckMaxLinearSpeed - 1e-9 &&
+      boosted_level < 64)
+    {
+      ++boosted_level;
+      boosted_speed = antiStuckLinearSpeedForLevel(boosted_level);
+    }
+    return std::min(kAntiStuckMaxLinearSpeed, std::max(base_linear_speed, boosted_speed));
   }
 
   double targetHeading(std::size_t index) const
@@ -525,6 +649,9 @@ private:
   bool complete_{false};
   std::size_t target_index_{0};
   std::vector<bool> retry_marker_near_;
+  bool anti_stuck_segment_active_{false};
+  std::size_t anti_stuck_target_index_{std::numeric_limits<std::size_t>::max()};
+  std::chrono::steady_clock::time_point anti_stuck_segment_started_at_;
   std::string message_{"No waypoints"};
 };
 
